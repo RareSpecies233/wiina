@@ -32,6 +32,7 @@ public sealed partial class MainWindow
     private long _thumbnailRequest;
     private TimelineControl? _previewTimeline;
     private double _previewRatio;
+    private double _previewPointerX;
     private bool _previewAboveTimeline;
     private bool _cacheBuffering;
     private double _cachePercent = 100;

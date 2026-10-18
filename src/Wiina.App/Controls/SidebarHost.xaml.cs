@@ -69,6 +69,45 @@ public sealed partial class SidebarHost : UserControl
             new PointerEventHandler(OnGripPointerReleased),
             handledEventsToo: true);
         RootGrid.PointerCaptureLost += OnGripPointerCaptureLost;
+        Loaded += OnLoaded;
+        Unloaded += OnUnloaded;
+    }
+
+    private ChromeBlurLayer? _blur;
+
+    private void OnLoaded(object sender, RoutedEventArgs e)
+    {
+        if (_blur is not null || XamlRoot is null)
+        {
+            return;
+        }
+
+        // Real blurred frame behind the sidebar; the acrylic panel only stays
+        // until the first blurred frame is available.
+        if (!ChromeBlur.TryAttach(BackdropBlurHost, 0, out ChromeBlurLayer layer))
+        {
+            return;
+        }
+
+        _blur = layer;
+        _blur.FirstFrame += OnFirstBlurFrame;
+        _blur.RaiseFirstFrameIfReady();
+    }
+
+    private void OnFirstBlurFrame(object? sender, EventArgs e)
+    {
+        PanelBorder.Background = null;
+        SidebarBlurTintLayer.Visibility = Visibility.Visible;
+    }
+
+    private void OnUnloaded(object sender, RoutedEventArgs e)
+    {
+        if (_blur is not null)
+        {
+            _blur.FirstFrame -= OnFirstBlurFrame;
+        }
+
+        _blur = null;
     }
 
     /// <summary>Optional diagnostic sink wired by the shell to its trace file.</summary>

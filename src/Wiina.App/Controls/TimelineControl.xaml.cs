@@ -38,7 +38,8 @@ public sealed partial class TimelineControl : UserControl
     public event Action? SeekStarted;
     public event Action? SeekCompleted;
     /// <summary>Seconds under the pointer plus the normalized 0–1 track position.</summary>
-    public event Action<double, double>? PreviewRequested;
+    /// <summary>Seconds, normalized ratio and exact pointer X inside the track.</summary>
+    public event Action<double, double, double>? PreviewRequested;
     public event Action? PreviewHidden;
 
     /// <summary>Wheel over the timeline always seeks (spec §6.2 override).</summary>
@@ -200,10 +201,9 @@ public sealed partial class TimelineControl : UserControl
 
         Point point = e.GetCurrentPoint(Slider).Position;
         double ratio = Math.Clamp(point.X / Slider.ActualWidth, 0, 1);
-        // Pass the normalized position, not an element-local pixel: the host
-        // anchors the preview to the timeline's current layout position, which
-        // stays correct while the OSC slides, docks or changes DPI.
-        PreviewRequested?.Invoke(ratio * _duration, ratio);
+        // Pass the exact pointer X as well as the ratio: the preview must sit
+        // under the cursor, not under an approximation of the track inset.
+        PreviewRequested?.Invoke(ratio * _duration, ratio, point.X);
     }
 
     private void OnSliderPointerExited(object sender, PointerRoutedEventArgs e)

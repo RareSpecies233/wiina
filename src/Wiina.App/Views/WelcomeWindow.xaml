@@ -35,7 +35,6 @@
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="*" />
                 <RowDefinition Height="Auto" />
-                <RowDefinition Height="Auto" />
             </Grid.RowDefinitions>
 
             <!-- Identity -->
@@ -52,9 +51,11 @@
                         Background="{ThemeResource CardBrush}"
                         BorderBrush="{ThemeResource CardBorderBrush}"
                         BorderThickness="1">
-                    <FontIcon Glyph="&#xE8B7;"
-                              FontSize="30"
-                              Foreground="{ThemeResource AccentBrush}" />
+                    <Image Source="ms-appx:///Assets/wiina.png"
+                           Width="40"
+                           Height="40"
+                           Stretch="Uniform"
+                           AutomationProperties.Name="Wiina" />
                 </Border>
 
                 <StackPanel Grid.Column="1" Margin="14,2,0,0" Spacing="2">
@@ -186,14 +187,7 @@
                            VerticalAlignment="Center" />
             </Grid>
 
-            <TextBlock Grid.Row="5"
-                       Margin="0,6,0,0"
-                       loc:Loc.Text="ui.dragHint"
-                       FontSize="11"
-                       Foreground="{ThemeResource SecondaryTextBrush}"
-                       TextWrapping="Wrap" />
-
-            <StackPanel Grid.Row="6"
+            <StackPanel Grid.Row="5"
                         Orientation="Horizontal"
                         Spacing="4"
                         Margin="0,4,0,0"

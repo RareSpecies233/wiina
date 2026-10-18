@@ -1,4 +1,4 @@
-# Known issues — Wiina v1.0.0
+# Known issues — Wiina v1.0.1
 
 Nothing here is hidden; these are known limitations of the v1 build.
 
@@ -17,12 +17,15 @@ Nothing here is hidden; these are known limitations of the v1 build.
   installer only when Inno Setup 6 is installed locally. No MSIX package is
   produced.
 
-## Acrylic over video
+## Blur over video
 
-- Windows 11 acrylic is real blur for windows and XAML surfaces, but WinUI 3
-  does not expose `SwapChainPanel` pixels to `AcrylicBrush`. The titlebar and
-  OSC therefore use a strong translucent tint over video rather than a blurred
-  frame. See [../architecture/0003-acrylic.md](../architecture/0003-acrylic.md).
+- Chrome over the video (titlebar, OSC, sidebar, OSD) uses a real Win2D
+  Gaussian blur of the current libmpv frame, refreshed at 8 fps. It lags the
+  video by up to one 125 ms frame and is a 320 px-wide resample, so it looks
+  slightly softer than the video at very large window sizes. Capture costs
+  roughly a third of one CPU core at 720p and more for 4K.
+- Secondary windows keep the Windows desktop-acrylic material. See
+  [../architecture/0003-acrylic.md](../architecture/0003-acrylic.md).
 
 ## HDR
 

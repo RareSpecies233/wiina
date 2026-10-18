@@ -261,7 +261,7 @@ public sealed partial class MainWindow : Window
         timeline.SeekRequested += value => _oscVm.RequestSeek(value);
         timeline.SeekStarted += OnSeekStarted;
         timeline.SeekCompleted += OnSeekCompleted;
-        timeline.PreviewRequested += (time, ratio) => ShowTimePreview(timeline, time, ratio);
+        timeline.PreviewRequested += (time, ratio, x) => ShowTimePreview(timeline, time, ratio, x);
         timeline.PreviewHidden += HideTimePreview;
         timeline.SizeChanged += (_, _) =>
         {
@@ -583,7 +583,11 @@ public sealed partial class MainWindow : Window
         }
     }
 
-    private void ShowTimePreview(TimelineControl timeline, double seconds, double ratio)
+    private void ShowTimePreview(
+        TimelineControl timeline,
+        double seconds,
+        double ratio,
+        double pointerX)
     {
         _previewTimeline = timeline;
         if (_seeking ||
@@ -596,6 +600,7 @@ public sealed partial class MainWindow : Window
         }
 
         _previewRatio = Math.Clamp(ratio, 0, 1);
+        _previewPointerX = Math.Max(0, pointerX);
         TimePreviewText.Text = TimeFormatter.Format(seconds);
         string? chapterTitle = FindChapterTitle(seconds);
         if (string.IsNullOrWhiteSpace(chapterTitle))
@@ -644,7 +649,8 @@ public sealed partial class MainWindow : Window
             double height = Math.Max(TimePreview.DesiredSize.Height, TimePreview.ActualHeight);
             Point origin = _previewTimeline.TransformToVisual(OverlayLayer)
                 .TransformPoint(new Point(0, 0));
-            double centerX = origin.X + _previewTimeline.ActualWidth * _previewRatio;
+            double centerX = origin.X +
+                Math.Clamp(_previewPointerX, 0, _previewTimeline.ActualWidth);
             double left = Math.Clamp(
                 centerX - width / 2,
                 8,

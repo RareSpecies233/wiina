@@ -7,7 +7,7 @@ Wiina 把 [IINA](https://iina.io/) 在 macOS 上的**界面逻辑**（窗口层�
 [mpv](https://mpv.io/) 作为播放内核。视觉上不照搬 AppKit，而是按 Windows 11 Fluent 规范重新设计：Segoe UI Variable、
 Segoe Fluent Icons、Mica/Acrylic、圆角与系统主题。
 
-## 状态（v1.0.0）
+## 状态（v1.0.1）
 
 - **Stage 0–8 已验收。** 播放管线、WinUI 标题栏、OSC、播放/轨道/字幕/章节/播放列表/历史、侧边栏与快速设置、
   OSD/缩略图、全屏/PiP/迷你模式/多窗口、11 页设置/搜索/快捷键/菜单/欢迎与辅助窗口、视频滤镜/10 段均衡器/
@@ -39,9 +39,17 @@ Segoe Fluent Icons、Mica/Acrylic、圆角与系统主题。
 - 首次播放按视频分辨率设置窗口（HiDPI 用物理像素；超屏用半尺寸）。
 - 设置底部 footer 移除；键位编辑独立到**亚克力 KeyBindingWindow**（控制 → 键盘方案 → 编辑键位）。
 - 欢迎窗口可缩放并记忆大小/位置；白底黄三角临时图标；`scripts/release.ps1` 版本同步发布脚本。
-- 真视频背景高斯模糊受 WinUI 3 `SwapChainPanel` 限制，当前为桌面 Acrylic + 视频 tint fallback
-  （详见 [0003-acrylic.md](docs/architecture/0003-acrylic.md)）。
 - 详细记录：[docs/acceptance/v1-polish2.md](docs/acceptance/v1-polish2.md)。
+
+### 后续修复 3：fix/v1-polish-3
+
+- **真视频背景模糊**：`Interop/ChromeBlur.cs` 每 125 ms 从 libmpv 取当前帧，320 px 降采样后
+  用 Win2D 高斯模糊，再按控件屏幕位置裁切分发给标题栏、OSC、侧边栏与 OSD；不再用平染色冒充。
+- 时间/章节预览改为按**指针实际 X** 锚定，不再随进度比例漂移。
+- 欢迎窗口移除底部拖放提示，图标改为白底黄色正三角；音量条移除 100% 竖线缺口；OSD 进度条
+  改为固定 8 px 圆角横条。
+- PiP 主窗口占位只保留一个“返回”按钮；进入 PiP 自动最小化主窗口，恢复/关闭 PiP 时还原。
+- 详细记录：[docs/acceptance/v1-polish3.md](docs/acceptance/v1-polish3.md)。
 
 ## 关键事实
 
@@ -59,7 +67,7 @@ Segoe Fluent Icons、Mica/Acrylic、圆角与系统主题。
 
 发布包是免安装的绿色压缩包（无需单独安装 .NET 或 Windows App Runtime）：
 
-1. 获取 `artifacts/wiina-1.0.0-win-x64.zip`（由下方打包命令生成，或由维护者随 Release 提供）。
+1. 获取 `artifacts/wiina-1.0.1-win-x64.zip`（由下方打包命令生成，或由维护者随 Release 提供）。
 2. 解压到任意可写目录。
 3. 运行 `Wiina.exe`。设置、日志与插件目录位于 `%LOCALAPPDATA%\Wiina`。
 4. 首次启动可拖入文件/文件夹/URL，或使用欢迎窗口打开媒体。
@@ -108,7 +116,7 @@ pwsh -File scripts/package.ps1
 脚本会：`dotnet publish` self-contained Release win-x64 到 `%TEMP%` 暂存目录 →
 复制 `third_party/libmpv/libmpv-2.dll`、`LICENSE`、`NOTICE`、`README.md` 并生成
 `SOURCE.txt`（源码地址 + 提交 + 构建时间）→ 校验必需文件 → 生成
-`artifacts/wiina-1.0.0-win-x64.zip`。`artifacts/` 与 `third_party/libmpv/` 均被 gitignore，
+`artifacts/wiina-1.0.1-win-x64.zip`。`artifacts/` 与 `third_party/libmpv/` 均被 gitignore，
 仓库不提交二进制。缺少任一必需文件时脚本直接失败。
 
 ## 本地化与无障碍

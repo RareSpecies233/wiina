@@ -183,6 +183,7 @@ public sealed partial class MainWindow
                 HideMiniPlayer();
                 SetTopmost(_settings.AlwaysOnTop);
                 RestoreNormalFrame();
+                RestoreMainAfterPip();
                 return true;
 
             case PlayerMode.Fullscreen:
@@ -315,6 +316,10 @@ public sealed partial class MainWindow
         pip.AttachSwapChain(_swapChain);
         pip.Activate();
 
+        // PiP is meant to get the player out of the way. Minimize the main
+        // window after the PiP window is visible; it is restored on exit.
+        MinimizeMainForPip();
+
         PipPlaceholder.Visibility = Visibility.Visible;
         PipPlaceholderTitle.Text = _currentTitle ?? Loc.T("pip.placeholder");
         return true;
@@ -355,6 +360,9 @@ public sealed partial class MainWindow
                 Trace("restore swapchain failed: " + ex);
             }
         }
+
+        // Any mode that leaves PiP must bring the minimized main window back.
+        RestoreMainAfterPip();
     }
 
     private void OnPipWindowClosed(PipWindow pip)
@@ -379,6 +387,10 @@ public sealed partial class MainWindow
                 Trace("pip closed reattach failed: " + ex);
             }
         }
+
+        // Closing PiP with its X restores the main window instead of leaving
+        // it minimized with no visible video surface.
+        RestoreMainAfterPip();
 
         if (!_closingPipFromMain && _mode.Current == PlayerMode.PiP)
         {
@@ -414,8 +426,24 @@ public sealed partial class MainWindow
     private void OnPipRestoreClick(object sender, RoutedEventArgs e) =>
         RequestMode(PlayerMode.Normal);
 
-    private void OnPipExitClick(object sender, RoutedEventArgs e) =>
-        RequestMode(PlayerMode.Normal);
+    private void MinimizeMainForPip()
+    {
+        if (AppWindow.Presenter is OverlappedPresenter presenter &&
+            presenter.State != OverlappedPresenterState.Minimized)
+        {
+            presenter.Minimize();
+        }
+    }
+
+    private void RestoreMainAfterPip()
+    {
+        if (AppWindow.Presenter is OverlappedPresenter presenter &&
+            presenter.State == OverlappedPresenterState.Minimized)
+        {
+            presenter.Restore();
+            Activate();
+        }
+    }
 
     // ------------------------------------------------------------------- mini
 

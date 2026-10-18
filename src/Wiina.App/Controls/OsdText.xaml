@@ -65,16 +65,22 @@
                        TextWrapping="Wrap"
                        Visibility="Collapsed" />
 
-            <ProgressBar x:Name="OsdProgress"
-                         Height="12"
-                         Minimum="0"
-                         Maximum="1"
-                         Value="0"
-                         CornerRadius="6"
-                         Background="{ThemeResource OsdProgressTrackBrush}"
-                         Foreground="{ThemeResource AccentBrush}"
-                         Visibility="Collapsed"
-                         Margin="0,4,0,0" />
+            <!-- A single 8 px rail keeps volume/seek OSD bars at the same
+                 thickness instead of inheriting the thin system ProgressBar
+                 template, which reads as a squashed line over video. -->
+            <Grid x:Name="OsdProgressHost"
+                  Height="8"
+                  Margin="0,4,0,0"
+                  Visibility="Collapsed"
+                  SizeChanged="OnProgressSizeChanged">
+                <Border Background="{ThemeResource OsdProgressTrackBrush}"
+                        CornerRadius="4" />
+                <Border x:Name="OsdProgressFill"
+                        Width="0"
+                        HorizontalAlignment="Left"
+                        Background="{ThemeResource AccentBrush}"
+                        CornerRadius="4" />
+            </Grid>
 
             <StackPanel x:Name="PersistentContent"
                         Spacing="8"

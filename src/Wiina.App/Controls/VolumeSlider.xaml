@@ -26,15 +26,6 @@
                     VerticalAlignment="Center"
                     PointerWheelChanged="OnSliderWheelChanged"
                     loc:Loc.AutomationName="ui.volume" />
-            <!-- 2 px notch at the 100% stop; over-amplification pins the thumb here. -->
-            <Border x:Name="UnityNotch"
-                    Width="2"
-                    Height="12"
-                    CornerRadius="1"
-                    Background="{ThemeResource SecondaryTextBrush}"
-                    HorizontalAlignment="Left"
-                    VerticalAlignment="Center"
-                    IsHitTestVisible="False" />
         </Grid>
     </StackPanel>
 </UserControl>

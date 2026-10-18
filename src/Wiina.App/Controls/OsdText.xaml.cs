@@ -23,6 +23,7 @@ public sealed partial class OsdText : UserControl
     private bool _showing;
     private bool _persistent;
     private double _scalePercent = 100;
+    private double _progressValue;
     private TimeSpan _duration = TimeSpan.FromSeconds(1);
 
     public OsdText()
@@ -257,12 +258,14 @@ public sealed partial class OsdText : UserControl
 
         if (message.Progress is double progress)
         {
-            OsdProgress.Value = Math.Clamp(progress, 0, 1);
-            OsdProgress.Visibility = Visibility.Visible;
+            _progressValue = Math.Clamp(progress, 0, 1);
+            OsdProgressHost.Visibility = Visibility.Visible;
+            UpdateProgressWidth();
         }
         else
         {
-            OsdProgress.Visibility = Visibility.Collapsed;
+            _progressValue = 0;
+            OsdProgressHost.Visibility = Visibility.Collapsed;
         }
 
         FlowDirection direction = message.LeftToRight
@@ -273,6 +276,17 @@ public sealed partial class OsdText : UserControl
 
         ApplyScale();
         OsdRoot.Padding = new Thickness(16, 8, 16, 8);
+    }
+
+    private void OnProgressSizeChanged(object sender, SizeChangedEventArgs e) =>
+        UpdateProgressWidth();
+
+    private void UpdateProgressWidth()
+    {
+        double width = OsdProgressHost.ActualWidth;
+        OsdProgressFill.Width = width > 0
+            ? Math.Max(0, width * _progressValue)
+            : 0;
     }
 
     private void ApplyScale()

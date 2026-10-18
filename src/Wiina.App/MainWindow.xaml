@@ -49,16 +49,10 @@
                                FontSize="12"
                                Foreground="{ThemeResource SecondaryTextBrush}"
                                HorizontalAlignment="Center" />
-                    <StackPanel Orientation="Horizontal"
-                                Spacing="8"
-                                HorizontalAlignment="Center">
-                        <Button loc:Loc.Content="ui.restore"
-                                Click="OnPipRestoreClick"
-                                loc:Loc.AutomationName="ui.restorePip" />
-                        <Button loc:Loc.Content="ui.exitPip"
-                                Click="OnPipExitClick"
-                                loc:Loc.AutomationName="ui.exitPip" />
-                    </StackPanel>
+                    <Button loc:Loc.Content="ui.restore"
+                            Click="OnPipRestoreClick"
+                            HorizontalAlignment="Center"
+                            loc:Loc.AutomationName="ui.restorePip" />
                 </StackPanel>
             </Grid>
         </Grid>

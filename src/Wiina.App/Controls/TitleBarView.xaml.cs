@@ -1,10 +1,14 @@
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Media;
+using Wiina.App.Interop;
 
 namespace Wiina.App.Controls;
 
 public sealed partial class TitleBarView : UserControl
 {
+    private ChromeBlurLayer? _blur;
+
     public TitleBarView()
     {
         InitializeComponent();
@@ -12,6 +16,47 @@ public sealed partial class TitleBarView : UserControl
         // document icon/title so it can fade with the rest of the chrome.
         ButtonPanel.Visibility = Visibility.Collapsed;
         SizeChanged += OnSizeChanged;
+        Loaded += OnLoaded;
+        Unloaded += OnUnloaded;
+    }
+
+    private void OnLoaded(object sender, RoutedEventArgs e)
+    {
+        // Early calls can arrive before the element is in a XamlRoot; retry
+        // once the layout pass has produced one.
+        if (_blur is not null || XamlRoot is null)
+        {
+            return;
+        }
+
+        // Real blurred frames of the video sitting behind the titlebar. Until
+        // the first frame arrives the acrylic borders stay in place.
+        if (!ChromeBlur.TryAttach(BackdropBlurHost, 0, out ChromeBlurLayer layer))
+        {
+            return;
+        }
+
+        _blur = layer;
+        _blur.FirstFrame += OnFirstBlurFrame;
+        _blur.RaiseFirstFrameIfReady();
+    }
+
+    private void OnFirstBlurFrame(object? sender, EventArgs e)
+    {
+        TranslucentBackground.Visibility = Visibility.Collapsed;
+        BlurTint.Visibility = Visibility.Visible;
+        TopOscAcrylicLayer.Visibility = Visibility.Collapsed;
+        TopOscBlurTintLayer.Visibility = Visibility.Visible;
+    }
+
+    private void OnUnloaded(object sender, RoutedEventArgs e)
+    {
+        if (_blur is not null)
+        {
+            _blur.FirstFrame -= OnFirstBlurFrame;
+        }
+
+        _blur = null;
     }
 
     private void OnSizeChanged(object sender, SizeChangedEventArgs e)
