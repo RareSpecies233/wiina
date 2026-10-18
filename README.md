@@ -7,10 +7,10 @@ Wiina 把 [IINA](https://iina.io/) 在 macOS 上的**界面逻辑**（窗口层�
 [mpv](https://mpv.io/) 作为播放内核。视觉上不照搬 AppKit，而是按 Windows 11 Fluent 规范重新设计：Segoe UI Variable、
 Segoe Fluent Icons、Mica/Acrylic、圆角与系统主题。
 
-> **状态：计划对齐中。** 产品代码尚未开始；当前仓库包含设计规格、实施方案与许可证审计。
-> 已确认 **v1 = 全量规格**（含 OSC/侧栏/OSD/全屏/迷你/PiP/多窗口/设置 11 页/插件/在线字幕/yt-dlp/均衡器），
-> 以及 **IINA 插件 API 子集**、用户自备 OpenSubtitles key、yt-dlp 仅用系统 PATH、严格 600×480 / 560×440。
-> 第三轮确认插件 API 模块边界后进入 Stage 0。
+> **状态：Stage 0 已实现，待验收。** 计划已冻结；当前仓库可构建并运行一个最小播放器：
+> WinUI 3 窗口 + mpv composition swapchain 视频层 + XAML 覆盖层 + F11 全屏。
+> Stage 0 验收包：[docs/acceptance/stage-0.md](docs/acceptance/stage-0.md)。
+> 后续按 [实施计划](docs/PLAN.md) 的 Stage 1–11 推进。
 
 ## 关键事实
 
@@ -26,6 +26,7 @@ Segoe Fluent Icons、Mica/Acrylic、圆角与系统主题。
 ## 文档
 
 - [实施计划](docs/PLAN.md) — 阶段、范围、验收标准
+- [Stage 0 验收](docs/acceptance/stage-0.md) — 视频管线风险验证结果
 - [许可证审计](docs/licensing/AUDIT.md) — GPL/mpv/字体/图标/商标义务
 - [ADR-0001 视频管线](docs/architecture/0001-video-pipeline.md) — 为什么用 composition swapchain
 - [IINA macOS UI 复刻规格](docs/reference/IINA-macOS-UI-复刻规格.md) — 输入规格（GPL-3.0）
@@ -43,12 +44,15 @@ Segoe Fluent Icons、Mica/Acrylic、圆角与系统主题。
 # 1) 取 libmpv
 powershell -ExecutionPolicy Bypass -File tools/fetch-libmpv.ps1
 
-# 2) 构建
-dotnet build src/Wiina.App/Wiina.App.csproj -c Debug -p:Platform=x64
+# 2) 构建（self-contained：目标机不需要额外安装 .NET / Windows App Runtime）
+dotnet build Wiina.slnx -c Debug
 
 # 3) 运行
-dotnet run --project src/Wiina.App -- "C:\path\to\video.mkv"
+.\src\Wiina.App\bin\x64\Debug\net10.0-windows10.0.26100.0\win-x64\Wiina.exe
 ```
+
+> 首次构建会从 NuGet 还原 Windows App SDK。若 `dotnet` 不在 PATH，可使用
+> `%USERPROFILE%\.dotnet\dotnet.exe`（用户级安装）或安装系统级 .NET 10 SDK。
 
 ## 许可证与声明
 

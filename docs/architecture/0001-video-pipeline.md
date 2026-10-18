@@ -1,6 +1,6 @@
 # ADR-0001：WinUI 3 中的视频呈现 —— mpv composition swapchain + SwapChainPanel
 
-- 状态：**Proposed**（Stage 0 验证后改为 Accepted）
+- 状态：**Accepted**（Stage 0 验证通过，2026-10-18；DPI 变换有已知偏差）
 - 日期：2026-10-18
 - 决策者：Wiina maintainers
 - 相关：规格 §1.2、§3.3、§18.1；许可证审计 §4
@@ -118,6 +118,11 @@ setSwapChain(native, swapChainPtr);
 m11 = 1 / RasterizationScale, m22 = 1 / RasterizationScale
 ```
 
+> **Stage 0 实测（2026-10-18）**：本机（RTX 3070 Ti / 驱动 32.0.16.1088）对 mpv 的 composition
+> swapchain 调用 `IDXGISwapChain2::SetMatrixTransform` 返回 `DXGI_ERROR_INVALID_CALL (0x887A0001)`。
+> 当前实现改为：`SwapChainPanel` 按 buffer 的物理像素布局，再套一个 1/dpi 的 XAML
+> `CompositeTransform`；视觉效果等价。若后续驱动/接口可用，再切回 DXGI 矩阵。
+
 配合：
 
 - `_committed`（buffer 当前尺寸）与 `_target`（宿主期望尺寸）；
@@ -181,3 +186,22 @@ Window.Closed
 - mpv issue #5979（D3D11 render API 讨论）: https://github.com/mpv-player/mpv/issues/5979
 - WinUI `SwapChainPanel`: https://learn.microsoft.com/windows/windows-app-sdk/api/winrt/microsoft.ui.xaml.controls.swapchainpanel
 - `ISwapChainPanelNative`: `microsoft.ui.xaml.media.dxinterop.h`
+
+---
+
+## 8. Stage 0 实测结果（2026-10-18）
+
+| 项 | 结果 |
+|---|---|
+| 环境 | Windows 11 25H2 26200；RTX 3070 Ti 32.0.16.1088；125% DPI；libmpv 0.41.0-1205-g01e2533f3 |
+| `display-swapchain` | ✅ 初始化后即可读到；绑定 `SwapChainPanel` 成功 |
+| 视频呈现 | ✅ `av://lavfi:testsrc` 正常显示；XAML 覆盖层在视频上方 |
+| XAML 输入 | ✅ 覆盖层按钮可点击，事件不被视频层吞掉 |
+| resize | ✅ 1258×709 → 1000×600 正常缩放 |
+| 125% DPI | ⚠️ `SetMatrixTransform` 返回 `0x887A0001`，改用 XAML 1/dpi 缩放 |
+| F11 全屏 | ✅ 进入/退出正常，退出恢复窗口尺寸 |
+| 关闭 | ✅ 进程退出，无残留线程/进程 |
+| 备注 | caption 按钮区域仍有系统灰色底，Stage 1 自定义标题栏处理 |
+
+结论：方案 C 成立；唯一的偏差是 DPI 变换走 XAML 而非 DXGI 矩阵，已有等价回退。
+

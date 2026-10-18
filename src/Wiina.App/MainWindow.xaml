@@ -1,0 +1,73 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Window
+    x:Class="Wiina.App.MainWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <Grid x:Name="RootGrid" Background="#FF08090A">
+        <Grid.KeyboardAccelerators>
+            <KeyboardAccelerator Key="F11" Invoked="OnToggleFullscreen" />
+        </Grid.KeyboardAccelerators>
+
+        <!-- The video layer: mpv owns the swapchain, XAML draws above it.
+             The panel is sized to the buffer's physical pixels and scaled by
+             the inverse DPI, because some drivers reject IDXGISwapChain2's
+             SetMatrixTransform on composition swapchains. -->
+        <SwapChainPanel x:Name="VideoHost"
+                        HorizontalAlignment="Left"
+                        VerticalAlignment="Top">
+            <SwapChainPanel.RenderTransform>
+                <CompositeTransform x:Name="VideoTransform" />
+            </SwapChainPanel.RenderTransform>
+        </SwapChainPanel>
+
+        <!-- Custom title bar (system caption buttons stay on the right). -->
+        <Grid x:Name="TitleBar"
+              Height="40"
+              VerticalAlignment="Top"
+              Background="#66000000">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+
+            <TextBlock Text="Wiina"
+                       FontSize="13"
+                       FontWeight="SemiBold"
+                       Foreground="White"
+                       VerticalAlignment="Center"
+                       Margin="14,0,0,0" />
+
+            <TextBlock x:Name="StatusText"
+                       Grid.Column="1"
+                       Text="Stage 0 — initializing mpv…"
+                       FontSize="12"
+                       Foreground="#B3FFFFFF"
+                       VerticalAlignment="Center"
+                       TextTrimming="CharacterEllipsis"
+                       Margin="16,0,16,0" />
+        </Grid>
+
+        <!-- Proof that XAML content and input sit above the video. -->
+        <Border x:Name="OverlayPanel"
+                HorizontalAlignment="Center"
+                VerticalAlignment="Bottom"
+                Margin="0,0,0,96"
+                Background="#D91A0B14"
+                BorderBrush="#66FF6B8A"
+                BorderThickness="1"
+                CornerRadius="12"
+                Padding="18,12">
+            <StackPanel Spacing="8">
+                <TextBlock x:Name="OverlayText"
+                           Text="XAML overlay above the mpv video"
+                           FontSize="14"
+                           Foreground="White" />
+                <Button Content="Click to prove input"
+                        Click="OnOverlayClick"
+                        HorizontalAlignment="Left" />
+            </StackPanel>
+        </Border>
+    </Grid>
+</Window>

@@ -1,0 +1,9 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Wiina.App/Wiina.App.csproj">
+      <Platform Project="x64" />
+    </Project>
+    <Project Path="src/Wiina.Core/Wiina.Core.csproj" />
+    <Project Path="src/Wiina.Mpv/Wiina.Mpv.csproj" />
+  </Folder>
+</Solution>
