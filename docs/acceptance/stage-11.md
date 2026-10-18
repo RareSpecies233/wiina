@@ -93,7 +93,7 @@
 
 ## 4. 打包验证
 
-- `artifacts/wiina-1.0.0-win-x64.zip`：143,924,745 bytes。
+- `artifacts/wiina-1.0.0-win-x64.zip`：144,723,312 bytes（SHA-256 `3588211CB3C025052BA7C2D0807F96F2EC0057A3473F177B62FC19480D73982C`）。
 - 根目录包含 `Wiina.exe`、`libmpv-2.dll`、`LICENSE`、`NOTICE`、`README.md`、
   `SOURCE.txt`，以及 self-contained .NET/WinUI 运行文件与语言资源。
 - `SOURCE.txt` 记录版本、构建时间、commit、源码地址。

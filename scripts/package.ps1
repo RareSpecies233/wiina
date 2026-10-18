@@ -58,20 +58,35 @@ foreach ($file in $requiredRootFiles) {
 }
 
 $staging = Join-Path $env:TEMP ("wiina-package-" + [guid]::NewGuid().ToString('N'))
-$publishDir = Join-Path $staging 'publish'
 $payloadDir = Join-Path $staging 'payload'
 
 try {
-    New-Item -ItemType Directory -Path $publishDir, $payloadDir -Force | Out-Null
+    New-Item -ItemType Directory -Path $payloadDir -Force | Out-Null
 
-    Write-Host "Publishing $project ($Configuration, $runtime, self-contained)..."
-    & $dotnet publish $project -c $Configuration -r $runtime --self-contained true `
-        -o $publishDir -p:Version=$Version -p:DebugType=None -p:DebugSymbols=false
+    Write-Host "Building $project ($Configuration, $runtime, self-contained)..."
+    & $dotnet build $project -c $Configuration -r $runtime --self-contained true `
+        -p:Version=$Version -p:DebugType=None -p:DebugSymbols=false
     if ($LASTEXITCODE -ne 0) {
-        throw "dotnet publish failed with exit code $LASTEXITCODE"
+        throw "dotnet build failed with exit code $LASTEXITCODE"
     }
 
-    Copy-Item -Path (Join-Path $publishDir '*') -Destination $payloadDir -Recurse -Force
+    # Use the normal build output rather than `dotnet publish`: publishing
+    # emits loose XBF/PRI files for an unpackaged WinUI app and the packaged
+    # executable then fails in MainWindow.InitializeComponent with a
+    # XamlParseException. The build output embeds the XAML resources and has
+    # been verified to launch from the portable zip.
+    $targetDir = (& $dotnet msbuild $project -nologo -getProperty:TargetDir `
+        -p:Configuration=$Configuration -p:RuntimeIdentifier=$runtime -p:Platform=x64 |
+        Select-Object -Last 1).Trim()
+    if (-not [System.IO.Path]::IsPathRooted($targetDir)) {
+        $targetDir = Join-Path $root $targetDir
+    }
+    $targetDir = [System.IO.Path]::GetFullPath($targetDir)
+    if (-not (Test-Path -LiteralPath (Join-Path $targetDir 'Wiina.exe'))) {
+        throw "Build output does not contain Wiina.exe: $targetDir"
+    }
+
+    Copy-Item -Path (Join-Path $targetDir '*') -Destination $payloadDir -Recurse -Force
     Copy-Item -LiteralPath $libmpvSource -Destination (Join-Path $payloadDir 'libmpv-2.dll') -Force
     foreach ($file in $requiredRootFiles) {
         Copy-Item -LiteralPath (Join-Path $root $file) -Destination (Join-Path $payloadDir $file) -Force
