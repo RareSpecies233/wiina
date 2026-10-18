@@ -3,7 +3,8 @@
     x:Class="Wiina.App.Controls.OsdText"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-    IsHitTestVisible="False">
+    IsHitTestVisible="False"
+    IsTabStop="False">
 
     <Border x:Name="OsdRoot"
             Opacity="0"
@@ -14,19 +15,84 @@
             MaxWidth="460"
             Padding="16,8"
             CornerRadius="12"
-            Background="{ThemeResource PanelBrush}"
+            Background="{ThemeResource OsdBackgroundBrush}"
             BorderBrush="{ThemeResource PanelBorderBrush}"
-            BorderThickness="1">
+            BorderThickness="1"
+            IsHitTestVisible="False">
         <StackPanel Spacing="2">
-            <TextBlock x:Name="OsdMessageText"
-                       FontSize="18"
-                       Foreground="{ThemeResource PrimaryTextBrush}"
-                       TextWrapping="Wrap" />
+            <Grid x:Name="TitleRow" ColumnSpacing="6">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <FontIcon x:Name="OsdIcon"
+                          FontFamily="{StaticResource IconFont}"
+                          FontSize="16"
+                          Foreground="{ThemeResource PrimaryTextBrush}"
+                          VerticalAlignment="Center" />
+                <TextBlock x:Name="OsdMessageText"
+                           Grid.Column="1"
+                           FontFamily="{StaticResource AppFont}"
+                           FontSize="20"
+                           FontWeight="SemiBold"
+                           Foreground="{ThemeResource PrimaryTextBrush}"
+                           TextWrapping="Wrap"
+                           VerticalAlignment="Center" />
+                <Button x:Name="CloseButton"
+                        Grid.Column="2"
+                        Width="24"
+                        Height="24"
+                        Padding="0"
+                        Background="Transparent"
+                        BorderThickness="0"
+                        CornerRadius="4"
+                        FontFamily="{StaticResource IconFont}"
+                        FontSize="11"
+                        Foreground="{ThemeResource SecondaryTextBrush}"
+                        Content="&#xE711;"
+                        ToolTipService.ToolTip="关闭（Esc）"
+                        AutomationProperties.Name="关闭 OSD"
+                        Visibility="Collapsed"
+                        Click="OnCloseClick" />
+            </Grid>
+
             <TextBlock x:Name="OsdSecondaryText"
-                       FontSize="11"
+                       FontFamily="{StaticResource AppFont}"
+                       FontSize="10"
                        Foreground="{ThemeResource SecondaryTextBrush}"
                        TextWrapping="Wrap"
                        Visibility="Collapsed" />
+
+            <ProgressBar x:Name="OsdProgress"
+                         Height="12"
+                         Minimum="0"
+                         Maximum="1"
+                         Value="0"
+                         CornerRadius="6"
+                         Background="{ThemeResource OsdProgressTrackBrush}"
+                         Foreground="{ThemeResource AccentBrush}"
+                         Visibility="Collapsed"
+                         Margin="0,4,0,0" />
+
+            <StackPanel x:Name="PersistentContent"
+                        Spacing="8"
+                        Visibility="Collapsed">
+                <StackPanel x:Name="PersistentDetails" Spacing="4" />
+                <ScrollViewer x:Name="PersistentBodyScroller"
+                              MaxHeight="240"
+                              VerticalScrollBarVisibility="Auto"
+                              HorizontalScrollBarVisibility="Disabled"
+                              Visibility="Collapsed">
+                    <TextBlock x:Name="PersistentBody"
+                               Style="{StaticResource BodyTextStyle}"
+                               TextWrapping="Wrap"
+                               IsTextSelectionEnabled="True" />
+                </ScrollViewer>
+                <TextBlock Text="Esc 或点击 × 关闭"
+                           Style="{StaticResource CaptionTextStyle}"
+                           Foreground="{ThemeResource TertiaryTextBrush}" />
+            </StackPanel>
         </StackPanel>
     </Border>
 </UserControl>

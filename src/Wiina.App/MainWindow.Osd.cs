@@ -1,0 +1,620 @@
+using System.Globalization;
+using System.Runtime.InteropServices;
+using System.Runtime.InteropServices.WindowsRuntime;
+using Microsoft.UI.Dispatching;
+using Microsoft.UI.Windowing;
+using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Media.Imaging;
+using Windows.Foundation;
+using Windows.Graphics;
+using Wiina.App.Controls;
+using Wiina.App.Services;
+using Wiina.Core.Models;
+using Wiina.Core.Osd;
+using Wiina.Core.Settings;
+using Wiina.Core.Text;
+
+namespace Wiina.App;
+
+/// <summary>
+/// Stage 5: OSD placement/messages, cache status, fullscreen clock/battery and
+/// the timeline thumbnail peek. Kept out of the shell file so the Stage 1–4
+/// layout code stays readable.
+/// </summary>
+public sealed partial class MainWindow
+{
+    private readonly OsdQueue _osdQueue = new();
+    private ThumbnailService? _thumbnailService;
+    private CancellationTokenSource? _thumbnailCts;
+    private long _thumbnailRequest;
+    private TimelineControl? _previewTimeline;
+    private double _previewPointerX;
+    private bool _cacheBuffering;
+    private double _cachePercent = 100;
+    private double _cacheSpeed;
+    private bool _pausedForCache;
+    private bool _seekingProperty;
+    private bool _openingStream;
+    private string? _streamTarget;
+    private DispatcherQueueTimer? _fullscreenInfoTimer;
+    private DateTimeOffset _lastBatterySample;
+    private int? _batteryPercent;
+    private bool _batteryCharging;
+    private bool _onAcPower;
+    private SizeInt32? _persistentSavedSize;
+    private SizeInt32? _persistentGrownSize;
+
+    private bool IsFullscreen => AppWindow.Presenter.Kind == AppWindowPresenterKind.FullScreen;
+
+    private void InitializeStage5()
+    {
+        Osd.SetEnabled(_settings.OsdEnabled);
+        Osd.SetScale(_settings.OsdSizePercent);
+        Osd.SetDuration(OsdSettings.Duration(_settings.OsdDurationSeconds));
+        Osd.SetAnimationsEnabled(AnimationsEnabled);
+        Osd.PersistentCloseRequested += ClosePersistentOsd;
+        Osd.PersistentVisibilityChanged += OnPersistentVisibilityChanged;
+
+        FullscreenStatus.Configure(
+            _settings.FullscreenClockEnabled,
+            _settings.FullscreenBatteryEnabled,
+            _settings.FullscreenTitleEnabled);
+
+        _fullscreenInfoTimer = DispatcherQueue.CreateTimer();
+        _fullscreenInfoTimer.Interval = TimeSpan.FromSeconds(1);
+        _fullscreenInfoTimer.IsRepeating = true;
+        _fullscreenInfoTimer.Tick += (_, _) => UpdateFullscreenStatus();
+
+        UpdateOsdPlacement();
+        UpdateFullscreenStatus();
+        if (_settings.OsdPersistent)
+        {
+            DispatcherQueue.TryEnqueue(ShowPersistentOsd);
+        }
+    }
+
+    private void ApplyStage5Settings()
+    {
+        Osd.SetEnabled(_settings.OsdEnabled);
+        Osd.SetScale(_settings.OsdSizePercent);
+        Osd.SetDuration(OsdSettings.Duration(_settings.OsdDurationSeconds));
+        Osd.SetAnimationsEnabled(AnimationsEnabled);
+        FullscreenStatus.Configure(
+            _settings.FullscreenClockEnabled,
+            _settings.FullscreenBatteryEnabled,
+            _settings.FullscreenTitleEnabled);
+        UpdateOsdPlacement();
+        UpdateFullscreenStatus();
+    }
+
+    private void ShowOsd(OsdMessage message)
+    {
+        OsdQueueResult result = _osdQueue.Enqueue(message);
+        if (!Osd.IsPersistentShowing)
+        {
+            Osd.Show(message);
+        }
+
+        UpdateOsdPlacement();
+        Trace($"OSD [{message.Kind}] coalesced={result.Coalesced}");
+    }
+
+    private string ShortStreamName(string? path)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            return string.Empty;
+        }
+
+        try
+        {
+            var uri = new Uri(path);
+            string name = uri.AbsolutePath;
+            if (name.Length > 42)
+            {
+                name = name[^42..];
+            }
+
+            return string.IsNullOrWhiteSpace(name) || name == "/"
+                ? uri.Host
+                : uri.Host + name;
+        }
+        catch
+        {
+            return path.Length > 48 ? path[..48] : path;
+        }
+    }
+
+    // ------------------------------------------------------------ OSD geometry
+
+    private void UpdateOsdPlacement()
+    {
+        double bottom = 8;
+        double top = 8;
+        double right = 8;
+        double left = 8;
+        bool fullscreen = IsFullscreen;
+        bool chromeVisible = _chromeShown || _settings.Layout == WindowLayoutMode.Docked;
+
+        if (fullscreen || !chromeVisible)
+        {
+            bottom = 8;
+            top = 8;
+        }
+        else if (_settings.OscPosition == OscPosition.Bottom)
+        {
+            bottom = 72;
+        }
+        else if (_settings.OscPosition == OscPosition.Floating &&
+                 _settings.Layout == WindowLayoutMode.EdgeToEdge)
+        {
+            bottom = 76;
+        }
+        else if (_settings.Layout == WindowLayoutMode.Docked &&
+                 _settings.OscPosition != OscPosition.Top)
+        {
+            bottom = 72;
+        }
+
+        if (!fullscreen && chromeVisible && _settings.OscPosition == OscPosition.Top)
+        {
+            top = 72;
+        }
+        else if (!fullscreen && _titleBarVisible)
+        {
+            top = 48;
+        }
+
+        if (fullscreen && (FullscreenStatus.IsShowing ||
+                           (_settings.FullscreenClockEnabled ||
+                            _settings.FullscreenBatteryEnabled ||
+                            _settings.FullscreenTitleEnabled)))
+        {
+            bottom = Math.Max(bottom, 48);
+        }
+
+        Osd.HorizontalAlignment = _settings.OsdPosition == OsdPosition.BottomLeft
+            ? HorizontalAlignment.Left
+            : HorizontalAlignment.Right;
+        Osd.VerticalAlignment = _settings.OsdPosition == OsdPosition.TopRight
+            ? VerticalAlignment.Top
+            : VerticalAlignment.Bottom;
+        Osd.Margin = _settings.OsdPosition switch
+        {
+            OsdPosition.BottomLeft => new Thickness(left, 0, 0, bottom),
+            OsdPosition.TopRight => new Thickness(0, top, right, 0),
+            _ => new Thickness(0, 0, right, bottom),
+        };
+    }
+
+    private bool OsdCoversTimeline()
+    {
+        if (!Osd.IsShowing || _previewTimeline is null)
+        {
+            return false;
+        }
+
+        try
+        {
+            Point osdOrigin = Osd.TransformToVisual(OverlayLayer).TransformPoint(new Point(0, 0));
+            Point timelineOrigin = _previewTimeline.TransformToVisual(OverlayLayer)
+                .TransformPoint(new Point(0, 0));
+            Rect osd = new(
+                osdOrigin.X,
+                osdOrigin.Y,
+                Osd.ActualWidth,
+                Osd.ActualHeight);
+            Rect timeline = new(
+                timelineOrigin.X,
+                timelineOrigin.Y,
+                _previewTimeline.ActualWidth,
+                _previewTimeline.ActualHeight);
+            return Intersects(osd, timeline);
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private static bool Intersects(Rect a, Rect b) =>
+        a.X < b.X + b.Width &&
+        a.X + a.Width > b.X &&
+        a.Y < b.Y + b.Height &&
+        a.Y + a.Height > b.Y;
+
+    // ------------------------------------------------------- fullscreen status
+
+    private void UpdateFullscreenStatus()
+    {
+        bool enabled = _settings.FullscreenClockEnabled ||
+            _settings.FullscreenBatteryEnabled ||
+            _settings.FullscreenTitleEnabled;
+        bool visible = IsFullscreen && _chromeShown && enabled;
+        FullscreenStatus.SetVisible(visible);
+
+        if (!visible)
+        {
+            _fullscreenInfoTimer?.Stop();
+            FullscreenStatus.SetVisible(false);
+            UpdateOsdPlacement();
+            return;
+        }
+
+        if (_fullscreenInfoTimer is { IsRunning: false })
+        {
+            _fullscreenInfoTimer.Start();
+        }
+
+        if (DateTimeOffset.UtcNow - _lastBatterySample > TimeSpan.FromSeconds(10))
+        {
+            SampleBattery();
+            _lastBatterySample = DateTimeOffset.UtcNow;
+        }
+
+        FullscreenStatus.Update(
+            DateTimeOffset.Now,
+            _batteryPercent,
+            _batteryCharging,
+            _onAcPower,
+            _settings.FullscreenTitleEnabled ? _currentTitle : null);
+        UpdateOsdPlacement();
+    }
+
+    private void SampleBattery()
+    {
+        try
+        {
+            if (GetSystemPowerStatus(out SystemPowerStatus status))
+            {
+                _onAcPower = status.ACLineStatus == 1;
+                _batteryCharging = (status.BatteryFlag & 8) != 0;
+                _batteryPercent = status.BatteryLifePercent == 255
+                    ? null
+                    : status.BatteryLifePercent;
+            }
+        }
+        catch
+        {
+            _batteryPercent = null;
+        }
+    }
+
+    // ---------------------------------------------------------- cache / stream
+
+    private void SetPausedForCache(bool value)
+    {
+        _pausedForCache = value;
+        UpdateBufferStatus();
+    }
+
+    private void SetSeekingProperty(bool value)
+    {
+        _seekingProperty = value;
+        UpdateBufferStatus();
+    }
+
+    private void SetCacheBuffering(double percent)
+    {
+        _cachePercent = double.IsFinite(percent) ? Math.Clamp(percent, 0, 100) : 100;
+        _cacheBuffering = _cachePercent > 0 && _cachePercent < 99.5;
+        UpdateBufferStatus();
+    }
+
+    private void SetCacheSpeed(double bytesPerSecond)
+    {
+        _cacheSpeed = double.IsFinite(bytesPerSecond) ? Math.Max(0, bytesPerSecond) : 0;
+    }
+
+    private void BeginStreamOpen(string path)
+    {
+        _openingStream = IsUrlPath(path);
+        _streamTarget = _openingStream ? ShortStreamName(path) : null;
+        UpdateBufferStatus();
+    }
+
+    private void EndStreamOpen()
+    {
+        _openingStream = false;
+        _streamTarget = null;
+        _cacheBuffering = false;
+        _pausedForCache = false;
+        _seekingProperty = false;
+        UpdateBufferStatus();
+    }
+
+    private void UpdateBufferStatus()
+    {
+        if (_openingStream)
+        {
+            BufferStatus.Show("正在打开流…", _streamTarget, indeterminate: true);
+            return;
+        }
+
+        if (_pausedForCache || _cacheBuffering)
+        {
+            string detail = _cachePercent > 0
+                ? $"{Math.Round(_cachePercent)}%" + FormatCacheSpeed()
+                : "读取缓存…";
+            BufferStatus.Show("正在缓冲…", detail, indeterminate: false);
+            return;
+        }
+
+        if (_seekingProperty && !string.IsNullOrWhiteSpace(_currentPath) &&
+            IsUrlPath(_currentPath))
+        {
+            BufferStatus.Show("正在跳转…", _streamTarget, indeterminate: true);
+            return;
+        }
+
+        BufferStatus.Hide();
+    }
+
+    private string FormatCacheSpeed()
+    {
+        if (_cacheSpeed < 1024)
+        {
+            return string.Empty;
+        }
+
+        double kilo = _cacheSpeed / 1024;
+        return kilo < 1024
+            ? $" · {kilo:0} KB/s"
+            : $" · {kilo / 1024:0.0} MB/s";
+    }
+
+    // ---------------------------------------------------------- persistent OSD
+
+    private void TogglePersistentOsd()
+    {
+        if (Osd.IsPersistentShowing)
+        {
+            ClosePersistentOsd();
+            return;
+        }
+
+        ShowPersistentOsd();
+    }
+
+    private void ShowPersistentOsd()
+    {
+        _settings.OsdPersistent = true;
+        GrowWindowForPersistentOsd();
+
+        var details = new List<(string Label, string Value)>
+        {
+            ("状态", _oscVm.IsPlaying ? "播放中" : _oscVm.Position > 0 ? "暂停" : "空闲"),
+            ("位置", $"{TimeFormatter.Format(_oscVm.Position)} / {TimeFormatter.Format(_oscVm.Duration)}"),
+            ("音量", $"{Math.Round(_oscVm.Volume)}%" + (_oscVm.IsMuted ? "（静音）" : string.Empty)),
+            ("速度", $"{_oscVm.Speed:0.##}x"),
+            ("视频", _videoWidth > 0 && _videoHeight > 0
+                ? $"{_videoWidth}×{_videoHeight} · {_videoAspect:0.###}:1"
+                : "未加载视频"),
+            ("音频输出", string.IsNullOrWhiteSpace(_currentAudioDevice)
+                ? "自动"
+                : _currentAudioDevice),
+            ("文件", _currentPath ?? "—"),
+        };
+
+        TrackInfo? audio = _trackList.FirstOrDefault(
+            track => track.Type == TrackType.Audio && track.IsSelected);
+        TrackInfo? subtitle = _trackList.FirstOrDefault(
+            track => track.Type == TrackType.Subtitle && track.IsSelected);
+        if (audio is not null)
+        {
+            details.Add(("音频轨道", audio.DisplayName));
+        }
+
+        details.Add(("字幕", subtitle?.DisplayName ?? "关闭"));
+
+        string body = string.Join(
+            Environment.NewLine,
+            "持久 OSD（Stage 5）",
+            "• 普通 OSD 在持久 OSD 打开期间被抑制。",
+            "• 自动隐藏已停用；点击 × 或按 Esc 关闭。",
+            "• 附件/插件视图与窗口增长后的多显示器适配留到后续阶段。");
+
+        Osd.ShowPersistent(_currentTitle ?? "技术信息", _currentPath, details, body);
+        SyncQuickSettingsValues();
+        SaveSettings();
+    }
+
+    private void ClosePersistentOsd()
+    {
+        _settings.OsdPersistent = false;
+        Osd.HidePersistent();
+        RestoreWindowAfterPersistentOsd();
+        SyncQuickSettingsValues();
+        SaveSettings();
+    }
+
+    private void OnPersistentVisibilityChanged(bool visible)
+    {
+        if (!visible)
+        {
+            RestoreWindowAfterPersistentOsd();
+        }
+    }
+
+    private void GrowWindowForPersistentOsd()
+    {
+        if (_persistentGrownSize is not null)
+        {
+            return;
+        }
+
+        SizeInt32 size = AppWindow.Size;
+        if (size.Width >= 560 && size.Height >= 360)
+        {
+            return;
+        }
+
+        _persistentSavedSize = size;
+        int width = Math.Max(560, size.Width);
+        int height = Math.Max(360, size.Height);
+        AppWindow.Resize(new SizeInt32(width, height));
+        _persistentGrownSize = new SizeInt32(width, height);
+    }
+
+    private void RestoreWindowAfterPersistentOsd()
+    {
+        if (_persistentGrownSize is not { } grown || _persistentSavedSize is not { } saved)
+        {
+            return;
+        }
+
+        if (AppWindow.Size is { } current &&
+            current.Width == grown.Width &&
+            current.Height == grown.Height)
+        {
+            AppWindow.Resize(saved);
+        }
+
+        _persistentGrownSize = null;
+        _persistentSavedSize = null;
+    }
+
+    // -------------------------------------------------------- time preview UX
+
+    private async void RequestThumbnailAsync(double seconds)
+    {
+        if (!_settings.ThumbnailPreviewEnabled ||
+            string.IsNullOrWhiteSpace(_currentPath) ||
+            !File.Exists(_currentPath) ||
+            _videoWidth <= 0)
+        {
+            ThumbnailPeek.Hide();
+            return;
+        }
+
+        long request = ++_thumbnailRequest;
+        _thumbnailCts?.Cancel();
+        var cts = new CancellationTokenSource();
+        _thumbnailCts = cts;
+
+        try
+        {
+            ThumbnailFrame? frame = await GetThumbnailService().GetAsync(
+                _currentPath,
+                seconds,
+                90,
+                cts.Token);
+            if (cts.IsCancellationRequested ||
+                request != _thumbnailRequest ||
+                !ThumbnailPeek.IsShowing ||
+                TimePreview.Visibility != Visibility.Visible)
+            {
+                return;
+            }
+
+            if (frame is null)
+            {
+                ThumbnailPeek.Hide();
+                return;
+            }
+
+            var bitmap = new WriteableBitmap(frame.Width, frame.Height);
+            using (Stream stream = bitmap.PixelBuffer.AsStream())
+            {
+                await stream.WriteAsync(frame.Bgra);
+            }
+
+            bitmap.Invalidate();
+            ThumbnailPeek.Show(
+                bitmap,
+                TimeFormatter.Format(seconds),
+                frame.Width,
+                frame.Height);
+            PositionThumbnail();
+        }
+        catch (OperationCanceledException)
+        {
+            // A newer hover position owns the overlay.
+        }
+        catch (Exception ex)
+        {
+            Trace("thumbnail request failed: " + ex.Message);
+            ThumbnailPeek.Hide();
+        }
+        finally
+        {
+            if (request == _thumbnailRequest)
+            {
+            }
+        }
+    }
+
+    private ThumbnailService GetThumbnailService() =>
+        _thumbnailService ??= new ThumbnailService(
+            Math.Clamp(_settings.ThumbnailCacheCount, 1, 240),
+            Math.Clamp(_settings.ThumbnailBucketSeconds, 1, 30),
+            Trace);
+
+    private void PositionThumbnail()
+    {
+        if (!ThumbnailPeek.IsShowing || _previewTimeline is null)
+        {
+            return;
+        }
+
+        try
+        {
+            Point timelineOrigin = _previewTimeline.TransformToVisual(OverlayLayer)
+                .TransformPoint(new Point(0, 0));
+            double width = ThumbnailPeek.ActualWidth > 0
+                ? ThumbnailPeek.ActualWidth
+                : ThumbnailPeek.Width;
+            double height = ThumbnailPeek.ActualHeight > 0
+                ? ThumbnailPeek.ActualHeight
+                : ThumbnailPeek.Height;
+            double centerX = _previewPointerX;
+            double left = Math.Clamp(
+                centerX - width / 2,
+                0,
+                Math.Max(0, OverlayLayer.ActualWidth - width));
+
+            Point previewOrigin = TimePreview.TransformToVisual(OverlayLayer)
+                .TransformPoint(new Point(0, 0));
+            bool previewAboveTimeline =
+                previewOrigin.Y + TimePreview.ActualHeight <= timelineOrigin.Y + 1;
+            double top = previewAboveTimeline
+                ? previewOrigin.Y - height - 5
+                : timelineOrigin.Y + _previewTimeline.ActualHeight + 5;
+            top = Math.Clamp(top, 0, Math.Max(0, OverlayLayer.ActualHeight - height));
+            ThumbnailPeek.Margin = new Thickness(left, top, 0, 0);
+        }
+        catch
+        {
+            // Layout can race a collapse; the next hover repositions it.
+        }
+    }
+
+    private void DisposeStage5()
+    {
+        _fullscreenInfoTimer?.Stop();
+        _fullscreenInfoTimer = null;
+        _thumbnailCts?.Cancel();
+        _thumbnailCts?.Dispose();
+        _thumbnailCts = null;
+        _thumbnailService?.Dispose();
+        _thumbnailService = null;
+        ThumbnailPeek.Hide();
+    }
+
+    // ------------------------------------------------------------- interop
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct SystemPowerStatus
+    {
+        public byte ACLineStatus;
+        public byte BatteryFlag;
+        public byte BatteryLifePercent;
+        public byte SystemStatusFlag;
+        public int BatteryLifeTime;
+        public int BatteryFullLifeTime;
+    }
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern bool GetSystemPowerStatus(out SystemPowerStatus status);
+}

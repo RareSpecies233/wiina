@@ -1,8 +1,9 @@
-using System.Globalization;
+﻿using System.Globalization;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Wiina.App.Controls;
 using Wiina.Core.Models;
+using Wiina.Core.Osd;
 using Wiina.Core.Settings;
 using Wiina.Core.State;
 using Wiina.Mpv;
@@ -506,6 +507,54 @@ public sealed partial class MainWindow
                 _oscState.AutoHideEnabled = e.Flag;
                 ResetAutoHideTimer();
                 break;
+            case QuickSettingKey.OsdEnabled:
+                _settings.OsdEnabled = e.Flag;
+                Osd.SetEnabled(e.Flag);
+                break;
+            case QuickSettingKey.OsdPosition:
+                _settings.OsdPosition = (OsdPosition)Math.Clamp((int)e.Number, 0, 2);
+                UpdateOsdPlacement();
+                break;
+            case QuickSettingKey.OsdSize:
+                _settings.OsdSizePercent = OsdSettings.ClampSize(e.Number);
+                Osd.SetScale(_settings.OsdSizePercent);
+                UpdateOsdPlacement();
+                break;
+            case QuickSettingKey.OsdDuration:
+                _settings.OsdDurationSeconds = OsdSettings.ClampDuration(e.Number);
+                Osd.SetDuration(OsdSettings.Duration(_settings.OsdDurationSeconds));
+                break;
+            case QuickSettingKey.OsdPersistent:
+                if (e.Flag)
+                {
+                    ShowPersistentOsd();
+                }
+                else
+                {
+                    ClosePersistentOsd();
+                }
+
+                break;
+            case QuickSettingKey.FullscreenClock:
+                _settings.FullscreenClockEnabled = e.Flag;
+                ApplyStage5Settings();
+                break;
+            case QuickSettingKey.FullscreenBattery:
+                _settings.FullscreenBatteryEnabled = e.Flag;
+                ApplyStage5Settings();
+                break;
+            case QuickSettingKey.FullscreenTitle:
+                _settings.FullscreenTitleEnabled = e.Flag;
+                ApplyStage5Settings();
+                break;
+            case QuickSettingKey.ThumbnailPreview:
+                _settings.ThumbnailPreviewEnabled = e.Flag;
+                if (!e.Flag)
+                {
+                    HideTimePreview();
+                }
+
+                break;
             case QuickSettingKey.SidebarSide:
                 MoveSidebarTo(e.Number >= 1 ? SidebarSide.Trailing : SidebarSide.Leading);
                 break;
@@ -684,6 +733,18 @@ public sealed partial class MainWindow
                 _settings.OscAutoHide = true;
                 _oscState.AutoHideEnabled = true;
                 ApplyLayout();
+                break;
+            case "osd":
+                _settings.OsdEnabled = true;
+                _settings.OsdPosition = OsdPosition.BottomRight;
+                _settings.OsdSizePercent = 100;
+                _settings.OsdDurationSeconds = 1;
+                _settings.FullscreenClockEnabled = true;
+                _settings.FullscreenBatteryEnabled = true;
+                _settings.FullscreenTitleEnabled = false;
+                _settings.ThumbnailPreviewEnabled = true;
+                ClosePersistentOsd();
+                ApplyStage5Settings();
                 break;
             case "sidebar":
                 _settings.SidebarWidth = SidebarState.DefaultWidth;

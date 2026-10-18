@@ -26,6 +26,14 @@ public enum SidebarSide
     Trailing,
 }
 
+/// <summary>Corner used by the Stage 5 OSD.</summary>
+public enum OsdPosition
+{
+    BottomRight,
+    BottomLeft,
+    TopRight,
+}
+
 public enum SidebarType
 {
     Settings,

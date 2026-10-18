@@ -29,6 +29,38 @@ public sealed class AppSettings
 
     public bool OscAutoHide { get; set; } = true;
 
+    // ---- Stage 5: OSD, status overlays and timeline thumbnails ----
+
+    public bool OsdEnabled { get; set; } = true;
+
+    public OsdPosition OsdPosition { get; set; } = OsdPosition.BottomRight;
+
+    /// <summary>OSD text scale in percent (1–500).</summary>
+    public double OsdSizePercent { get; set; } = 100;
+
+    /// <summary>Hold time before the 0.5 s fade-out.</summary>
+    public double OsdDurationSeconds { get; set; } = 1;
+
+    /// <summary>Keep the technical OSD open instead of auto-hiding messages.</summary>
+    public bool OsdPersistent { get; set; }
+
+    /// <summary>Fullscreen bottom-left clock.</summary>
+    public bool FullscreenClockEnabled { get; set; } = true;
+
+    /// <summary>Fullscreen bottom-left battery indicator.</summary>
+    public bool FullscreenBatteryEnabled { get; set; } = true;
+
+    /// <summary>Include the media title in the fullscreen status line.</summary>
+    public bool FullscreenTitleEnabled { get; set; }
+
+    public bool ThumbnailPreviewEnabled { get; set; } = true;
+
+    public int ThumbnailWidth { get; set; } = 160;
+
+    public double ThumbnailBucketSeconds { get; set; } = 5;
+
+    public int ThumbnailCacheCount { get; set; } = 60;
+
     // ---- Quick settings: video (persisted and re-applied on startup) ----
 
     public string VideoAspect { get; set; } = "no";

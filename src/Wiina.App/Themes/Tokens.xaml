@@ -10,6 +10,10 @@
             <SolidColorBrush x:Key="TitleBarBorderBrush" Color="#22FFFFFF" />
             <SolidColorBrush x:Key="PanelBrush" Color="#FF15171B" />
             <SolidColorBrush x:Key="PanelBorderBrush" Color="#26FFFFFF" />
+            <SolidColorBrush x:Key="OsdBackgroundBrush" Color="#D9101114" />
+            <SolidColorBrush x:Key="OsdProgressTrackBrush" Color="#33FFFFFF" />
+            <SolidColorBrush x:Key="ThumbnailBorderBrush" Color="#99FFFFFF" />
+            <SolidColorBrush x:Key="StatusBackgroundBrush" Color="#B3000000" />
             <AcrylicBrush x:Key="SidebarAcrylicBrush"
                           TintColor="#FF101114"
                           TintOpacity="0.45"
@@ -42,6 +46,10 @@
             <SolidColorBrush x:Key="TitleBarBorderBrush" Color="#1A000000" />
             <SolidColorBrush x:Key="PanelBrush" Color="#FFFFFFFF" />
             <SolidColorBrush x:Key="PanelBorderBrush" Color="#1F000000" />
+            <SolidColorBrush x:Key="OsdBackgroundBrush" Color="#E6F3F3F3" />
+            <SolidColorBrush x:Key="OsdProgressTrackBrush" Color="#22000000" />
+            <SolidColorBrush x:Key="ThumbnailBorderBrush" Color="#99000000" />
+            <SolidColorBrush x:Key="StatusBackgroundBrush" Color="#CCF3F3F3" />
             <AcrylicBrush x:Key="SidebarAcrylicBrush"
                           TintColor="#FFF3F3F3"
                           TintOpacity="0.5"

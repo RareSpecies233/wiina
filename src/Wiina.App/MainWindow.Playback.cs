@@ -18,6 +18,7 @@ using Wiina.Core.Files;
 using Wiina.Core.History;
 using Wiina.Core.Input;
 using Wiina.Core.Models;
+using Wiina.Core.Osd;
 using Wiina.Core.Text;
 using Wiina.Mpv;
 using DispatcherQueueTimer = Microsoft.UI.Dispatching.DispatcherQueueTimer;
@@ -591,9 +592,17 @@ public sealed partial class MainWindow
             SendPlayerCommandAsync("loadfile", entries[i], "append");
         }
 
-        ShowOsd(
-            entries.Count > 1 ? $"正在打开 {entries.Count} 个文件" : "正在打开…",
-            entries.Count > 1 ? Path.GetFileName(entries[0]) : null);
+        BeginStreamOpen(entries[0]);
+        if (IsUrlPath(entries[0]))
+        {
+            ShowOsd(OsdMessages.NetworkOpening(ShortStreamName(entries[0])));
+        }
+        else
+        {
+            ShowOsd(
+                entries.Count > 1 ? $"正在打开 {entries.Count} 个文件" : "正在打开…",
+                entries.Count > 1 ? Path.GetFileName(entries[0]) : null);
+        }
     }
 
     private void OnRootDragOver(object sender, DragEventArgs e)
@@ -682,7 +691,7 @@ public sealed partial class MainWindow
         bool paused = _player!.GetPropertyFlag("pause");
         Trace($"toggle pause, was paused={paused}");
         SendPlayerCommandAsync("set", "pause", paused ? "no" : "yes");
-        ShowOsd(paused ? "播放" : "暂停");
+        ShowOsd(OsdMessages.Pause(!paused));
     }
 
     private void PlayOrPause(bool play)
@@ -693,7 +702,7 @@ public sealed partial class MainWindow
         }
 
         SendPlayerCommandAsync("set", "pause", play ? "no" : "yes");
-        ShowOsd(play ? "播放" : "暂停");
+        ShowOsd(OsdMessages.Pause(!play));
     }
 
     private void StopPlayback()
@@ -704,6 +713,7 @@ public sealed partial class MainWindow
         _currentTitle = null;
         TitleBar.Title = "Wiina";
         Title = "Wiina";
+        EndStreamOpen();
         ShowOsd("已停止");
         UpdateSmtc();
     }
@@ -724,9 +734,7 @@ public sealed partial class MainWindow
             "seek",
             seconds.ToString("0.###", CultureInfo.InvariantCulture),
             "relative");
-        ShowOsd(
-            TimeFormatter.Format(target),
-            _oscVm.Duration > 0 ? TimeFormatter.Format(_oscVm.Duration) : null);
+        ShowOsd(OsdMessages.Seek(target, _oscVm.Duration));
     }
 
     private void SeekAbsolute(double seconds, bool showOsd = true)
@@ -746,9 +754,7 @@ public sealed partial class MainWindow
             "absolute");
         if (showOsd)
         {
-            ShowOsd(
-                TimeFormatter.Format(target),
-                _oscVm.Duration > 0 ? TimeFormatter.Format(_oscVm.Duration) : null);
+            ShowOsd(OsdMessages.Seek(target, _oscVm.Duration));
         }
     }
 
@@ -763,7 +769,7 @@ public sealed partial class MainWindow
                 clamped.ToString("0.##", CultureInfo.InvariantCulture));
         }
 
-        ShowOsd($"音量 {Math.Round(clamped)}%");
+        ShowOsd(OsdMessages.Volume(clamped));
     }
 
     private void AdjustVolume(double delta)
@@ -786,7 +792,7 @@ public sealed partial class MainWindow
         bool muted = !_oscVm.IsMuted;
         Trace($"set mute {muted}");
         _player.TrySetPropertyString("mute", muted ? "yes" : "no");
-        ShowOsd(muted ? "静音" : "取消静音");
+        ShowOsd(OsdMessages.Mute(muted));
     }
 
     private void SetSpeed(double speed)
@@ -800,7 +806,7 @@ public sealed partial class MainWindow
                 clamped.ToString("0.###", CultureInfo.InvariantCulture));
         }
 
-        ShowOsd($"速度 {clamped:0.##}x");
+        ShowOsd(OsdMessages.Speed(clamped));
     }
 
     private void MultiplySpeed(double factor)
@@ -1335,9 +1341,10 @@ public sealed partial class MainWindow
             Title = "Wiina";
             _currentPath = null;
             _currentTitle = null;
-            ShowOsd(
+            EndStreamOpen();
+            ShowOsd(OsdMessages.Error(
                 "无法打开媒体",
-                string.IsNullOrWhiteSpace(message) ? $"mpv 错误 {error}" : message);
+                string.IsNullOrWhiteSpace(message) ? $"mpv 错误 {error}" : message));
             UpdateSmtc();
         });
     }
@@ -1576,6 +1583,7 @@ public sealed partial class MainWindow
 
         flyout.Items.Add(Item("截图", CaptureScreenshot, "Ctrl+S"));
         flyout.Items.Add(Item("截图到文件夹…", ScreenshotToFolderPickerAsync));
+        flyout.Items.Add(Item("技术信息 OSD", TogglePersistentOsd));
         flyout.Items.Add(new MenuFlyoutSeparator());
         flyout.Items.Add(Item("设置…", ShowSettingsDialogAsync, "Ctrl+,"));
         flyout.Items.Add(Item("退出", () => Close(), "Q"));
@@ -2056,6 +2064,13 @@ public sealed partial class MainWindow
             return;
         }
 
+        if (e.Key == VirtualKey.Escape && Osd.IsPersistentShowing)
+        {
+            ClosePersistentOsd();
+            e.Handled = true;
+            return;
+        }
+
         Trace($"key down {e.Key}");
         KeyModifiers modifiers = KeyModifiers.None;
         if (WindowInterop.IsKeyDown(VirtualKey.Control))
@@ -2077,6 +2092,15 @@ public sealed partial class MainWindow
             WindowInterop.IsKeyDown(VirtualKey.RightWindows))
         {
             modifiers |= KeyModifiers.Windows;
+        }
+
+        if (e.Key == VirtualKey.I &&
+            (modifiers == KeyModifiers.None ||
+             modifiers == (KeyModifiers.Control | KeyModifiers.Alt)))
+        {
+            TogglePersistentOsd();
+            e.Handled = true;
+            return;
         }
 
         if (!KeyChordMapper.TryMap(e.Key, modifiers, out KeyChord chord) ||

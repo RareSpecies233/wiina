@@ -44,6 +44,9 @@ internal static class MpvInterop
     internal static extern int mpv_command(nint ctx, nint args);
 
     [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
+    internal static extern int mpv_command_node(nint ctx, nint args, out MpvNode result);
+
+    [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
     internal static extern int mpv_command_async(
         nint ctx,
         ulong replyUserData,

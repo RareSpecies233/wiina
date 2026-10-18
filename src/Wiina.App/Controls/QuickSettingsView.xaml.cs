@@ -2,6 +2,7 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Controls.Primitives;
 using Wiina.Core.Models;
+using Wiina.Core.Osd;
 using Wiina.Core.Settings;
 using Wiina.Mpv;
 
@@ -16,6 +17,15 @@ public enum QuickSettingKey
     LockAspect,
     OscPosition,
     OscAutoHide,
+    OsdEnabled,
+    OsdPosition,
+    OsdSize,
+    OsdDuration,
+    OsdPersistent,
+    FullscreenClock,
+    FullscreenBattery,
+    FullscreenTitle,
+    ThumbnailPreview,
     SidebarSide,
     SidebarWidth,
     VideoTrack,
@@ -95,10 +105,13 @@ public sealed partial class QuickSettingsView : UserControl
         // still at its default (WinUI rejects Minimum > Maximum at parse time).
         SidebarWidthSlider.Maximum = 500;
         SidebarWidthSlider.Minimum = 300;
+        OsdSizeSlider.Maximum = 500;
+        OsdSizeSlider.Minimum = 1;
 
         ThemeBox.ItemsSource = new[] { "跟随系统", "深色", "浅色" };
         LayoutBox.ItemsSource = new[] { "Edge-to-edge（覆盖视频）", "Docked（视频让位）" };
         OscPositionBox.ItemsSource = new[] { "浮动", "底部", "顶部" };
+        OsdPositionBox.ItemsSource = new[] { "右下", "左下", "右上" };
         SidebarSideBox.ItemsSource = new[] { "左侧（leading）", "右侧（trailing）" };
 
         AspectBox.ItemsSource = QuickSettings.AspectRatios;
@@ -128,6 +141,15 @@ public sealed partial class QuickSettingsView : UserControl
             LockAspectSwitch.IsOn = settings.LockAspectRatio;
             OscPositionBox.SelectedIndex = Math.Clamp((int)settings.OscPosition, 0, 2);
             OscAutoHideSwitch.IsOn = settings.OscAutoHide;
+            OsdEnabledSwitch.IsOn = settings.OsdEnabled;
+            OsdPositionBox.SelectedIndex = Math.Clamp((int)settings.OsdPosition, 0, 2);
+            OsdSizeSlider.Value = OsdSettings.ClampSize(settings.OsdSizePercent);
+            OsdDurationBox.Value = OsdSettings.ClampDuration(settings.OsdDurationSeconds);
+            OsdPersistentSwitch.IsOn = settings.OsdPersistent;
+            FullscreenClockSwitch.IsOn = settings.FullscreenClockEnabled;
+            FullscreenBatterySwitch.IsOn = settings.FullscreenBatteryEnabled;
+            FullscreenTitleSwitch.IsOn = settings.FullscreenTitleEnabled;
+            ThumbnailPreviewSwitch.IsOn = settings.ThumbnailPreviewEnabled;
             SidebarSideBox.SelectedIndex = settings.SidebarSide == SidebarSide.Leading ? 0 : 1;
             SidebarWidthSlider.Value = SidebarStateWidth(settings.SidebarWidth);
 
@@ -457,6 +479,7 @@ public sealed partial class QuickSettingsView : UserControl
     private void UpdateRangeLabels()
     {
         SidebarWidthText.Text = $"{Math.Round(SidebarWidthSlider.Value)} DIP";
+        OsdSizeText.Text = $"{Math.Round(OsdSizeSlider.Value)}%";
         ZoomValueText.Text = $"{ZoomSlider.Value:0.00}×";
         PanXValueText.Text = $"{PanXSlider.Value:0.00}";
         PanYValueText.Text = $"{PanYSlider.Value:0.00}";
@@ -539,6 +562,9 @@ public sealed partial class QuickSettingsView : UserControl
                 break;
             case nameof(OscPositionBox):
                 Raise(QuickSettingKey.OscPosition, number: OscPositionBox.SelectedIndex);
+                break;
+            case nameof(OsdPositionBox):
+                Raise(QuickSettingKey.OsdPosition, number: OsdPositionBox.SelectedIndex);
                 break;
             case nameof(SidebarSideBox):
                 Raise(QuickSettingKey.SidebarSide, number: SidebarSideBox.SelectedIndex);
@@ -629,6 +655,24 @@ public sealed partial class QuickSettingsView : UserControl
             case nameof(OscAutoHideSwitch):
                 Raise(QuickSettingKey.OscAutoHide, flag: OscAutoHideSwitch.IsOn);
                 break;
+            case nameof(OsdEnabledSwitch):
+                Raise(QuickSettingKey.OsdEnabled, flag: OsdEnabledSwitch.IsOn);
+                break;
+            case nameof(OsdPersistentSwitch):
+                Raise(QuickSettingKey.OsdPersistent, flag: OsdPersistentSwitch.IsOn);
+                break;
+            case nameof(FullscreenClockSwitch):
+                Raise(QuickSettingKey.FullscreenClock, flag: FullscreenClockSwitch.IsOn);
+                break;
+            case nameof(FullscreenBatterySwitch):
+                Raise(QuickSettingKey.FullscreenBattery, flag: FullscreenBatterySwitch.IsOn);
+                break;
+            case nameof(FullscreenTitleSwitch):
+                Raise(QuickSettingKey.FullscreenTitle, flag: FullscreenTitleSwitch.IsOn);
+                break;
+            case nameof(ThumbnailPreviewSwitch):
+                Raise(QuickSettingKey.ThumbnailPreview, flag: ThumbnailPreviewSwitch.IsOn);
+                break;
             case nameof(FlipHorizontalSwitch):
                 Raise(QuickSettingKey.FlipHorizontal, flag: FlipHorizontalSwitch.IsOn);
                 break;
@@ -668,6 +712,9 @@ public sealed partial class QuickSettingsView : UserControl
             case nameof(SidebarWidthSlider):
                 Raise(QuickSettingKey.SidebarWidth, number: SidebarWidthSlider.Value);
                 break;
+            case nameof(OsdSizeSlider):
+                Raise(QuickSettingKey.OsdSize, number: OsdSizeSlider.Value);
+                break;
             case nameof(ZoomSlider):
                 Raise(QuickSettingKey.Zoom, number: ZoomSlider.Value);
                 break;
@@ -706,6 +753,9 @@ public sealed partial class QuickSettingsView : UserControl
         {
             case nameof(MaxVolumeBox):
                 Raise(QuickSettingKey.MaxVolume, number: sender.Value);
+                break;
+            case nameof(OsdDurationBox):
+                Raise(QuickSettingKey.OsdDuration, number: sender.Value);
                 break;
             case nameof(SubtitleFontSizeBox):
                 Raise(QuickSettingKey.SubtitleFontSize, number: sender.Value);

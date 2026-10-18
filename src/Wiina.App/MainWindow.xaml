@@ -54,6 +54,9 @@
                                   HorizontalAlignment="Right"
                                   Margin="0,40,0,0"
                                   Visibility="Collapsed" />
+            <controls:ThumbnailPeek x:Name="ThumbnailPeek" />
+            <controls:BufferIndicator x:Name="BufferStatus" />
+            <controls:FullscreenInfo x:Name="FullscreenStatus" />
             <Border x:Name="TimePreview"
                     HorizontalAlignment="Left"
                     VerticalAlignment="Top"
@@ -77,7 +80,7 @@
 
         <controls:OsdText x:Name="Osd"
                           Grid.RowSpan="3"
-                          Margin="0,0,12,76"
+                          Margin="0,0,8,76"
                           HorizontalAlignment="Right"
                           VerticalAlignment="Bottom" />
     </Grid>

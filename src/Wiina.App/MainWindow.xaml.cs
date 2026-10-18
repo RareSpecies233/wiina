@@ -16,6 +16,7 @@ using Wiina.App.Controls;
 using Wiina.App.Interop;
 using Wiina.App.ViewModels;
 using Wiina.Core.Models;
+using Wiina.Core.Osd;
 using Wiina.Core.Settings;
 using Wiina.Core.State;
 using Wiina.Core.Text;
@@ -171,6 +172,7 @@ public sealed partial class MainWindow : Window
         ApplySettings();
         InitializeStage3();
         InitializeSidebar();
+        InitializeStage5();
     }
 
     private void ApplySettings()
@@ -178,6 +180,7 @@ public sealed partial class MainWindow : Window
         ApplyTheme();
         ApplyLayout();
         _oscState.AutoHideEnabled = _settings.OscAutoHide;
+        ApplyStage5Settings();
 
         if (AppWindow.Presenter is OverlappedPresenter presenter)
         {
@@ -282,9 +285,7 @@ public sealed partial class MainWindow : Window
         }
 
         _wasPlayingBeforeSeek = false;
-        ShowOsd(
-            TimeFormatter.Format(_oscVm.Position),
-            TimeFormatter.Format(_oscVm.Duration));
+        ShowOsd(OsdMessages.Seek(_oscVm.Position, _oscVm.Duration));
         ResetAutoHideTimer();
     }
 
@@ -459,6 +460,8 @@ public sealed partial class MainWindow : Window
                 element.Opacity = opacity;
             }
 
+            UpdateFullscreenStatus();
+            UpdateOsdPlacement();
             return;
         }
 
@@ -477,6 +480,8 @@ public sealed partial class MainWindow : Window
         }
 
         storyboard.Begin();
+        UpdateFullscreenStatus();
+        UpdateOsdPlacement();
     }
 
     private bool IsOverChrome(Point point)
@@ -486,7 +491,8 @@ public sealed partial class MainWindow : Window
             (OscTop.Visibility == Visibility.Visible && Contains(OscTop, point)) ||
             (OscFloating.Visibility == Visibility.Visible && Contains(OscFloating, point)) ||
             (SidebarLeading.Visibility == Visibility.Visible && Contains(SidebarLeading, point)) ||
-            (SidebarTrailing.Visibility == Visibility.Visible && Contains(SidebarTrailing, point));
+            (SidebarTrailing.Visibility == Visibility.Visible && Contains(SidebarTrailing, point)) ||
+            (Osd.IsPersistentShowing && Contains(Osd, point));
     }
 
     private bool Contains(FrameworkElement element, Point point)
@@ -514,11 +520,17 @@ public sealed partial class MainWindow : Window
 
     private void ShowTimePreview(TimelineControl timeline, double seconds, double x)
     {
-        if (_seeking)
+        _previewTimeline = timeline;
+        if (_seeking ||
+            HasVisibleSidebar ||
+            _oscDragging ||
+            OsdCoversTimeline())
         {
+            HideTimePreview();
             return;
         }
 
+        _previewPointerX = ParsePreviewX(timeline, x);
         TimePreviewText.Text = TimeFormatter.Format(seconds);
         string? chapterTitle = FindChapterTitle(seconds);
         if (string.IsNullOrWhiteSpace(chapterTitle))
@@ -549,6 +561,33 @@ public sealed partial class MainWindow : Window
 
         top = Math.Clamp(top, 0, Math.Max(0, OverlayLayer.ActualHeight - height));
         TimePreview.Margin = new Thickness(left, top, 0, 0);
+
+        if (_settings.ThumbnailPreviewEnabled && File.Exists(_currentPath))
+        {
+            double thumbWidth = Math.Clamp(_settings.ThumbnailWidth, 80, 320);
+            double aspect = _videoAspect > 0 ? _videoAspect : 16.0 / 9.0;
+            double thumbHeight = Math.Clamp(thumbWidth / aspect, 45, 220);
+            ThumbnailPeek.ShowLoading(
+                TimeFormatter.Format(seconds),
+                thumbWidth,
+                thumbHeight);
+            PositionThumbnail();
+            RequestThumbnailAsync(seconds);
+        }
+    }
+
+    private double ParsePreviewX(TimelineControl timeline, double x)
+    {
+        try
+        {
+            Point point = timeline.TransformToVisual(OverlayLayer).TransformPoint(
+                new Point(x, timeline.ActualHeight / 2));
+            return point.X;
+        }
+        catch
+        {
+            return x;
+        }
     }
 
     private string? FindChapterTitle(double seconds)
@@ -570,7 +609,16 @@ public sealed partial class MainWindow : Window
         return title;
     }
 
-    private void HideTimePreview() => TimePreview.Visibility = Visibility.Collapsed;
+    private void HideTimePreview()
+    {
+        TimePreview.Visibility = Visibility.Collapsed;
+        ThumbnailPeek.Hide();
+        _previewTimeline = null;
+        _thumbnailRequest++;
+        _thumbnailCts?.Cancel();
+        _thumbnailCts?.Dispose();
+        _thumbnailCts = null;
+    }
 
     private void OnOscDragStart(object sender, PointerRoutedEventArgs e)
     {
@@ -744,6 +792,7 @@ public sealed partial class MainWindow : Window
 
         AddItem("主题", CycleTheme);
         AddItem("置顶", TogglePin);
+        AddItem("技术信息 OSD", TogglePersistentOsd);
 
         var windowMenu = new MenuFlyoutSubItem { Text = "窗口尺寸" };
         AddSubItem(windowMenu, "0.5×", () => ResizeToScale(0.5));
@@ -792,8 +841,12 @@ public sealed partial class MainWindow : Window
         DispatcherQueue.TryEnqueue(ApplyVideoLayout);
     }
 
-    private void SyncFullscreenState() =>
-        _oscVm.IsFullscreen = AppWindow.Presenter.Kind == AppWindowPresenterKind.FullScreen;
+    private void SyncFullscreenState()
+    {
+        _oscVm.IsFullscreen = IsFullscreen;
+        UpdateFullscreenStatus();
+        UpdateOsdPlacement();
+    }
 
     private void OnNumberPropertyChanged(string name, double value)
     {
@@ -816,6 +869,12 @@ public sealed partial class MainWindow : Window
                     break;
                 case "demuxer-cache-time":
                     _oscVm.SetBufferFromPlayer(value);
+                    break;
+                case "cache-buffering-state":
+                    SetCacheBuffering(value);
+                    break;
+                case "cache-speed":
+                    SetCacheSpeed(value);
                     break;
                 case "speed":
                     _oscVm.SetSpeedFromPlayer(value);
@@ -841,6 +900,12 @@ public sealed partial class MainWindow : Window
                     _oscVm.SetMutedFromPlayer(value);
                     _settings.Muted = value;
                     SyncSidebarVolume();
+                    break;
+                case "paused-for-cache":
+                    SetPausedForCache(value);
+                    break;
+                case "seeking":
+                    SetSeekingProperty(value);
                     break;
                 default:
                     OnStage3FlagProperty(name, value);
@@ -907,6 +972,7 @@ public sealed partial class MainWindow : Window
 
         ShowChrome();
         OnMediaLoadedStage3();
+        EndStreamOpen();
         RefreshSidebarContent();
         ApplyCropFromSettings();
     }
@@ -1042,6 +1108,13 @@ public sealed partial class MainWindow : Window
 
         FadeChrome(_chromeShown ? 1 : 0, _chromeShown);
         ApplyOscPosition();
+        UpdateOsdPlacement();
+        UpdateFullscreenStatus();
+        if (sidebarVisible)
+        {
+            HideTimePreview();
+        }
+
         ResetAutoHideTimer();
     }
 
@@ -1075,6 +1148,7 @@ public sealed partial class MainWindow : Window
         UpdateCompactState();
         OscFloating.SetAvailableWidth(RootGrid.ActualWidth);
         ApplyOscPosition();
+        UpdateOsdPlacement();
         _resizeTimer.Stop();
         _resizeTimer.Start();
     }
@@ -1419,6 +1493,7 @@ public sealed partial class MainWindow : Window
         SidebarHost.Log = null;
         WindowInterop.SetCursorVisible(true);
         OnClosedStage3();
+        DisposeStage5();
         SaveSettings();
         WindowInterop.Detach(this);
 

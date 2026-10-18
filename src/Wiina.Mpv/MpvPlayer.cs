@@ -118,6 +118,16 @@ public sealed class MpvPlayer : IDisposable
 
     public void Start(int width, int height)
     {
+        Start(width, height, headless: false);
+    }
+
+    /// <summary>
+    /// Starts the client. <paramref name="headless"/> is used by the Stage 5
+    /// thumbnail extractor: no window, no audio, paused and kept open so the
+    /// background worker can seek and call <see cref="ScreenshotRaw"/>.
+    /// </summary>
+    public void Start(int width, int height, bool headless)
+    {
         ObjectDisposedException.ThrowIf(_disposed, this);
         if (_handle != 0)
         {
@@ -140,7 +150,7 @@ public sealed class MpvPlayer : IDisposable
             SetOption("d3d11-composition-size", $"{Math.Max(1, width)}x{Math.Max(1, height)}");
 
             // Embedding-friendly defaults. Wiina draws its own OSC/OSD.
-            SetOption("force-window", "immediate");
+            SetOption("force-window", headless ? "no" : "immediate");
             SetOption("idle", "yes");
             SetOption("keep-open", "yes");
             SetOption("terminal", "no");
@@ -152,6 +162,16 @@ public sealed class MpvPlayer : IDisposable
             SetOption("screenshot-format", "png");
             SetOption("screenshot-directory", DefaultScreenshotFolder());
             SetOption("sub-visibility", "yes");
+
+            if (headless)
+            {
+                SetOption("audio", "no");
+                SetOption("pause", "yes");
+                SetOption("untimed", "yes");
+                SetOption("hr-seek", "yes");
+                SetOption("video-sync", "audio");
+                SetOption("cache", "no");
+            }
 
             Check(MpvInterop.mpv_initialize(_handle), "mpv_initialize");
             ObservePlaybackProperties();
@@ -320,6 +340,13 @@ public sealed class MpvPlayer : IDisposable
         TryObserveProperty("sub-visibility", MpvFormat.Flag);
         TryObserveProperty("eof-reached", MpvFormat.Flag);
         TryObserveProperty("idle-active", MpvFormat.Flag);
+
+        // Stage 5 status overlays.
+        TryObserveProperty("paused-for-cache", MpvFormat.Flag);
+        TryObserveProperty("seeking", MpvFormat.Flag);
+        TryObserveProperty("cache-buffering-state", MpvFormat.Double);
+        TryObserveProperty("cache-speed", MpvFormat.Double);
+        TryObserveProperty("demuxer-cache-state", MpvFormat.Node);
     }
 
     /// <summary>Last parsed chapter list (updated on the mpv event thread).</summary>
@@ -441,6 +468,55 @@ public sealed class MpvPlayer : IDisposable
             {
                 Marshal.FreeHGlobal(array);
             }
+        }
+    }
+
+    /// <summary>
+    /// Runs <c>screenshot-raw</c> synchronously and returns the decoded frame.
+    /// Only call this off the UI thread; a 4K frame is tens of megabytes.
+    /// </summary>
+    public unsafe MpvScreenshot? ScreenshotRaw()
+    {
+        if (_handle == 0)
+        {
+            throw new InvalidOperationException("MpvPlayer is not started.");
+        }
+
+        nint name = Marshal.StringToCoTaskMemUTF8("screenshot-raw");
+        MpvNode* values = stackalloc MpvNode[1];
+        values[0] = new MpvNode { Data = name, Format = MpvFormat.String };
+        MpvNodeList list = new()
+        {
+            Count = 1,
+            Values = (nint)values,
+            Keys = 0,
+        };
+        MpvNode arguments = new()
+        {
+            Data = (nint)(&list),
+            Format = MpvFormat.NodeArray,
+        };
+        try
+        {
+            int result = MpvInterop.mpv_command_node(_handle, (nint)(&arguments), out MpvNode node);
+            try
+            {
+                if (result < 0)
+                {
+                    Log?.Invoke($"screenshot-raw failed: {ErrorString(result)}");
+                    return null;
+                }
+
+                return MpvScreenshotReader.Read((nint)(&node));
+            }
+            finally
+            {
+                MpvInterop.mpv_free_node_contents(ref node);
+            }
+        }
+        finally
+        {
+            Marshal.FreeCoTaskMem(name);
         }
     }
 

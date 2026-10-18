@@ -184,6 +184,135 @@
                         <StackPanel Spacing="10">
                             <Grid>
                                 <StackPanel Orientation="Horizontal" Spacing="8">
+                                    <FontIcon Glyph="&#xE7BA;" FontSize="14" Foreground="{ThemeResource SecondaryTextBrush}" />
+                                    <TextBlock Text="OSD 与预览" Style="{StaticResource SectionTitleStyle}" />
+                                </StackPanel>
+                                <Button Style="{StaticResource CardHeaderButtonStyle}"
+                                        Content="&#xE72C;"
+                                        HorizontalAlignment="Right"
+                                        Tag="osd"
+                                        Click="OnResetClick"
+                                        ToolTipService.ToolTip="重置 OSD 设置" />
+                            </Grid>
+
+                            <Grid ColumnSpacing="12">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="启用 OSD" Style="{StaticResource BodyTextStyle}" />
+                                <ToggleSwitch x:Name="OsdEnabledSwitch"
+                                              Grid.Column="1"
+                                              MinWidth="0"
+                                              Toggled="OnToggleChanged" />
+                            </Grid>
+
+                            <Grid ColumnSpacing="12">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="位置" Style="{StaticResource BodyTextStyle}" />
+                                <ComboBox x:Name="OsdPositionBox"
+                                          Grid.Column="1"
+                                          Width="150"
+                                          SelectionChanged="OnComboChanged" />
+                            </Grid>
+
+                            <StackPanel Spacing="2">
+                                <Grid>
+                                    <TextBlock Text="字号" Style="{StaticResource BodyTextStyle}" />
+                                    <TextBlock x:Name="OsdSizeText"
+                                               HorizontalAlignment="Right"
+                                               Style="{StaticResource CaptionTextStyle}" />
+                                </Grid>
+                                <Slider x:Name="OsdSizeSlider"
+                                        StepFrequency="5"
+                                        ValueChanged="OnSliderValueChanged" />
+                            </StackPanel>
+
+                            <Grid ColumnSpacing="12">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="停留时间（秒）" Style="{StaticResource BodyTextStyle}" />
+                                <NumberBox x:Name="OsdDurationBox"
+                                           Grid.Column="1"
+                                           Width="110"
+                                           Minimum="0.1"
+                                           Maximum="30"
+                                           SmallChange="0.1"
+                                           SpinButtonPlacementMode="Compact"
+                                           ValueChanged="OnNumberBoxChanged" />
+                            </Grid>
+
+                            <Grid ColumnSpacing="12">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="持久技术信息 OSD" Style="{StaticResource BodyTextStyle}" />
+                                <ToggleSwitch x:Name="OsdPersistentSwitch"
+                                              Grid.Column="1"
+                                              MinWidth="0"
+                                              Toggled="OnToggleChanged" />
+                            </Grid>
+
+                            <Grid ColumnSpacing="12">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="全屏时钟" Style="{StaticResource BodyTextStyle}" />
+                                <ToggleSwitch x:Name="FullscreenClockSwitch"
+                                              Grid.Column="1"
+                                              MinWidth="0"
+                                              Toggled="OnToggleChanged" />
+                            </Grid>
+
+                            <Grid ColumnSpacing="12">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="全屏电量" Style="{StaticResource BodyTextStyle}" />
+                                <ToggleSwitch x:Name="FullscreenBatterySwitch"
+                                              Grid.Column="1"
+                                              MinWidth="0"
+                                              Toggled="OnToggleChanged" />
+                            </Grid>
+
+                            <Grid ColumnSpacing="12">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="全屏显示标题" Style="{StaticResource BodyTextStyle}" />
+                                <ToggleSwitch x:Name="FullscreenTitleSwitch"
+                                              Grid.Column="1"
+                                              MinWidth="0"
+                                              Toggled="OnToggleChanged" />
+                            </Grid>
+
+                            <Grid ColumnSpacing="12">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="时间轴缩略图" Style="{StaticResource BodyTextStyle}" />
+                                <ToggleSwitch x:Name="ThumbnailPreviewSwitch"
+                                              Grid.Column="1"
+                                              MinWidth="0"
+                                              Toggled="OnToggleChanged" />
+                            </Grid>
+                        </StackPanel>
+                    </Border>
+
+                    <Border Style="{StaticResource CardBorderStyle}" Padding="12">
+                        <StackPanel Spacing="10">
+                            <Grid>
+                                <StackPanel Orientation="Horizontal" Spacing="8">
                                     <FontIcon Glyph="&#xE700;" FontSize="14" Foreground="{ThemeResource SecondaryTextBrush}" />
                                     <TextBlock Text="侧边栏" Style="{StaticResource SectionTitleStyle}" />
                                 </StackPanel>
