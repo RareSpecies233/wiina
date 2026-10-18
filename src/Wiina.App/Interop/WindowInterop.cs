@@ -41,6 +41,20 @@ internal static class WindowInterop
     [DllImport("user32.dll")]
     private static extern uint GetDpiForWindow(nint hWnd);
 
+    [DllImport("user32.dll")]
+    private static extern nint SetCursor(nint hCursor);
+
+    [DllImport("user32.dll")]
+    private static extern nint LoadCursor(nint hInstance, nint lpCursorName);
+
+    [DllImport("user32.dll")]
+    private static extern bool GetCursorPos(out POINT point);
+
+    [DllImport("user32.dll")]
+    private static extern bool GetWindowRect(nint hWnd, out RECT rect);
+
+    private const int IDC_ARROW = 32512;
+
     private delegate nint SubclassProc(
         nint hWnd,
         uint uMsg,
@@ -73,6 +87,45 @@ internal static class WindowInterop
         if (Hooks.Remove(hwnd, out Hook? hook))
         {
             hook.Detach();
+        }
+    }
+
+    /// <summary>
+    /// True while the OS pointer is inside the window rect. WinUI raises
+    /// PointerExited on the root when the pointer moves between child
+    /// elements too, so the root-exit handler must filter those.
+    /// </summary>
+    public static bool IsCursorInsideWindow(Window window)
+    {
+        try
+        {
+            nint hwnd = Microsoft.UI.Win32Interop.GetWindowFromWindowId(window.AppWindow.Id);
+            return GetCursorPos(out POINT point) &&
+                GetWindowRect(hwnd, out RECT rect) &&
+                point.X >= rect.Left &&
+                point.X < rect.Right &&
+                point.Y >= rect.Top &&
+                point.Y < rect.Bottom;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Hide the pointer while the chrome is hidden. WinUI keeps resetting the
+    /// cursor on pointer moves, so callers re-apply this from PointerMoved.
+    /// </summary>
+    public static void SetCursorVisible(bool visible)
+    {
+        try
+        {
+            SetCursor(visible ? LoadCursor(0, IDC_ARROW) : 0);
+        }
+        catch
+        {
+            // Cursor feedback must never break playback.
         }
     }
 

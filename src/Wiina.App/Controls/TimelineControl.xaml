@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="utf-8"?>
+<UserControl
+    x:Class="Wiina.App.Controls.TimelineControl"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    Height="22"
+    IsTabStop="True"
+    AutomationProperties.Name="播放进度"
+    AutomationProperties.HelpText="左右方向键跳转 5 秒，Home/End 跳到开头或结尾">
+
+    <Grid x:Name="Root" Background="Transparent" SizeChanged="OnSizeChanged">
+        <Border x:Name="Track"
+                Height="3"
+                CornerRadius="1.5"
+                Background="{ThemeResource SliderTrackBrush}"
+                VerticalAlignment="Center" />
+        <Border x:Name="BufferBar"
+                Height="3"
+                CornerRadius="1.5"
+                Background="{ThemeResource SliderBufferBrush}"
+                HorizontalAlignment="Left"
+                VerticalAlignment="Center"
+                Width="0" />
+        <Border x:Name="PlayedBar"
+                Height="3"
+                CornerRadius="1.5"
+                Background="{ThemeResource SliderPlayedBrush}"
+                HorizontalAlignment="Left"
+                VerticalAlignment="Center"
+                Width="0" />
+        <Canvas x:Name="Marks" IsHitTestVisible="False" />
+        <Border x:Name="Thumb"
+                Width="3"
+                Height="15"
+                CornerRadius="1.5"
+                Background="{ThemeResource SliderThumbBrush}"
+                HorizontalAlignment="Left"
+                VerticalAlignment="Center"
+                IsHitTestVisible="False" />
+        <Slider x:Name="Slider"
+                Opacity="0"
+                Minimum="0"
+                Maximum="1"
+                StepFrequency="0.01"
+                IsThumbToolTipEnabled="False"
+                ValueChanged="OnSliderValueChanged"
+                PointerPressed="OnSliderPointerPressed"
+                PointerReleased="OnSliderPointerReleased"
+                PointerMoved="OnSliderPointerMoved"
+                PointerExited="OnSliderPointerExited"
+                PointerCaptureLost="OnSliderPointerCaptureLost" />
+        <Border x:Name="ChapterBrushSource"
+                Background="{ThemeResource SecondaryTextBrush}"
+                Visibility="Collapsed" />
+        <Border x:Name="AbBrushSource"
+                Background="{ThemeResource AccentBrush}"
+                Visibility="Collapsed" />
+    </Grid>
+</UserControl>

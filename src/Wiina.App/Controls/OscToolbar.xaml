@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<UserControl
+    x:Class="Wiina.App.Controls.OscToolbar"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <StackPanel Orientation="Horizontal" Spacing="1" VerticalAlignment="Center">
+        <Button Style="{StaticResource OscIconButtonStyle}"
+                Content="&#xE8B9;"
+                IsEnabled="False"
+                ToolTipService.ToolTip="画中画（Stage 6）"
+                AutomationProperties.Name="画中画" />
+        <Button Style="{StaticResource OscIconButtonStyle}"
+                Content="&#xE8FD;"
+                Command="{Binding PlaylistCommand}"
+                ToolTipService.ToolTip="播放列表 (Ctrl+Shift+B)"
+                AutomationProperties.Name="播放列表" />
+        <Button Style="{StaticResource OscIconButtonStyle}"
+                Content="&#xE713;"
+                Command="{Binding SettingsCommand}"
+                ToolTipService.ToolTip="快速设置"
+                AutomationProperties.Name="设置" />
+        <Button x:Name="FullscreenButton"
+                Style="{StaticResource OscIconButtonStyle}"
+                Content="&#xE740;"
+                Command="{Binding FullscreenCommand}"
+                ToolTipService.ToolTip="全屏 (F11)"
+                AutomationProperties.Name="全屏" />
+    </StackPanel>
+</UserControl>

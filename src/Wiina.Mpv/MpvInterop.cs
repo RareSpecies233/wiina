@@ -31,6 +31,12 @@ internal static class MpvInterop
     [DllImport(Lib, CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Ansi)]
     internal static extern int mpv_get_property(nint ctx, string name, MpvFormat format, out long data);
 
+    [DllImport(Lib, EntryPoint = "mpv_get_property", CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Ansi)]
+    internal static extern int mpv_get_property_double(nint ctx, string name, MpvFormat format, out double data);
+
+    [DllImport(Lib, EntryPoint = "mpv_get_property", CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Ansi)]
+    internal static extern int mpv_get_property_flag(nint ctx, string name, MpvFormat format, out int data);
+
     [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
     internal static extern void mpv_free(nint data);
 

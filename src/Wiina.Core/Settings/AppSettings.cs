@@ -22,6 +22,12 @@ public sealed class AppSettings
 
     public bool LockAspectRatio { get; set; } = true;
 
+    /// <summary>Floating OSC centre X as a 0..1 fraction of the video area.</summary>
+    public double OscX { get; set; } = 0.5;
+
+    /// <summary>Floating OSC centre Y as a 0..1 fraction of the video area.</summary>
+    public double OscY { get; set; } = 0.85;
+
     public int WindowWidth { get; set; } = 1280;
 
     public int WindowHeight { get; set; } = 720;

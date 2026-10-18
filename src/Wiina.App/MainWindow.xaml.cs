@@ -1,4 +1,6 @@
+using System.Globalization;
 using System.IO;
+using System.Linq;
 using Microsoft.UI;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Windowing;
@@ -6,12 +8,17 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
+using Microsoft.UI.Xaml.Media.Animation;
 using Windows.Foundation;
 using Windows.Graphics;
 using Windows.UI;
+using Wiina.App.Controls;
 using Wiina.App.Interop;
+using Wiina.App.ViewModels;
 using Wiina.Core.Models;
 using Wiina.Core.Settings;
+using Wiina.Core.State;
+using Wiina.Core.Text;
 using Wiina.Mpv;
 
 namespace Wiina.App;
@@ -44,13 +51,46 @@ public sealed partial class MainWindow : Window
 
     private readonly SettingsStore _settingsStore = new();
     private readonly DispatcherQueueTimer _resizeTimer;
+    private readonly DispatcherQueueTimer _autoHideTimer;
+    private readonly OscVisibilityController _oscState = new();
+    private readonly OscViewModel _oscVm = new();
     private AppSettings _settings;
     private MpvPlayer? _player;
     private nint _swapChain;
     private bool _started;
     private bool _sidebarVisible;
     private bool _compact;
+    private bool _oscDragging;
+    private bool _seeking;
+    private bool _wasPlayingBeforeSeek;
+    private bool _chromeShown = true;
+    private bool _pointerOverChrome;
+    private bool? _animationsEnabled;
+    private Point _oscDragStart;
+    private Point _oscOrigin;
+    private IReadOnlyList<MpvChapter> _chapters = Array.Empty<MpvChapter>();
     private double _videoAspect = 16.0 / 9.0;
+
+    private bool AnimationsEnabled
+    {
+        get
+        {
+            if (_animationsEnabled is null)
+            {
+                try
+                {
+                    _animationsEnabled =
+                        new Windows.UI.ViewManagement.UISettings().AnimationsEnabled;
+                }
+                catch
+                {
+                    _animationsEnabled = true;
+                }
+            }
+
+            return _animationsEnabled.Value;
+        }
+    }
 
     private static readonly string TracePath =
         Path.Combine(Path.GetTempPath(), "wiina-trace.log");
@@ -93,6 +133,16 @@ public sealed partial class MainWindow : Window
         _resizeTimer.IsRepeating = false;
         _resizeTimer.Tick += (_, _) => ApplyVideoLayout();
 
+        _autoHideTimer = DispatcherQueue.CreateTimer();
+        _autoHideTimer.Interval = TimeSpan.FromMilliseconds(2500);
+        _autoHideTimer.IsRepeating = false;
+        _autoHideTimer.Tick += OnAutoHideTick;
+
+        OscFloating.DataContext = _oscVm;
+        OscBottom.DataContext = _oscVm;
+        TitleBar.SetOscDataContext(_oscVm);
+        SubscribeOsc();
+
         TitleBar.Title = "Wiina";
         TitleBar.PinClicked += (_, _) => TogglePin();
         TitleBar.LayoutClicked += (_, _) => ToggleLayout();
@@ -122,6 +172,609 @@ public sealed partial class MainWindow : Window
         {
             presenter.IsAlwaysOnTop = _settings.AlwaysOnTop;
         }
+    }
+
+    private void SubscribeOsc()
+    {
+        _oscVm.SeekRequested += seconds => SendPlayerCommand(
+            "seek",
+            seconds.ToString("0.###", CultureInfo.InvariantCulture),
+            "absolute");
+        _oscVm.VolumeRequested += value => _player?.TrySetPropertyString(
+            "volume",
+            value.ToString("0.##", CultureInfo.InvariantCulture));
+        _oscVm.PlayPauseRequested += () => SendPlayerCommand("cycle", "pause");
+        _oscVm.MuteRequested += () => SendPlayerCommand("cycle", "mute");
+        _oscVm.PreviousRequested += () => SendPlayerCommand("playlist-prev");
+        _oscVm.NextRequested += () => SendPlayerCommand("playlist-next");
+        _oscVm.FullscreenRequested += ToggleFullscreen;
+        _oscVm.SettingsRequested += ShowSettingsSidebar;
+        _oscVm.PlaylistRequested += ShowPlaylistSidebar;
+        _oscVm.PropertyChanged += (_, _) => UpdateTimelines();
+
+        SubscribeTimeline(OscFloating.Timeline);
+        SubscribeTimeline(OscBottom.Timeline);
+        SubscribeTimeline(TitleBar.TopTimeline);
+
+        OscFloating.DragHandle.PointerPressed += OnOscDragStart;
+        OscFloating.DragHandle.PointerMoved += OnOscDragMove;
+        OscFloating.DragHandle.PointerReleased += OnOscDragEnd;
+        OscFloating.DragHandle.PointerCaptureLost += OnOscDragEnd;
+        OscCanvas.SizeChanged += (_, _) => ApplyOscPosition();
+        OscFloating.SizeChanged += (_, _) => ApplyOscPosition();
+    }
+
+    private void SendPlayerCommand(params string[] args)
+    {
+        try
+        {
+            if (_player is { IsRunning: true })
+            {
+                _player.Command(args);
+            }
+        }
+        catch (MpvException ex)
+        {
+            Trace($"mpv command failed ({string.Join(' ', args)}): {ex.Message}");
+        }
+    }
+
+    private void SubscribeTimeline(TimelineControl timeline)
+    {
+        timeline.SeekRequested += value => _oscVm.RequestSeek(value);
+        timeline.SeekStarted += OnSeekStarted;
+        timeline.SeekCompleted += OnSeekCompleted;
+        timeline.PreviewRequested += (time, x) => ShowTimePreview(timeline, time, x);
+        timeline.PreviewHidden += HideTimePreview;
+    }
+
+    private void UpdateTimelines()
+    {
+        foreach (TimelineControl timeline in new[]
+                 {
+                     OscFloating.Timeline,
+                     OscBottom.Timeline,
+                     TitleBar.TopTimeline,
+                 })
+        {
+            timeline.Position = _oscVm.Position;
+            timeline.SetDuration(_oscVm.Duration);
+            timeline.SetBufferEnd(_oscVm.BufferEnd);
+            timeline.SetChapters(_oscVm.Chapters);
+            timeline.SetAbLoop(_oscVm.AbLoopA ?? 0, _oscVm.AbLoopB ?? 0);
+        }
+    }
+
+    private void OnSeekStarted()
+    {
+        _seeking = true;
+        _wasPlayingBeforeSeek = _oscVm.IsPlaying;
+        HideTimePreview();
+        _autoHideTimer.Stop();
+        if (_wasPlayingBeforeSeek)
+        {
+            SendPlayerCommand("set", "pause", "yes");
+        }
+    }
+
+    private void OnSeekCompleted()
+    {
+        if (!_seeking)
+        {
+            return;
+        }
+
+        _seeking = false;
+        if (_wasPlayingBeforeSeek)
+        {
+            SendPlayerCommand("set", "pause", "no");
+        }
+
+        _wasPlayingBeforeSeek = false;
+        ResetAutoHideTimer();
+    }
+
+    private void OnRootPointerEntered(object sender, PointerRoutedEventArgs e)
+    {
+        ShowChrome();
+    }
+
+    private void OnRootPointerMoved(object sender, PointerRoutedEventArgs e)
+    {
+        Point point = e.GetCurrentPoint(RootGrid).Position;
+        _pointerOverChrome = IsOverChrome(point);
+
+        if (!_chromeShown)
+        {
+            ShowChrome();
+        }
+
+        if (_pointerOverChrome || _oscDragging || _seeking)
+        {
+            _autoHideTimer.Stop();
+        }
+        else
+        {
+            ResetAutoHideTimer();
+        }
+
+        if (!_chromeShown)
+        {
+            // WinUI restores the default cursor on pointer moves.
+            WindowInterop.SetCursorVisible(false);
+        }
+    }
+
+    private void OnRootPointerExited(object sender, PointerRoutedEventArgs e)
+    {
+        // Root PointerExited also fires when the pointer moves between child
+        // elements; only a real window exit should hide the chrome.
+        if (WindowInterop.IsCursorInsideWindow(this))
+        {
+            return;
+        }
+
+        _pointerOverChrome = false;
+        _autoHideTimer.Stop();
+        HideChrome(force: true);
+    }
+
+    private void OnAutoHideTick(DispatcherQueueTimer sender, object args)
+    {
+        _autoHideTimer.Stop();
+        if (_pointerOverChrome || _oscDragging || _seeking)
+        {
+            return;
+        }
+
+        HideChrome();
+    }
+
+    private void ShowChrome()
+    {
+        if (!_chromeShown)
+        {
+            _chromeShown = true;
+            _oscState.Show();
+            _oscState.CompleteShow();
+            FadeChrome(1, hitTest: true);
+            WindowInterop.SetCursorVisible(true);
+        }
+
+        ResetAutoHideTimer();
+    }
+
+    private void HideChrome(bool force = false)
+    {
+        if (_settings.Layout == WindowLayoutMode.Docked)
+        {
+            // Docked titlebar/bottom bar are part of the layout: never fade
+            // them out, otherwise the window looks like it lost its chrome.
+            return;
+        }
+
+        if (_oscDragging)
+        {
+            return;
+        }
+
+        if (!force && !_oscState.CanHide)
+        {
+            return;
+        }
+
+        if (_oscState.Hide(force) != OscVisibilityState.WillHide || !_chromeShown)
+        {
+            return;
+        }
+
+        _oscState.CompleteHide();
+        _chromeShown = false;
+        _autoHideTimer.Stop();
+        FadeChrome(0, hitTest: false);
+        WindowInterop.SetCursorVisible(false);
+    }
+
+    private void ResetAutoHideTimer()
+    {
+        _autoHideTimer.Stop();
+        if (_settings.Layout == WindowLayoutMode.Docked ||
+            !_oscState.AutoHideEnabled ||
+            _oscDragging ||
+            _seeking ||
+            _sidebarVisible ||
+            _pointerOverChrome)
+        {
+            return;
+        }
+
+        _autoHideTimer.Start();
+    }
+
+    private void FadeChrome(double opacity, bool hitTest)
+    {
+        if (_settings.Layout == WindowLayoutMode.Docked)
+        {
+            opacity = 1;
+            hitTest = true;
+        }
+
+        TitleBar.IsHitTestVisible = hitTest;
+        OscBottom.IsHitTestVisible = hitTest;
+        OscFloating.IsHitTestVisible = hitTest;
+
+        FrameworkElement[] elements =
+        {
+            TitleBar,
+            OscBottom,
+            OscFloating,
+        };
+
+        if (!AnimationsEnabled)
+        {
+            foreach (FrameworkElement element in elements)
+            {
+                element.Opacity = opacity;
+            }
+
+            return;
+        }
+
+        var storyboard = new Storyboard();
+        foreach (FrameworkElement element in elements)
+        {
+            var animation = new DoubleAnimation
+            {
+                To = opacity,
+                Duration = TimeSpan.FromMilliseconds(250),
+                EnableDependentAnimation = true,
+            };
+            Storyboard.SetTarget(animation, element);
+            Storyboard.SetTargetProperty(animation, "Opacity");
+            storyboard.Children.Add(animation);
+        }
+
+        storyboard.Begin();
+    }
+
+    private bool IsOverChrome(Point point)
+    {
+        return Contains(TitleBar, point) ||
+            (OscBottom.Visibility == Visibility.Visible && Contains(OscBottom, point)) ||
+            (OscFloating.Visibility == Visibility.Visible && Contains(OscFloating, point)) ||
+            (SidebarLeading.Visibility == Visibility.Visible && Contains(SidebarLeading, point)) ||
+            (SidebarTrailing.Visibility == Visibility.Visible && Contains(SidebarTrailing, point));
+    }
+
+    private bool Contains(FrameworkElement element, Point point)
+    {
+        if (element.Visibility != Visibility.Visible ||
+            element.ActualWidth <= 0 ||
+            element.ActualHeight <= 0)
+        {
+            return false;
+        }
+
+        try
+        {
+            Point origin = element.TransformToVisual(RootGrid).TransformPoint(new Point(0, 0));
+            return point.X >= origin.X &&
+                point.X <= origin.X + element.ActualWidth &&
+                point.Y >= origin.Y &&
+                point.Y <= origin.Y + element.ActualHeight;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private void ShowTimePreview(TimelineControl timeline, double seconds, double x)
+    {
+        if (_seeking)
+        {
+            return;
+        }
+
+        TimePreviewText.Text = TimeFormatter.Format(seconds);
+        string? chapterTitle = FindChapterTitle(seconds);
+        if (string.IsNullOrWhiteSpace(chapterTitle))
+        {
+            TimePreviewChapter.Visibility = Visibility.Collapsed;
+        }
+        else
+        {
+            TimePreviewChapter.Text = chapterTitle;
+            TimePreviewChapter.Visibility = Visibility.Visible;
+        }
+
+        TimePreview.Visibility = Visibility.Visible;
+        TimePreview.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+        Point point = timeline.TransformToVisual(OverlayLayer).TransformPoint(
+            new Point(x, timeline.ActualHeight / 2));
+        double width = TimePreview.DesiredSize.Width;
+        double height = TimePreview.DesiredSize.Height;
+        double left = Math.Clamp(
+            point.X - width / 2,
+            0,
+            Math.Max(0, OverlayLayer.ActualWidth - width));
+        double top = point.Y - height - 8;
+        if (top < 0)
+        {
+            top = point.Y + timeline.ActualHeight / 2 + 8;
+        }
+
+        top = Math.Clamp(top, 0, Math.Max(0, OverlayLayer.ActualHeight - height));
+        TimePreview.Margin = new Thickness(left, top, 0, 0);
+    }
+
+    private string? FindChapterTitle(double seconds)
+    {
+        string? title = null;
+        foreach (MpvChapter chapter in _chapters)
+        {
+            if (chapter.Time > seconds)
+            {
+                break;
+            }
+
+            if (!string.IsNullOrWhiteSpace(chapter.Title))
+            {
+                title = chapter.Title;
+            }
+        }
+
+        return title;
+    }
+
+    private void HideTimePreview() => TimePreview.Visibility = Visibility.Collapsed;
+
+    private void OnOscDragStart(object sender, PointerRoutedEventArgs e)
+    {
+        if (!e.GetCurrentPoint(OscFloating).Properties.IsLeftButtonPressed)
+        {
+            return;
+        }
+
+        _oscDragging = true;
+        _oscState.IsDragging = true;
+        _autoHideTimer.Stop();
+        _oscDragStart = e.GetCurrentPoint(RootGrid).Position;
+        double left = Canvas.GetLeft(OscFloating);
+        double top = Canvas.GetTop(OscFloating);
+        _oscOrigin = new Point(
+            double.IsNaN(left) ? 0 : left,
+            double.IsNaN(top) ? 0 : top);
+        OscFloating.DragHandle.CapturePointer(e.Pointer);
+        e.Handled = true;
+    }
+
+    private void OnOscDragMove(object sender, PointerRoutedEventArgs e)
+    {
+        if (!_oscDragging)
+        {
+            return;
+        }
+
+        Point current = e.GetCurrentPoint(RootGrid).Position;
+        double x = _oscOrigin.X + (current.X - _oscDragStart.X);
+        double y = _oscOrigin.Y + (current.Y - _oscDragStart.Y);
+        double availableWidth = OscCanvas.ActualWidth;
+        double availableHeight = OscCanvas.ActualHeight;
+        double oscWidth = OscFloating.ActualWidth;
+        double oscHeight = OscFloating.ActualHeight;
+        if (availableWidth <= oscWidth || availableHeight <= oscHeight)
+        {
+            return;
+        }
+
+        x = Math.Clamp(x, 0, availableWidth - oscWidth);
+        y = Math.Clamp(y, 0, availableHeight - oscHeight);
+
+        // Snap the horizontal centre within +-5 px (spec §5.6).
+        double centerX = x + oscWidth / 2;
+        double snappedCenter = OscPositioning.SnapToCenter(centerX, availableWidth, 5);
+        x = Math.Clamp(snappedCenter - oscWidth / 2, 0, availableWidth - oscWidth);
+
+        Canvas.SetLeft(OscFloating, x);
+        Canvas.SetTop(OscFloating, y);
+        e.Handled = true;
+    }
+
+    private void OnOscDragEnd(object sender, PointerRoutedEventArgs e)
+    {
+        if (!_oscDragging)
+        {
+            return;
+        }
+
+        _oscDragging = false;
+        _oscState.IsDragging = false;
+        try
+        {
+            OscFloating.DragHandle.ReleasePointerCapture(e.Pointer);
+        }
+        catch
+        {
+            // Pointer may already be gone.
+        }
+
+        SaveOscPosition();
+        ResetAutoHideTimer();
+    }
+
+    private void ApplyOscPosition()
+    {
+        if (OscFloating.Visibility != Visibility.Visible ||
+            OscCanvas.ActualWidth < 10 ||
+            OscCanvas.ActualHeight < 10 ||
+            _oscDragging)
+        {
+            return;
+        }
+
+        double width = OscCanvas.ActualWidth;
+        double height = OscCanvas.ActualHeight;
+        double oscWidth = OscFloating.ActualWidth > 0 ? OscFloating.ActualWidth : 460;
+        double oscHeight = OscFloating.ActualHeight > 0 ? OscFloating.ActualHeight : 64;
+
+        double centerX = OscPositioning.ClampCenter(
+            OscPositioning.DenormalizeCenter(_settings.OscX, width),
+            oscWidth,
+            width);
+        double centerY = OscPositioning.ClampCenter(
+            OscPositioning.DenormalizeCenter(_settings.OscY, height),
+            oscHeight,
+            height);
+
+        Canvas.SetLeft(OscFloating, centerX - oscWidth / 2);
+        Canvas.SetTop(OscFloating, centerY - oscHeight / 2);
+    }
+
+    private void SaveOscPosition()
+    {
+        double width = OscCanvas.ActualWidth;
+        double height = OscCanvas.ActualHeight;
+        if (width <= 0 || height <= 0)
+        {
+            return;
+        }
+
+        double left = Canvas.GetLeft(OscFloating);
+        double top = Canvas.GetTop(OscFloating);
+        if (double.IsNaN(left) || double.IsNaN(top))
+        {
+            return;
+        }
+
+        _settings.OscX = OscPositioning.NormalizeCenter(
+            left + OscFloating.ActualWidth / 2,
+            width);
+        _settings.OscY = OscPositioning.NormalizeCenter(
+            top + OscFloating.ActualHeight / 2,
+            height);
+        SaveSettings();
+    }
+
+    private void ShowSettingsSidebar()
+    {
+        _settings.SidebarSide = SidebarSide.Trailing;
+        _sidebarVisible = true;
+        _autoHideTimer.Stop();
+        ShowChrome();
+        ApplyLayout();
+    }
+
+    private void ShowPlaylistSidebar()
+    {
+        _settings.SidebarSide = SidebarSide.Trailing;
+        _sidebarVisible = true;
+        _autoHideTimer.Stop();
+        ShowChrome();
+        ApplyLayout();
+    }
+
+    private void ToggleFullscreen()
+    {
+        if (AppWindow.Presenter.Kind == AppWindowPresenterKind.FullScreen)
+        {
+            AppWindow.SetPresenter(AppWindowPresenterKind.Overlapped);
+        }
+        else
+        {
+            AppWindow.SetPresenter(AppWindowPresenterKind.FullScreen);
+        }
+
+        SyncFullscreenState();
+        DispatcherQueue.TryEnqueue(ApplyVideoLayout);
+    }
+
+    private void SyncFullscreenState() =>
+        _oscVm.IsFullscreen = AppWindow.Presenter.Kind == AppWindowPresenterKind.FullScreen;
+
+    private void OnNumberPropertyChanged(string name, double value)
+    {
+        DispatcherQueue.TryEnqueue(() =>
+        {
+            switch (name)
+            {
+                case "time-pos":
+                    _oscVm.SetPositionFromPlayer(value);
+                    break;
+                case "duration":
+                    _oscVm.SetDurationFromPlayer(value);
+                    break;
+                case "volume":
+                    _oscVm.SetVolumeFromPlayer(value);
+                    break;
+                case "demuxer-cache-time":
+                    _oscVm.SetBufferFromPlayer(value);
+                    break;
+                case "speed":
+                    _oscVm.SetSpeedFromPlayer(value);
+                    break;
+            }
+        });
+    }
+
+    private void OnFlagPropertyChanged(string name, bool value)
+    {
+        DispatcherQueue.TryEnqueue(() =>
+        {
+            switch (name)
+            {
+                case "pause":
+                    _oscVm.SetPlayingFromPlayer(!value);
+                    break;
+                case "mute":
+                    _oscVm.SetMutedFromPlayer(value);
+                    break;
+            }
+        });
+    }
+
+    private void OnStringPropertyChanged(string name, string? value)
+    {
+        if (name != "media-title" || string.IsNullOrWhiteSpace(value))
+        {
+            return;
+        }
+
+        DispatcherQueue.TryEnqueue(() => TitleBar.Title = value);
+    }
+
+    private void OnFileLoaded()
+    {
+        DispatcherQueue.TryEnqueue(ApplyLoadedMedia);
+    }
+
+    private void ApplyLoadedMedia()
+    {
+        if (_player is null)
+        {
+            return;
+        }
+
+        _oscVm.SetDurationFromPlayer(_player.GetPropertyDouble("duration"));
+        _oscVm.SetPositionFromPlayer(_player.GetPropertyDouble("time-pos"));
+        _oscVm.SetVolumeFromPlayer(_player.GetPropertyDouble("volume"));
+        _oscVm.SetSpeedFromPlayer(_player.GetPropertyDouble("speed"));
+        _oscVm.SetPlayingFromPlayer(!_player.GetPropertyFlag("pause"));
+        _oscVm.SetMutedFromPlayer(_player.GetPropertyFlag("mute"));
+
+        _chapters = _player.GetChapters();
+        _oscVm.Chapters = _chapters.Select(chapter => chapter.Time).ToArray();
+        _oscVm.AbLoopA = null;
+        _oscVm.AbLoopB = null;
+        UpdateTimelines();
+
+        string? title = _player.GetPropertyString("media-title");
+        if (!string.IsNullOrWhiteSpace(title))
+        {
+            TitleBar.Title = title;
+        }
+
+        ShowChrome();
     }
 
     private void ApplyTheme()
@@ -174,27 +827,26 @@ public sealed partial class MainWindow : Window
 
     private void ApplyLayout()
     {
-        _compact = RootGrid.ActualWidth > 0 && RootGrid.ActualWidth < 520;
+        _compact = RootGrid.ActualWidth > 0 && RootGrid.ActualWidth < 420;
         bool docked = _settings.Layout == WindowLayoutMode.Docked;
         Grid.SetRow(VideoFrame, docked ? 1 : 0);
         Grid.SetRowSpan(VideoFrame, docked ? 1 : 3);
 
         TitleBar.SetDocked(docked);
         TitleBar.IsPinned = _settings.AlwaysOnTop;
-        TitleBar.SetTopOscVisible(
-            _settings.OscPosition == OscPosition.Top && !_compact);
+        TitleBar.SetTopOscVisible(_settings.OscPosition == OscPosition.Top);
 
         bool useBottomOsc =
             _settings.OscPosition == OscPosition.Bottom ||
             (docked && _settings.OscPosition == OscPosition.Floating);
-        OscBottom.Visibility = useBottomOsc && !_compact
-            ? Visibility.Visible
-            : Visibility.Collapsed;
+        OscBottom.Visibility = useBottomOsc ? Visibility.Visible : Visibility.Collapsed;
+
         bool sidebarVisible = !_compact && _sidebarVisible;
         OscFloating.Visibility = !docked && !_compact && !sidebarVisible &&
             _settings.OscPosition == OscPosition.Floating
             ? Visibility.Visible
             : Visibility.Collapsed;
+        OscFloating.SetAvailableWidth(RootGrid.ActualWidth);
 
         bool showLeading = sidebarVisible &&
             _settings.SidebarSide == SidebarSide.Leading;
@@ -202,8 +854,9 @@ public sealed partial class MainWindow : Window
             _settings.SidebarSide == SidebarSide.Trailing;
         SidebarLeading.Visibility = showLeading ? Visibility.Visible : Visibility.Collapsed;
         SidebarTrailing.Visibility = showTrailing ? Visibility.Visible : Visibility.Collapsed;
+        _oscState.IsSuppressed = sidebarVisible;
 
-        double sidebarTop = _settings.OscPosition == OscPosition.Top ? 68 : 40;
+        double sidebarTop = _settings.OscPosition == OscPosition.Top ? 70 : 40;
         SidebarLeading.Margin = new Thickness(0, sidebarTop, 0, 0);
         SidebarTrailing.Margin = new Thickness(0, sidebarTop, 0, 0);
 
@@ -218,8 +871,22 @@ public sealed partial class MainWindow : Window
         // edge in docked mode. Stage 4 will make the fragments compress.
         OscBottom.Margin = new Thickness(0);
 
+        if (docked)
+        {
+            // Docked titlebar/bottom bar are layout chrome and stay visible.
+            _chromeShown = true;
+            _autoHideTimer.Stop();
+        }
+        else if (sidebarVisible)
+        {
+            _chromeShown = true;
+        }
+
+        FadeChrome(_chromeShown ? 1 : 0, _chromeShown);
         _resizeTimer.Stop();
         _resizeTimer.Start();
+        ApplyOscPosition();
+        ResetAutoHideTimer();
     }
 
     private void OnRootLoaded(object sender, RoutedEventArgs e)
@@ -247,13 +914,15 @@ public sealed partial class MainWindow : Window
     private void OnRootSizeChanged(object sender, SizeChangedEventArgs e)
     {
         UpdateCompactState();
+        OscFloating.SetAvailableWidth(RootGrid.ActualWidth);
+        ApplyOscPosition();
         _resizeTimer.Stop();
         _resizeTimer.Start();
     }
 
     private void UpdateCompactState()
     {
-        bool compact = RootGrid.ActualWidth > 0 && RootGrid.ActualWidth < 520;
+        bool compact = RootGrid.ActualWidth > 0 && RootGrid.ActualWidth < 420;
         if (compact == _compact)
         {
             return;
@@ -293,8 +962,22 @@ public sealed partial class MainWindow : Window
             _player = new MpvPlayer();
             _player.Log += message => Trace("mpv: " + message);
             _player.DisplaySwapChainChanged += OnDisplaySwapChainChanged;
+            _player.NumberPropertyChanged += OnNumberPropertyChanged;
+            _player.FlagPropertyChanged += OnFlagPropertyChanged;
+            _player.StringPropertyChanged += OnStringPropertyChanged;
+            _player.FileLoaded += OnFileLoaded;
             _player.Start(width, height);
             _player.ObserveProperty("display-swapchain", MpvFormat.Int64);
+
+            _oscVm.SetDurationFromPlayer(_player.GetPropertyDouble("duration"));
+            _oscVm.SetPositionFromPlayer(_player.GetPropertyDouble("time-pos"));
+            _oscVm.SetVolumeFromPlayer(_player.GetPropertyDouble("volume"));
+            _oscVm.SetBufferFromPlayer(_player.GetPropertyDouble("demuxer-cache-time"));
+            _oscVm.SetSpeedFromPlayer(_player.GetPropertyDouble("speed"));
+            _oscVm.SetPlayingFromPlayer(!_player.GetPropertyFlag("pause"));
+            _oscVm.SetMutedFromPlayer(_player.GetPropertyFlag("mute"));
+            SyncFullscreenState();
+            UpdateTimelines();
 
             long existing = _player.GetPropertyInt64("display-swapchain");
             if (existing > 0)
@@ -522,16 +1205,7 @@ public sealed partial class MainWindow : Window
     private void OnToggleFullscreen(KeyboardAccelerator sender, KeyboardAcceleratorInvokedEventArgs args)
     {
         args.Handled = true;
-        if (AppWindow.Presenter.Kind == AppWindowPresenterKind.FullScreen)
-        {
-            AppWindow.SetPresenter(AppWindowPresenterKind.Overlapped);
-        }
-        else
-        {
-            AppWindow.SetPresenter(AppWindowPresenterKind.FullScreen);
-        }
-
-        DispatcherQueue.TryEnqueue(ApplyVideoLayout);
+        ToggleFullscreen();
     }
 
     private void OnEscape(KeyboardAccelerator sender, KeyboardAcceleratorInvokedEventArgs args)
@@ -540,6 +1214,7 @@ public sealed partial class MainWindow : Window
         {
             args.Handled = true;
             AppWindow.SetPresenter(AppWindowPresenterKind.Overlapped);
+            SyncFullscreenState();
             DispatcherQueue.TryEnqueue(ApplyVideoLayout);
         }
     }
@@ -590,6 +1265,8 @@ public sealed partial class MainWindow : Window
     {
         Trace("Window closed");
         _resizeTimer.Stop();
+        _autoHideTimer.Stop();
+        WindowInterop.SetCursorVisible(true);
         SaveSettings();
         WindowInterop.Detach(this);
 

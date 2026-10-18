@@ -18,6 +18,21 @@ public sealed partial class TitleBarView : UserControl
         ButtonPanel.Visibility = e.NewSize.Width < 620
             ? Visibility.Collapsed
             : Visibility.Visible;
+
+        // Top OSC compression: toolbar, volume, then time labels. The
+        // transport and timeline always stay usable.
+        TopToolbar.Visibility = e.NewSize.Width < 700
+            ? Visibility.Collapsed
+            : Visibility.Visible;
+        TopVolume.Visibility = e.NewSize.Width < 560
+            ? Visibility.Collapsed
+            : Visibility.Visible;
+        TopDuration.Visibility = e.NewSize.Width < 440
+            ? Visibility.Collapsed
+            : Visibility.Visible;
+        TopCurrentTime.Visibility = e.NewSize.Width < 360
+            ? Visibility.Collapsed
+            : Visibility.Visible;
     }
 
     public event EventHandler? PinClicked;
@@ -38,6 +53,10 @@ public sealed partial class TitleBarView : UserControl
     {
         set => PinButton.Content = value ? "\uE77A" : "\uE718";
     }
+
+    public TimelineControl TopTimeline => TopTimelineControl;
+
+    public void SetOscDataContext(object? dataContext) => TopOscRoot.DataContext = dataContext;
 
     public void SetTopOscVisible(bool visible)
     {

@@ -5,7 +5,11 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:controls="using:Wiina.App.Controls">
 
-    <Grid x:Name="RootGrid" Background="{ThemeResource AppBackgroundBrush}">
+    <Grid x:Name="RootGrid"
+          Background="{ThemeResource AppBackgroundBrush}"
+          PointerEntered="OnRootPointerEntered"
+          PointerMoved="OnRootPointerMoved"
+          PointerExited="OnRootPointerExited">
         <Grid.KeyboardAccelerators>
             <KeyboardAccelerator Key="F11" Invoked="OnToggleFullscreen" />
             <KeyboardAccelerator Key="Escape" Invoked="OnEscape" />
@@ -38,12 +42,11 @@
                                 Grid.Row="2"
                                 Visibility="Collapsed" />
 
-        <!-- Floating overlays: OSC, sidebars. Empty areas stay hit-test transparent. -->
+        <!-- Floating overlays: OSC, sidebars, time preview. Empty areas stay hit-test transparent. -->
         <Grid x:Name="OverlayLayer" Grid.RowSpan="3">
-            <controls:OscFloatingView x:Name="OscFloating"
-                                      HorizontalAlignment="Center"
-                                      VerticalAlignment="Bottom"
-                                      Margin="0,0,0,84" />
+            <Canvas x:Name="OscCanvas" Grid.RowSpan="3">
+                <controls:OscFloatingView x:Name="OscFloating" />
+            </Canvas>
             <controls:SidebarHost x:Name="SidebarLeading"
                                   HorizontalAlignment="Left"
                                   Margin="0,40,0,0"
@@ -52,6 +55,25 @@
                                   HorizontalAlignment="Right"
                                   Margin="0,40,0,0"
                                   Visibility="Collapsed" />
+            <Border x:Name="TimePreview"
+                    HorizontalAlignment="Left"
+                    VerticalAlignment="Top"
+                    Padding="10,6"
+                    CornerRadius="8"
+                    Background="{ThemeResource PanelBrush}"
+                    BorderBrush="{ThemeResource PanelBorderBrush}"
+                    BorderThickness="1"
+                    Visibility="Collapsed"
+                    IsHitTestVisible="False">
+                <StackPanel Spacing="2">
+                    <TextBlock x:Name="TimePreviewChapter"
+                               FontSize="11"
+                               Foreground="{ThemeResource SecondaryTextBrush}"
+                               Visibility="Collapsed" />
+                    <TextBlock x:Name="TimePreviewText"
+                               Style="{StaticResource CaptionTextStyle}" />
+                </StackPanel>
+            </Border>
         </Grid>
     </Grid>
 </Window>

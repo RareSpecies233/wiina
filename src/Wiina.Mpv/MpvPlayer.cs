@@ -2,6 +2,9 @@ using System.Runtime.InteropServices;
 
 namespace Wiina.Mpv;
 
+/// <summary>One chapter entry as reported by mpv.</summary>
+public readonly record struct MpvChapter(double Time, string? Title);
+
 /// <summary>
 /// Minimal, thread-safe libmpv wrapper for Stage 0.
 /// The mpv event loop runs on a dedicated background thread; UI code must
@@ -14,12 +17,25 @@ public sealed class MpvPlayer : IDisposable
     private CancellationTokenSource? _cts;
     private long _lastSwapChain;
     private bool _disposed;
+    private readonly HashSet<string> _observed = new(StringComparer.Ordinal);
 
     /// <summary>Raised on the mpv event thread with the raw DXGI swapchain pointer.</summary>
     public event Action<long>? DisplaySwapChainChanged;
 
     /// <summary>Raised on the mpv event thread for diagnostics.</summary>
     public event Action<string>? Log;
+
+    /// <summary>Numeric mpv property update (time-pos, duration, volume, ...).</summary>
+    public event Action<string, double>? NumberPropertyChanged;
+
+    /// <summary>Boolean mpv property update (pause, mute, ...).</summary>
+    public event Action<string, bool>? FlagPropertyChanged;
+
+    /// <summary>String mpv property update.</summary>
+    public event Action<string, string?>? StringPropertyChanged;
+
+    /// <summary>Raised when a file is loaded (headers read, decoding starts).</summary>
+    public event Action? FileLoaded;
 
     public bool IsRunning => _handle != 0;
 
@@ -58,6 +74,7 @@ public sealed class MpvPlayer : IDisposable
             SetOption("hwdec", "auto-safe");
 
             Check(MpvInterop.mpv_initialize(_handle), "mpv_initialize");
+            ObservePlaybackProperties();
         }
         catch
         {
@@ -108,6 +125,29 @@ public sealed class MpvPlayer : IDisposable
             : 0;
     }
 
+    public double GetPropertyDouble(string name)
+    {
+        if (_handle == 0)
+        {
+            return 0;
+        }
+
+        return MpvInterop.mpv_get_property_double(_handle, name, MpvFormat.Double, out double value) >= 0
+            ? value
+            : 0;
+    }
+
+    public bool GetPropertyFlag(string name)
+    {
+        if (_handle == 0)
+        {
+            return false;
+        }
+
+        return MpvInterop.mpv_get_property_flag(_handle, name, MpvFormat.Flag, out int value) >= 0
+            && value != 0;
+    }
+
     public string? GetPropertyString(string name)
     {
         if (_handle == 0)
@@ -133,7 +173,56 @@ public sealed class MpvPlayer : IDisposable
 
     public void ObserveProperty(string name, MpvFormat format)
     {
+        if (!_observed.Add(name))
+        {
+            return;
+        }
+
         Check(MpvInterop.mpv_observe_property(_handle, 0, name, format), $"observe property {name}");
+    }
+
+    /// <summary>
+    /// Properties needed by the OSC. The swapchain property stays opt-in
+    /// because it is only meaningful for the composition host.
+    /// </summary>
+    private void ObservePlaybackProperties()
+    {
+        ObserveProperty("time-pos", MpvFormat.Double);
+        ObserveProperty("duration", MpvFormat.Double);
+        ObserveProperty("pause", MpvFormat.Flag);
+        ObserveProperty("volume", MpvFormat.Double);
+        ObserveProperty("mute", MpvFormat.Flag);
+        ObserveProperty("speed", MpvFormat.Double);
+        ObserveProperty("demuxer-cache-time", MpvFormat.Double);
+        ObserveProperty("media-title", MpvFormat.String);
+    }
+
+    /// <summary>
+    /// Chapter times/titles. Uses per-item property reads instead of the node
+    /// API because Stage 2 only needs a flat list.
+    /// </summary>
+    public IReadOnlyList<MpvChapter> GetChapters()
+    {
+        if (_handle == 0)
+        {
+            return Array.Empty<MpvChapter>();
+        }
+
+        long count = GetPropertyInt64("chapter-list/count");
+        if (count <= 0 || count > 10_000)
+        {
+            return Array.Empty<MpvChapter>();
+        }
+
+        var chapters = new List<MpvChapter>((int)count);
+        for (int i = 0; i < count; i++)
+        {
+            double time = GetPropertyDouble($"chapter-list/{i}/time");
+            string? title = GetPropertyString($"chapter-list/{i}/title");
+            chapters.Add(new MpvChapter(time, title));
+        }
+
+        return chapters;
     }
 
     public void Command(params string[] args)
@@ -210,6 +299,10 @@ public sealed class MpvPlayer : IDisposable
                 case MpvEventId.PropertyChange:
                     HandlePropertyChange(ev);
                     break;
+
+                case MpvEventId.FileLoaded:
+                    FileLoaded?.Invoke();
+                    break;
             }
         }
     }
@@ -223,19 +316,51 @@ public sealed class MpvPlayer : IDisposable
 
         MpvEventProperty prop = Marshal.PtrToStructure<MpvEventProperty>(ev.Data);
         string? name = Marshal.PtrToStringUTF8(prop.Name);
-        if (name != "display-swapchain"
-            || prop.Format != MpvFormat.Int64
-            || prop.Data == 0)
+        if (string.IsNullOrEmpty(name) || prop.Format == MpvFormat.None || prop.Data == 0)
         {
             return;
         }
 
-        long swapChain = Marshal.ReadInt64(prop.Data);
-        long previous = Interlocked.Exchange(ref _lastSwapChain, swapChain);
-        if (swapChain != previous)
+        switch (prop.Format)
         {
-            Log?.Invoke($"display-swapchain = 0x{swapChain:x}.");
-            DisplaySwapChainChanged?.Invoke(swapChain);
+            case MpvFormat.Int64:
+            {
+                long value = Marshal.ReadInt64(prop.Data);
+                if (name == "display-swapchain")
+                {
+                    long previous = Interlocked.Exchange(ref _lastSwapChain, value);
+                    if (value != previous)
+                    {
+                        Log?.Invoke($"display-swapchain = 0x{value:x}.");
+                        DisplaySwapChainChanged?.Invoke(value);
+                    }
+                }
+                else
+                {
+                    NumberPropertyChanged?.Invoke(name, value);
+                }
+
+                break;
+            }
+
+            case MpvFormat.Double:
+                NumberPropertyChanged?.Invoke(
+                    name,
+                    Marshal.PtrToStructure<double>(prop.Data));
+                break;
+
+            case MpvFormat.Flag:
+                FlagPropertyChanged?.Invoke(name, Marshal.ReadInt32(prop.Data) != 0);
+                break;
+
+            case MpvFormat.String:
+            {
+                nint stringPtr = Marshal.ReadIntPtr(prop.Data);
+                StringPropertyChanged?.Invoke(
+                    name,
+                    stringPtr == 0 ? null : Marshal.PtrToStringUTF8(stringPtr));
+                break;
+            }
         }
     }
 

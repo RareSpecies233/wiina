@@ -19,6 +19,10 @@
             <SolidColorBrush x:Key="HoverBrush" Color="#1FFFFFFF" />
             <SolidColorBrush x:Key="PressedBrush" Color="#33FFFFFF" />
             <SolidColorBrush x:Key="SubtleBrush" Color="#0DFFFFFF" />
+            <SolidColorBrush x:Key="SliderTrackBrush" Color="#1AFFFFFF" />
+            <SolidColorBrush x:Key="SliderBufferBrush" Color="#33FFFFFF" />
+            <SolidColorBrush x:Key="SliderPlayedBrush" Color="#4DFFFFFF" />
+            <SolidColorBrush x:Key="SliderThumbBrush" Color="#CCFFFFFF" />
         </ResourceDictionary>
 
         <ResourceDictionary x:Key="Light">
@@ -37,6 +41,10 @@
             <SolidColorBrush x:Key="HoverBrush" Color="#0F000000" />
             <SolidColorBrush x:Key="PressedBrush" Color="#1F000000" />
             <SolidColorBrush x:Key="SubtleBrush" Color="#08000000" />
+            <SolidColorBrush x:Key="SliderTrackBrush" Color="#33000000" />
+            <SolidColorBrush x:Key="SliderBufferBrush" Color="#4D000000" />
+            <SolidColorBrush x:Key="SliderPlayedBrush" Color="#4D000000" />
+            <SolidColorBrush x:Key="SliderThumbBrush" Color="#CC000000" />
         </ResourceDictionary>
     </ResourceDictionary.ThemeDictionaries>
 
