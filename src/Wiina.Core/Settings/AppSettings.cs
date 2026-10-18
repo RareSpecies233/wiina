@@ -1,3 +1,4 @@
+using Wiina.Core.Input;
 using Wiina.Core.Models;
 
 namespace Wiina.Core.Settings;
@@ -164,4 +165,46 @@ public sealed class AppSettings
 
     /// <summary>Folder used by Ctrl+S screenshots.</summary>
     public string ScreenshotFolder { get; set; } = string.Empty;
+
+    // ---- Stage 7: welcome, settings window, network and key bindings ----
+
+    /// <summary>Show the welcome window on startup when no media was given.</summary>
+    public bool ShowWelcomeWindow { get; set; } = true;
+
+    /// <summary>Persisted page of the settings window (enum name).</summary>
+    public string SettingsPage { get; set; } = "General";
+
+    /// <summary>Restore the last window position/size on startup.</summary>
+    public bool RestoreWindowPosition { get; set; } = true;
+
+    /// <summary>UI language preference; resource strings land in Stage 11.</summary>
+    public string Language { get; set; } = "system";
+
+    /// <summary>mpv <c>sub-font</c> family used for subtitle text.</summary>
+    public string SubtitleFont { get; set; } = "Segoe UI";
+
+    /// <summary>Forward demuxer cache size in MiB (<c>demuxer-max-bytes</c>).</summary>
+    public int CacheSizeMb { get; set; } = 150;
+
+    /// <summary>Backward demuxer cache size in MiB (<c>demuxer-max-back-bytes</c>).</summary>
+    public int CacheBackMb { get; set; } = 50;
+
+    /// <summary>HTTP proxy ('' = direct).</summary>
+    public string Proxy { get; set; } = string.Empty;
+
+    public string UserAgent { get; set; } = "Wiina/0.1";
+
+    public double NetworkTimeoutSeconds { get; set; } = 30;
+
+    /// <summary>mpv log level requested from libmpv: no/info/v/verbose.</summary>
+    public string MpvLogLevel { get; set; } = "info";
+
+    /// <summary>Optional yt-dlp executable path (Stage 10 uses it).</summary>
+    public string YtDlpPath { get; set; } = string.Empty;
+
+    /// <summary>Reverse the wheel direction for volume/seek gestures.</summary>
+    public bool InvertWheelDirection { get; set; }
+
+    /// <summary>User key bindings; empty means the documented defaults.</summary>
+    public List<KeyBindingSetting> KeyBindings { get; set; } = new();
 }

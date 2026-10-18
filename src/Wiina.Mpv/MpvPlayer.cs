@@ -119,6 +119,8 @@ public sealed class MpvPlayer : IDisposable
 
     public bool IsRunning => _handle != 0;
 
+    private string _logLevel = "info";
+
     public void Start(int width, int height)
     {
         Start(width, height, headless: false);
@@ -178,7 +180,7 @@ public sealed class MpvPlayer : IDisposable
 
             Check(MpvInterop.mpv_initialize(_handle), "mpv_initialize");
             ObservePlaybackProperties();
-            MpvInterop.mpv_request_log_messages(_handle, "error");
+            MpvInterop.mpv_request_log_messages(_handle, _logLevel);
         }
         catch
         {
@@ -197,6 +199,29 @@ public sealed class MpvPlayer : IDisposable
         Log?.Invoke($"mpv initialized (client API version 0x{MpvInterop.mpv_client_api_version():x}).");
     }
 
+    /// <summary>Requests libmpv log messages at the given level (no/info/v/verbose).</summary>
+    public void SetLogLevel(string? level)
+    {
+        _logLevel = level?.Trim().ToLowerInvariant() switch
+        {
+            "no" or "none" => "no",
+            "v" => "v",
+            "verbose" => "verbose",
+            _ => "info",
+        };
+
+        if (_handle != 0)
+        {
+            try
+            {
+                MpvInterop.mpv_request_log_messages(_handle, _logLevel);
+            }
+            catch
+            {
+                // Logging must never break playback.
+            }
+        }
+    }
     public void SetOption(string name, string value)
     {
         Check(MpvInterop.mpv_set_option_string(_handle, name, value), $"set option {name}");

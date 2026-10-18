@@ -1,10 +1,19 @@
+using System.Diagnostics;
 using System.IO;
+using System.Reflection;
+using System.Text;
+using System.Text.Json;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
 using Wiina.App.Services;
+using Wiina.App.Views;
+using Wiina.Core;
+using Wiina.Core.History;
+using Wiina.Core.Input;
 using Wiina.Core.Models;
 using Wiina.Core.Settings;
 using Wiina.Core.State;
+using Wiina.Mpv;
 
 namespace Wiina.App;
 
@@ -17,7 +26,15 @@ public partial class App : Application
 {
     private static App? _instance;
     private static SmtcService? _mediaSession;
+    private static SettingsWindow? _settingsWindow;
+    private static WelcomeWindow? _welcomeWindow;
+    private static AboutWindow? _aboutWindow;
+    private static LogViewerWindow? _logWindow;
+    private static InspectorWindow? _inspectorWindow;
     private readonly Dictionary<string, MainWindow> _windows = new();
+
+    /// <summary>True when settings.json did not exist before this launch.</summary>
+    public static bool IsFirstRun { get; private set; }
 
     /// <summary>File/folder/URL arguments passed on the command line.</summary>
     public static IReadOnlyList<string> StartupPaths { get; private set; } =
@@ -44,6 +61,7 @@ public partial class App : Application
         _instance = this;
         InitializeComponent();
         StartupPaths = ParseStartupPaths(Environment.GetCommandLineArgs().Skip(1));
+        IsFirstRun = !File.Exists(SettingsStore.Path);
         Settings = SettingsStore.Load();
         UnhandledException += OnUnhandledException;
         AppDomain.CurrentDomain.UnhandledException += (_, e) =>
@@ -77,6 +95,10 @@ public partial class App : Application
         try
         {
             CreateWindow(StartupPaths);
+            if (StartupPaths.Count == 0 && Settings.ShowWelcomeWindow)
+            {
+                ShowWelcomeWindow();
+            }
         }
         catch (Exception ex)
         {
@@ -245,6 +267,250 @@ public partial class App : Application
     {
         _mediaSession?.Dispose();
         _mediaSession = null;
+    }
+
+    // ------------------------------------------------------- Stage 7 windows
+
+    public static string DataFolder => Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+        "Wiina");
+
+    public static string LogsFolder => Path.Combine(DataFolder, "logs");
+
+    public static string PluginsFolder => Path.Combine(DataFolder, "plugins");
+
+    public static string ConfigFolder => Path.Combine(DataFolder, "mpv");
+
+    public static string TraceLogPath => Path.Combine(Path.GetTempPath(), "wiina-trace.log");
+
+    public static string CrashLogPath => Path.Combine(DataFolder, "crash.log");
+
+    public static void ShowSettingsWindow(
+        SettingsPageId page = SettingsPageId.General,
+        string? rowId = null)
+    {
+        if (_settingsWindow is { } existing)
+        {
+            existing.NavigateTo(page, rowId);
+            return;
+        }
+
+        var window = new SettingsWindow(page, rowId);
+        _settingsWindow = window;
+        window.Closed += (_, _) =>
+        {
+            if (ReferenceEquals(_settingsWindow, window))
+            {
+                _settingsWindow = null;
+            }
+        };
+        window.Activate();
+    }
+
+    public static void ShowWelcomeWindow()
+    {
+        if (_welcomeWindow is { } existing)
+        {
+            existing.Activate();
+            return;
+        }
+
+        var window = new WelcomeWindow();
+        _welcomeWindow = window;
+        window.Closed += (_, _) =>
+        {
+            if (ReferenceEquals(_welcomeWindow, window))
+            {
+                _welcomeWindow = null;
+            }
+        };
+        window.Activate();
+    }
+
+    public static void HideWelcomeWindow()
+    {
+        WelcomeWindow? window = _welcomeWindow;
+        _welcomeWindow = null;
+        if (window is null)
+        {
+            return;
+        }
+
+        try
+        {
+            window.Close();
+        }
+        catch
+        {
+            // The window may already be closing.
+        }
+    }
+
+    public static void ShowAboutWindow()
+    {
+        if (_aboutWindow is { } existing)
+        {
+            existing.Activate();
+            return;
+        }
+
+        var window = new AboutWindow();
+        _aboutWindow = window;
+        window.Closed += (_, _) =>
+        {
+            if (ReferenceEquals(_aboutWindow, window))
+            {
+                _aboutWindow = null;
+            }
+        };
+        window.Activate();
+    }
+
+    public static void ShowLogViewerWindow()
+    {
+        if (_logWindow is { } existing)
+        {
+            existing.Activate();
+            return;
+        }
+
+        var window = new LogViewerWindow();
+        _logWindow = window;
+        window.Closed += (_, _) =>
+        {
+            if (ReferenceEquals(_logWindow, window))
+            {
+                _logWindow = null;
+            }
+        };
+        window.Activate();
+    }
+
+    public static void ShowInspectorWindow()
+    {
+        if (_inspectorWindow is { } existing)
+        {
+            existing.Activate();
+            return;
+        }
+
+        var window = new InspectorWindow();
+        _inspectorWindow = window;
+        window.Closed += (_, _) =>
+        {
+            if (ReferenceEquals(_inspectorWindow, window))
+            {
+                _inspectorWindow = null;
+            }
+        };
+        window.Activate();
+    }
+
+    /// <summary>Opens media in the active window or a new one (welcome/menu).</summary>
+    public static void OpenMedia(IEnumerable<string> paths, bool newWindow = false)
+    {
+        string[] list = paths
+            .Where(path => !string.IsNullOrWhiteSpace(path))
+            .ToArray();
+        if (list.Length == 0)
+        {
+            return;
+        }
+
+        if (newWindow)
+        {
+            OpenInNewWindow(list);
+            return;
+        }
+
+        MainWindow window = ActiveWindow ?? CreateWindow();
+        window.Activate();
+        window.OpenExternalPaths(list);
+    }
+
+    public static void OpenFolder(string path)
+    {
+        try
+        {
+            Directory.CreateDirectory(path);
+            Process.Start(new ProcessStartInfo("explorer.exe", $"\"{path}\"")
+            {
+                UseShellExecute = true,
+            });
+        }
+        catch (Exception ex)
+        {
+            LogCrash(ex);
+        }
+    }
+
+    public static void ClearHistory() =>
+        new HistoryStore().Save(Array.Empty<HistoryEntry>());
+
+    public static string ExportDiagnostics()
+    {
+        var builder = new StringBuilder();
+        builder.AppendLine($"{Branding.Name} {Branding.Version} diagnostics");
+        builder.AppendLine($"Time: {DateTimeOffset.Now:O}");
+        builder.AppendLine($"OS: {Environment.OSVersion.VersionString}");
+        builder.AppendLine($"Runtime: .NET {Environment.Version}");
+        builder.AppendLine($"libmpv client API: {MpvRuntime.ClientApiVersion}");
+        builder.AppendLine($"First run: {IsFirstRun}");
+        if (ActiveWindow is { } window)
+        {
+            builder.AppendLine();
+            builder.AppendLine("== active media ==");
+            foreach (InspectorRow row in window.GetInspectorSnapshot())
+            {
+                builder.AppendLine($"[{row.Section}] {row.Name}: {row.Value}");
+            }
+        }
+
+        builder.AppendLine();
+        builder.AppendLine("== settings.json ==");
+        builder.AppendLine(JsonSerializer.Serialize(
+            Settings,
+            new JsonSerializerOptions { WriteIndented = true }));
+
+        Directory.CreateDirectory(LogsFolder);
+        string path = Path.Combine(
+            LogsFolder,
+            $"diagnostics-{DateTime.Now:yyyyMMdd-HHmmss}.txt");
+        File.WriteAllText(path, builder.ToString());
+        OpenFolder(LogsFolder);
+        return path;
+    }
+
+    /// <summary>
+    /// Resets every settings property in place (windows hold the same instance),
+    /// preserving key bindings, recent list and the last window frame.
+    /// </summary>
+    public static void ResetSettings()
+    {
+        var defaults = new AppSettings();
+        List<KeyBindingSetting> keys = Settings.KeyBindings;
+        List<string> recent = Settings.RecentUrls;
+        int width = Settings.WindowWidth;
+        int height = Settings.WindowHeight;
+        int x = Settings.WindowX;
+        int y = Settings.WindowY;
+
+        foreach (PropertyInfo property in typeof(AppSettings).GetProperties(
+                     BindingFlags.Public | BindingFlags.Instance))
+        {
+            if (property.CanWrite)
+            {
+                property.SetValue(Settings, property.GetValue(defaults));
+            }
+        }
+
+        Settings.KeyBindings = keys;
+        Settings.RecentUrls = recent;
+        Settings.WindowWidth = width;
+        Settings.WindowHeight = height;
+        Settings.WindowX = x;
+        Settings.WindowY = y;
+        SaveSettings();
     }
 
     private static void OnUnhandledException(

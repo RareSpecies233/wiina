@@ -13,6 +13,7 @@ using Windows.Storage.Pickers;
 using Windows.System;
 using Wiina.App.Controls;
 using Wiina.App.Interop;
+using Wiina.App.Views;
 using Wiina.App.Services;
 using Wiina.Core.Files;
 using Wiina.Core.History;
@@ -33,7 +34,7 @@ namespace Wiina.App;
 public sealed partial class MainWindow
 {
     private readonly HistoryStore _historyStore = new();
-    private readonly KeyMap _keyMap = KeyMap.CreateDefault();
+    private KeyMap _keyMap = KeyMap.CreateDefault();
     private readonly List<TrackInfo> _trackList = new();
     private readonly List<ChapterInfo> _chapterList = new();
     private readonly List<MpvPlaylistItem> _playlistItems = new();
@@ -70,7 +71,7 @@ public sealed partial class MainWindow
     {
         _settings.RecentUrls ??= new List<string>();
 
-        TitleBar.MoreClicked += (_, _) => ShowMoreMenu();
+        TitleBar.MoreClicked += (_, _) => ShowApplicationMenu(TitleBar);
         RootGrid.AllowDrop = true;
         RootGrid.DragOver += OnRootDragOver;
         RootGrid.Drop += OnRootDropAsync;
@@ -208,60 +209,16 @@ public sealed partial class MainWindow
         }
     }
 
-    private async Task OpenUrlDialogAsync()
+    private async Task OpenUrlDialogAsync(bool newWindow = false)
     {
-        var urlBox = new TextBox
-        {
-            PlaceholderText = "https://example.com/video",
-            Text = _settings.RecentUrls.FirstOrDefault() ?? string.Empty,
-        };
-        var recent = new ComboBox
-        {
-            PlaceholderText = "最近打开的 URL",
-            HorizontalAlignment = HorizontalAlignment.Stretch,
-            ItemsSource = _settings.RecentUrls.ToArray(),
-        };
-        recent.SelectionChanged += (_, _) =>
-        {
-            if (recent.SelectedItem is string selected)
-            {
-                urlBox.Text = selected;
-            }
-        };
-
-        var panel = new StackPanel { Spacing = 10, MinWidth = 380 };
-        panel.Children.Add(new TextBlock
-        {
-            Text = "支持 mpv 原生协议（HTTP/HTTPS/RTP/RTSP/…）。",
-            Style = (Style)Application.Current.Resources["CaptionTextStyle"],
-        });
-        panel.Children.Add(urlBox);
-        panel.Children.Add(recent);
-
-        var dialog = new ContentDialog
-        {
-            Title = "打开 URL",
-            Content = panel,
-            PrimaryButtonText = "打开",
-            CloseButtonText = "取消",
-            DefaultButton = ContentDialogButton.Primary,
-            XamlRoot = RootGrid.XamlRoot,
-        };
-
-        if (await dialog.ShowAsync() != ContentDialogResult.Primary)
+        OpenUrlRequest? request = await Dialogs.OpenUrlAsync(RootGrid.XamlRoot, _settings);
+        if (request is null)
         {
             return;
         }
 
-        string text = urlBox.Text.Trim();
-        if (!TryNormalizeUrl(text, out string normalized))
-        {
-            ShowOsd("URL 无效", text);
-            return;
-        }
-
-        AddRecentUrl(normalized);
-        OpenPaths(new[] { normalized });
+        AddRecentUrl(request.Url);
+        App.OpenMedia(new[] { request.Url }, newWindow || request.NewWindow);
     }
 
     private async Task OpenSubtitlePickerAsync()
@@ -391,15 +348,9 @@ public sealed partial class MainWindow
 
     private void AddRecentUrl(string url)
     {
-        _settings.RecentUrls ??= new List<string>();
-        _settings.RecentUrls.RemoveAll(
-            existing => string.Equals(existing, url, StringComparison.OrdinalIgnoreCase));
-        _settings.RecentUrls.Insert(0, url);
-        while (_settings.RecentUrls.Count > 10)
-        {
-            _settings.RecentUrls.RemoveAt(_settings.RecentUrls.Count - 1);
-        }
-
+        _settings.RecentUrls = RecentList
+            .Push(_settings.RecentUrls, url)
+            .ToList();
         SaveSettings();
     }
 
@@ -1266,7 +1217,12 @@ public sealed partial class MainWindow
 
     private void OnAudioDeviceListChanged(IReadOnlyList<MpvAudioDevice> devices)
     {
-        DispatcherQueue.TryEnqueue(RefreshSidebarDevices);
+        DispatcherQueue.TryEnqueue(() =>
+        {
+            _audioDevices.Clear();
+            _audioDevices.AddRange(devices);
+            RefreshSidebarDevices();
+        });
     }
 
     private void OnChapterChanged(int chapter)
@@ -1526,555 +1482,24 @@ public sealed partial class MainWindow
 
     private static bool TryNormalizeUrl(string text, out string normalized)
     {
-        normalized = text.Trim();
-        if (normalized.Length == 0)
-        {
-            return false;
-        }
-
-        if (normalized.StartsWith("magnet:", StringComparison.OrdinalIgnoreCase))
+        if (UrlValidation.TryNormalize(text, out normalized))
         {
             return true;
         }
 
-        if (normalized.Contains("://", StringComparison.Ordinal))
+        // mpv also accepts synthetic protocols that are not HTTP URLs.
+        string candidate = text.Trim();
+        if (candidate.StartsWith("magnet:", StringComparison.OrdinalIgnoreCase) ||
+            candidate.StartsWith("av://", StringComparison.OrdinalIgnoreCase) ||
+            candidate.StartsWith("edl://", StringComparison.OrdinalIgnoreCase))
         {
-            // mpv owns protocol validation (http, rtsp, av://lavfi, edl, …).
-            return !normalized.Contains(' ');
+            normalized = candidate;
+            return true;
         }
 
-        if (normalized.Contains(' ') || !normalized.Contains('.'))
-        {
-            return false;
-        }
-
-        normalized = "https://" + normalized;
-        return Uri.TryCreate(normalized, UriKind.Absolute, out Uri? uri) &&
-            !string.IsNullOrWhiteSpace(uri.Scheme);
+        normalized = string.Empty;
+        return false;
     }
-
-    // ------------------------------------------------------------------ menu
-
-    private void ShowMoreMenu()
-    {
-        var flyout = new MenuFlyout();
-        flyout.Items.Add(Item("打开文件…", OpenFilePickerAsync, "Ctrl+O"));
-        flyout.Items.Add(Item("打开文件夹…", OpenFolderPickerAsync));
-        flyout.Items.Add(Item("打开 URL…", OpenUrlDialogAsync, "Ctrl+Shift+O"));
-        flyout.Items.Add(Item("打开播放列表…", OpenPlaylistPickerAsync));
-        flyout.Items.Add(BuildRecentMenu());
-        flyout.Items.Add(new MenuFlyoutSeparator());
-
-        flyout.Items.Add(Item("播放 / 暂停", TogglePlayPause, "Space"));
-        flyout.Items.Add(Item("停止", StopPlayback, "Ctrl+."));
-        flyout.Items.Add(Item("上一首", PlaylistPrevious, "Ctrl+←"));
-        flyout.Items.Add(Item("下一首", PlaylistNext, "Ctrl+→"));
-        flyout.Items.Add(BuildSpeedMenu());
-        flyout.Items.Add(BuildLoopMenu());
-        flyout.Items.Add(Item(
-            _player?.GetPropertyFlag("shuffle") == true ? "随机播放：开" : "随机播放：关",
-            ToggleShuffle));
-        flyout.Items.Add(Item("A-B 循环", CycleAbLoop, "Ctrl+L"));
-        flyout.Items.Add(new MenuFlyoutSeparator());
-
-        flyout.Items.Add(BuildChapterMenu());
-        flyout.Items.Add(BuildTrackMenu());
-        flyout.Items.Add(BuildSubtitleMenu());
-        flyout.Items.Add(BuildPlaylistMenu());
-        flyout.Items.Add(new MenuFlyoutSeparator());
-
-        var modeMenu = new MenuFlyoutSubItem { Text = "窗口模式" };
-        modeMenu.Items.Add(Item(
-            _mode.Current == PlayerMode.Fullscreen ? "退出全屏 (F11)" : "全屏 (F11)",
-            EnterFullscreenFromMenu));
-        modeMenu.Items.Add(Item(
-            _mode.Current == PlayerMode.PiP ? "退出画中画" : "画中画 (Ctrl+Shift+P)",
-            TogglePip));
-        modeMenu.Items.Add(Item(
-            _mode.Current == PlayerMode.Mini ? "退出迷你播放器" : "迷你播放器 (Ctrl+Shift+M)",
-            ToggleMini));
-        modeMenu.Items.Add(Item(
-            _settings.AlwaysOnTop ? "取消置顶" : "置顶",
-            TogglePin,
-            isChecked: _settings.AlwaysOnTop));
-        flyout.Items.Add(modeMenu);
-        flyout.Items.Add(Item("新建窗口 (Ctrl+N)", NewWindow));
-        flyout.Items.Add(Item(
-            "在新窗口打开… (Ctrl+Shift+N)",
-            () => _ = OpenInNewWindowAsync()));
-        flyout.Items.Add(Item("关闭当前窗口 (Ctrl+W)", CloseCurrentWindow));
-        flyout.Items.Add(new MenuFlyoutSeparator());
-
-        flyout.Items.Add(Item("截图", CaptureScreenshot, "Ctrl+S"));
-        flyout.Items.Add(Item("截图到文件夹…", ScreenshotToFolderPickerAsync));
-        flyout.Items.Add(Item("技术信息 OSD", TogglePersistentOsd));
-        flyout.Items.Add(new MenuFlyoutSeparator());
-        flyout.Items.Add(Item("设置…", ShowSettingsDialogAsync, "Ctrl+,"));
-        flyout.Items.Add(Item("退出", () => Close(), "Q"));
-
-        flyout.ShowAt(TitleBar);
-    }
-
-    private MenuFlyoutSubItem BuildRecentMenu()
-    {
-        var sub = new MenuFlyoutSubItem { Text = "最近打开" };
-        IReadOnlyList<HistoryEntry> recent = _historyStore.Recent(10);
-        if (recent.Count == 0)
-        {
-            sub.Items.Add(Item("（暂无记录）", () => { }, enabled: false));
-            return sub;
-        }
-
-        foreach (HistoryEntry entry in recent)
-        {
-            string label = string.IsNullOrWhiteSpace(entry.Title)
-                ? Path.GetFileName(entry.Path)
-                : entry.Title;
-            sub.Items.Add(Item(
-                label,
-                () => OpenPaths(new[] { entry.Path })));
-        }
-
-        return sub;
-    }
-
-    private MenuFlyoutSubItem BuildSpeedMenu()
-    {
-        var sub = new MenuFlyoutSubItem { Text = "速度" };
-        foreach (double speed in new[] { 0.5, 0.75, 1.0, 1.25, 1.5, 2.0 })
-        {
-            double value = speed;
-            sub.Items.Add(Item(
-                $"{value:0.##}x",
-                () => SetSpeed(value),
-                isChecked: Math.Abs(_oscVm.Speed - value) < 0.01));
-        }
-
-        sub.Items.Add(new MenuFlyoutSeparator());
-        sub.Items.Add(Item("重置 1x", ResetSpeed, "Ctrl+Backspace"));
-        return sub;
-    }
-
-    private MenuFlyoutSubItem BuildLoopMenu()
-    {
-        var sub = new MenuFlyoutSubItem { Text = "循环模式" };
-        string[] labels = { "关闭", "列表循环", "单曲循环" };
-        for (int i = 0; i < labels.Length; i++)
-        {
-            int mode = i;
-            sub.Items.Add(Item(
-                labels[i],
-                () => SetLoopMode(mode),
-                isChecked: _loopMode == mode));
-        }
-
-        return sub;
-    }
-
-    private MenuFlyoutSubItem BuildChapterMenu()
-    {
-        var sub = new MenuFlyoutSubItem { Text = "章节" };
-        if (_chapterList.Count == 0)
-        {
-            sub.Items.Add(Item("（无章节）", () => { }, enabled: false));
-            return sub;
-        }
-
-        foreach (ChapterInfo chapter in _chapterList.Take(80))
-        {
-            ChapterInfo captured = chapter;
-            sub.Items.Add(Item(
-                $"{captured.Index + 1}. {captured.DisplayName}  {TimeFormatter.Format(captured.Time)}",
-                () => JumpToChapter(captured.Index),
-                isChecked: captured.Index == _currentChapterIndex));
-        }
-
-        return sub;
-    }
-
-    private MenuFlyoutSubItem BuildTrackMenu()
-    {
-        var sub = new MenuFlyoutSubItem { Text = "轨道" };
-        sub.Items.Add(BuildTrackGroup(TrackType.Video));
-        sub.Items.Add(BuildTrackGroup(TrackType.Audio));
-        sub.Items.Add(BuildTrackGroup(TrackType.Subtitle));
-        return sub;
-    }
-
-    private MenuFlyoutSubItem BuildTrackGroup(TrackType type)
-    {
-        var group = new MenuFlyoutSubItem { Text = TrackTypeLabel(type) };
-        group.Items.Add(Item(
-            "自动",
-            () => SetTrackSelection(type, "auto", "自动"),
-            isChecked: !_trackList.Any(track => track.Type == type && track.IsSelected)));
-        group.Items.Add(Item(
-            "关闭",
-            () => SetTrackSelection(type, "no", "关闭")));
-
-        foreach (TrackInfo track in _trackList.Where(track => track.Type == type))
-        {
-            TrackInfo captured = track;
-            string label = captured.DisplayName;
-            if (!string.IsNullOrWhiteSpace(captured.Codec))
-            {
-                label += $"  [{captured.Codec}]";
-            }
-
-            group.Items.Add(Item(
-                label,
-                () => SelectTrack(captured),
-                isChecked: captured.IsSelected));
-        }
-
-        return group;
-    }
-
-    private MenuFlyoutSubItem BuildSubtitleMenu()
-    {
-        var sub = new MenuFlyoutSubItem { Text = "字幕" };
-        bool hasSubtitles = _trackList.Any(track => track.Type == TrackType.Subtitle);
-        sub.Items.Add(Item(
-            "显示 / 隐藏字幕",
-            ToggleSubtitleVisibility,
-            "V",
-            isChecked: _player?.GetPropertyFlag("sub-visibility") ?? true));
-        sub.Items.Add(Item("加载外挂字幕…", OpenSubtitlePickerAsync));
-        sub.Items.Add(new MenuFlyoutSeparator());
-        sub.Items.Add(Item("延迟 -0.1s", () => AdjustSubtitleDelay(-0.1), "Z"));
-        sub.Items.Add(Item("延迟 +0.1s", () => AdjustSubtitleDelay(0.1), "X"));
-        sub.Items.Add(Item("延迟归零", ResetSubtitleDelay, "C"));
-        sub.Items.Add(Item("位置 +5", () => AdjustSubtitlePosition(5), "R"));
-        sub.Items.Add(Item("位置 -5", () => AdjustSubtitlePosition(-5), "T"));
-        sub.Items.Add(Item("放大", () => AdjustSubtitleScale(0.1), "G"));
-        sub.Items.Add(Item("缩小", () => AdjustSubtitleScale(-0.1), "F"));
-        sub.Items.Add(new MenuFlyoutSeparator());
-
-        var secondary = new MenuFlyoutSubItem { Text = "次字幕" };
-        secondary.Items.Add(Item("关闭", () => SetSecondarySubtitle(null)));
-        foreach (TrackInfo track in _trackList.Where(
-                     track => track.Type == TrackType.Subtitle))
-        {
-            TrackInfo captured = track;
-            secondary.Items.Add(Item(
-                captured.DisplayName,
-                () => SetSecondarySubtitle(captured.Id)));
-        }
-
-        sub.Items.Add(secondary);
-        if (!hasSubtitles)
-        {
-            sub.Items.Add(Item("（当前没有字幕轨道）", () => { }, enabled: false));
-        }
-
-        return sub;
-    }
-
-    private MenuFlyoutSubItem BuildPlaylistMenu()
-    {
-        var sub = new MenuFlyoutSubItem { Text = "播放列表" };
-        if (_playlistItems.Count == 0)
-        {
-            sub.Items.Add(Item("（播放列表为空）", () => { }, enabled: false));
-        }
-        else
-        {
-            foreach (MpvPlaylistItem item in _playlistItems.Take(40))
-            {
-                MpvPlaylistItem captured = item;
-                sub.Items.Add(Item(
-                    $"{captured.Index + 1}. {captured.DisplayName}",
-                    () => SendPlayerCommandAsync(
-                        "set",
-                        "playlist-pos",
-                        captured.Index.ToString(CultureInfo.InvariantCulture)),
-                    isChecked: captured.Index == _currentPlaylistIndex));
-            }
-
-            if (_playlistItems.Count > 40)
-            {
-                sub.Items.Add(Item(
-                    $"（还有 {_playlistItems.Count - 40} 项，Stage 4 提供完整列表）",
-                    () => { },
-                    enabled: false));
-            }
-        }
-
-        sub.Items.Add(new MenuFlyoutSeparator());
-        sub.Items.Add(Item("添加文件到播放列表…", AddFilesToPlaylistAsync));
-        sub.Items.Add(Item("保存播放列表…", SavePlaylistPickerAsync));
-        sub.Items.Add(Item(
-            "移除当前项",
-            RemoveCurrentPlaylistItem,
-            enabled: _currentPlaylistIndex >= 0));
-        sub.Items.Add(Item(
-            "当前项上移",
-            () => MoveCurrentPlaylistItem(-1),
-            enabled: _currentPlaylistIndex > 0));
-        sub.Items.Add(Item(
-            "当前项下移",
-            () => MoveCurrentPlaylistItem(1),
-            enabled: _currentPlaylistIndex >= 0 &&
-                _currentPlaylistIndex < _playlistItems.Count - 1));
-        return sub;
-    }
-
-    private async Task AddFilesToPlaylistAsync()
-    {
-        try
-        {
-            var picker = new FileOpenPicker
-            {
-                SuggestedStartLocation = PickerLocationId.VideosLibrary,
-            };
-            picker.FileTypeFilter.Add("*");
-            InitializePicker(picker);
-            IReadOnlyList<StorageFile> files = await picker.PickMultipleFilesAsync();
-            foreach (StorageFile file in files)
-            {
-                if (MediaFileTypes.IsPlayableMedia(file.Path))
-                {
-                    SendPlayerCommandAsync("loadfile", file.Path, "append");
-                }
-            }
-
-            if (files.Count > 0)
-            {
-                ShowOsd($"已添加 {files.Count} 个文件到播放列表");
-            }
-        }
-        catch (Exception ex)
-        {
-            Trace("append files failed: " + ex);
-            ShowOsd("添加文件失败", ex.Message);
-        }
-    }
-
-    private void RemoveCurrentPlaylistItem()
-    {
-        if (_currentPlaylistIndex < 0)
-        {
-            return;
-        }
-
-        SendPlayerCommandAsync(
-            "playlist-remove",
-            _currentPlaylistIndex.ToString(CultureInfo.InvariantCulture));
-        ShowOsd("已从播放列表移除");
-    }
-
-    private void MoveCurrentPlaylistItem(int delta)
-    {
-        int from = _currentPlaylistIndex;
-        int to = from + delta;
-        if (from < 0 || to < 0 || to >= _playlistItems.Count)
-        {
-            return;
-        }
-
-        SendPlayerCommandAsync(
-            "playlist-move",
-            from.ToString(CultureInfo.InvariantCulture),
-            to.ToString(CultureInfo.InvariantCulture));
-        ShowOsd(delta < 0 ? "已上移" : "已下移");
-    }
-
-    private MenuFlyoutItem Item(
-        string text,
-        Action action,
-        string? shortcut = null,
-        bool enabled = true,
-        bool isChecked = false)
-    {
-        var item = new MenuFlyoutItem
-        {
-            Text = isChecked ? "✓ " + text : text,
-            IsEnabled = enabled,
-        };
-        if (!string.IsNullOrWhiteSpace(shortcut))
-        {
-            item.KeyboardAcceleratorTextOverride = shortcut;
-        }
-
-        item.Click += (_, _) => action();
-        return item;
-    }
-
-    private MenuFlyoutItem Item(
-        string text,
-        Func<Task> action,
-        string? shortcut = null,
-        bool enabled = true)
-    {
-        var item = new MenuFlyoutItem
-        {
-            Text = text,
-            IsEnabled = enabled,
-        };
-        if (!string.IsNullOrWhiteSpace(shortcut))
-        {
-            item.KeyboardAcceleratorTextOverride = shortcut;
-        }
-
-        item.Click += async (_, _) =>
-        {
-            try
-            {
-                await action();
-            }
-            catch (Exception ex)
-            {
-                Trace("menu action failed: " + ex);
-                ShowOsd("操作失败", ex.Message);
-            }
-        };
-        return item;
-    }
-
-    private async Task ShowSettingsDialogAsync()
-    {
-        var resume = new CheckBox
-        {
-            Content = "打开文件时从上次位置继续",
-            IsChecked = _settings.ResumePlayback,
-        };
-        var clickMode = new ComboBox
-        {
-            HorizontalAlignment = HorizontalAlignment.Stretch,
-            ItemsSource = new[] { "隐藏 OSC", "播放 / 暂停", "全屏", "无" },
-            SelectedIndex = Math.Clamp(
-                (int)_settings.SingleClickAction,
-                0,
-                3),
-        };
-
-        var options = new StackPanel { Spacing = 10, MinWidth = 420 };
-        options.Children.Add(new TextBlock
-        {
-            Text = "播放",
-            FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
-        });
-        options.Children.Add(resume);
-        options.Children.Add(new TextBlock { Text = "视频单击动作" });
-        options.Children.Add(clickMode);
-
-        var keys = new StackPanel { Spacing = 3 };
-        keys.Children.Add(new TextBlock
-        {
-            Text = "默认键盘（Stage 3；Stage 7 提供编辑器）",
-            FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
-            Margin = new Thickness(0, 8, 0, 4),
-        });
-        foreach ((string chord, string action) in _keyMap.Describe())
-        {
-            var row = new Grid();
-            row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(150) });
-            row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-            var chordText = new TextBlock
-            {
-                Text = chord,
-                FontFamily = new Microsoft.UI.Xaml.Media.FontFamily("Cascadia Mono"),
-            };
-            var actionText = new TextBlock
-            {
-                Text = ActionLabel(action),
-                TextWrapping = TextWrapping.Wrap,
-            };
-            Grid.SetColumn(actionText, 1);
-            row.Children.Add(chordText);
-            row.Children.Add(actionText);
-            keys.Children.Add(row);
-        }
-
-        var scroll = new ScrollViewer
-        {
-            Content = keys,
-            Height = 260,
-            VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
-        };
-        options.Children.Add(scroll);
-
-        var dialog = new ContentDialog
-        {
-            Title = "设置（Stage 3 基础）",
-            Content = options,
-            PrimaryButtonText = "保存",
-            CloseButtonText = "取消",
-            XamlRoot = RootGrid.XamlRoot,
-        };
-
-        if (await dialog.ShowAsync() != ContentDialogResult.Primary)
-        {
-            return;
-        }
-
-        _settings.ResumePlayback = resume.IsChecked == true;
-        _settings.SingleClickAction = (SingleClickAction)Math.Clamp(
-            clickMode.SelectedIndex,
-            0,
-            3);
-        SaveSettings();
-        ShowOsd("设置已保存");
-    }
-
-    private static string ActionLabel(string action) => action switch
-    {
-        PlayerActions.PlayPause => "播放 / 暂停",
-        PlayerActions.Stop => "停止",
-        PlayerActions.SeekBack5 => "后退 5 秒",
-        PlayerActions.SeekForward5 => "前进 5 秒",
-        PlayerActions.SeekBack1 => "后退 1 秒",
-        PlayerActions.SeekForward1 => "前进 1 秒",
-        PlayerActions.VolumeUp5 => "音量 +5",
-        PlayerActions.VolumeDown5 => "音量 -5",
-        PlayerActions.VolumeUp1 => "音量 +1",
-        PlayerActions.VolumeDown1 => "音量 -1",
-        PlayerActions.Mute => "静音",
-        PlayerActions.FramePrevious => "上一帧",
-        PlayerActions.FrameNext => "下一帧",
-        PlayerActions.SubtitleSeekPrevious => "上一句字幕",
-        PlayerActions.SubtitleSeekNext => "下一句字幕",
-        PlayerActions.Open => "打开文件",
-        PlayerActions.OpenUrl => "打开 URL",
-        PlayerActions.Settings => "设置",
-        PlayerActions.Screenshot => "截图",
-        PlayerActions.AbLoop => "A-B 循环",
-        PlayerActions.PlaylistPrevious => "播放列表上一首",
-        PlayerActions.PlaylistNext => "播放列表下一首",
-        PlayerActions.SpeedHalf => "速度 ×0.5",
-        PlayerActions.SpeedDouble => "速度 ×2",
-        PlayerActions.SpeedReset => "速度复位",
-        PlayerActions.ToggleFullscreen => "全屏",
-        PlayerActions.ExitFullscreen => "退出全屏",
-        PlayerActions.PictureInPicture => "画中画",
-        PlayerActions.Sidebar => "侧边栏",
-        PlayerActions.SidebarSettings => "快速设置侧栏",
-        PlayerActions.Layout => "布局切换",
-        PlayerActions.MusicMode => "音乐模式",
-        PlayerActions.Theme => "主题切换",
-        PlayerActions.OscPosition => "OSC 位置",
-        PlayerActions.LoopMode => "循环模式",
-        PlayerActions.ChapterPrevious => "上一章",
-        PlayerActions.ChapterNext => "下一章",
-        PlayerActions.SubtitleVisibility => "字幕显隐",
-        PlayerActions.SubtitleDelayDecrease => "字幕延迟 -0.1",
-        PlayerActions.SubtitleDelayIncrease => "字幕延迟 +0.1",
-        PlayerActions.SubtitleDelayReset => "字幕延迟归零",
-        PlayerActions.SubtitleScaleIncrease => "字幕放大",
-        PlayerActions.SubtitleScaleDecrease => "字幕缩小",
-        PlayerActions.SubtitlePositionUp => "字幕位置上移",
-        PlayerActions.SubtitlePositionDown => "字幕位置下移",
-        PlayerActions.WindowHalf => "窗口 0.5×",
-        PlayerActions.WindowNormal => "窗口 1×",
-        PlayerActions.WindowDouble => "窗口 2×",
-        PlayerActions.WindowShrink => "缩小窗口",
-        PlayerActions.WindowGrow => "放大窗口",
-        PlayerActions.NewWindow => "新建窗口",
-        PlayerActions.OpenInNewWindow => "在新窗口打开",
-        PlayerActions.CloseWindow => "关闭当前窗口",
-        PlayerActions.Quit => "退出",
-        _ => action,
-    };
 
     // ----------------------------------------------------------------- input
 
@@ -2199,7 +1624,7 @@ public sealed partial class MainWindow
                 _ = OpenUrlDialogAsync();
                 return true;
             case PlayerActions.Settings:
-                _ = ShowSettingsDialogAsync();
+                App.ShowSettingsWindow();
                 return true;
             case PlayerActions.Screenshot:
                 CaptureScreenshot();
@@ -2497,6 +1922,10 @@ public sealed partial class MainWindow
         }
 
         int direction = Math.Sign(delta);
+        if (_settings.InvertWheelDirection)
+        {
+            direction = -direction;
+        }
         if (properties.IsHorizontalMouseWheel)
         {
             SeekRelative(direction * _settings.WheelSeekSeconds);

@@ -803,73 +803,11 @@ public sealed partial class MainWindow : Window
 
     private void OnMoreClicked(object? sender, EventArgs e)
     {
-        var flyout = new MenuFlyout();
-
-        void AddItem(string text, Action action)
-        {
-            var item = new MenuFlyoutItem { Text = text };
-            item.Click += (_, _) => action();
-            flyout.Items.Add(item);
-        }
-
-        void AddSubItem(MenuFlyoutSubItem parent, string text, Action action)
-        {
-            var item = new MenuFlyoutItem { Text = text };
-            item.Click += (_, _) => action();
-            parent.Items.Add(item);
-        }
-
-        AddItem("布局：Edge-to-edge / Docked", ToggleLayout);
-
-        var oscMenu = new MenuFlyoutSubItem { Text = "OSC 位置" };
-        AddSubItem(oscMenu, "浮动", () => SetOscPosition(OscPosition.Floating));
-        AddSubItem(oscMenu, "底部", () => SetOscPosition(OscPosition.Bottom));
-        AddSubItem(oscMenu, "顶部", () => SetOscPosition(OscPosition.Top));
-        flyout.Items.Add(oscMenu);
-
-        AddItem("快速设置侧栏 (Ctrl+Shift+S)", ShowSettingsSidebar);
-        AddItem("播放列表侧栏 (Ctrl+Shift+B)", ShowPlaylistSidebar);
-        AddItem("章节侧栏", ShowChaptersSidebar);
-        AddItem("插件侧栏（Stage 9）", ShowPluginsSidebar);
-
-        var sideMenu = new MenuFlyoutSubItem { Text = "侧边栏位置" };
-        AddSubItem(sideMenu, "左侧", () => MoveSidebarTo(SidebarSide.Leading));
-        AddSubItem(sideMenu, "右侧", () => MoveSidebarTo(SidebarSide.Trailing));
-        flyout.Items.Add(sideMenu);
-
-        AddItem("主题", CycleTheme);
-        AddItem("置顶", TogglePin);
-        AddItem("全屏 / 退出全屏", EnterFullscreenFromMenu);
-        AddItem("画中画", TogglePip);
-        AddItem("迷你播放器 / 音乐模式", ToggleMini);
-        AddItem("新建窗口", NewWindow);
-        AddItem("在新窗口打开…", () => _ = OpenInNewWindowAsync());
-        AddItem("关闭当前窗口", CloseCurrentWindow);
-        AddItem("技术信息 OSD", TogglePersistentOsd);
-
-        var windowMenu = new MenuFlyoutSubItem { Text = "窗口尺寸" };
-        AddSubItem(windowMenu, "0.5×", () => ResizeToScale(0.5));
-        AddSubItem(windowMenu, "1×", () => ResizeToScale(1.0));
-        AddSubItem(windowMenu, "2×", () => ResizeToScale(2.0));
-        AddSubItem(windowMenu, "适合屏幕", FitToScreen);
-        flyout.Items.Add(windowMenu);
-
-        var icons = new MenuFlyoutItem { Text = "图标映射" };
-        icons.Click += async (_, _) => await ShowIconDialogAsync();
-        flyout.Items.Add(icons);
-
-        AddItem("设置", ShowSettingsSidebar);
-
-        if (sender is OscToolbar toolbar)
-        {
-            flyout.ShowAt(toolbar.MoreAnchor);
-        }
-        else
-        {
-            flyout.ShowAt(OscFloating);
-        }
+        FrameworkElement anchor = sender is OscToolbar toolbar
+            ? toolbar.MoreAnchor
+            : OscFloating;
+        ShowApplicationMenu(anchor);
     }
-
     private void ToggleFullscreen()
     {
         RequestMode(IsFullscreen ? PlayerMode.Normal : PlayerMode.Fullscreen);
@@ -1252,6 +1190,7 @@ public sealed partial class MainWindow : Window
             _player.ObserveProperty("display-swapchain", MpvFormat.Int64);
             InitializePlayerStage3(_player);
             ApplyPersistedQuickSettings();
+            ApplyStage7Settings();
 
             _oscVm.SetDurationFromPlayer(_player.GetPropertyDouble("duration"));
             _oscVm.SetPositionFromPlayer(_player.GetPropertyDouble("time-pos"));
