@@ -195,6 +195,14 @@ OSD 截图确认：在视频暂停的 150 ms 内截到右下角“暂停”胶�
 | 17 | 无新增 NuGet | ✅ | 仅现有 Windows App SDK/xUnit |
 | 18 | 构建 0 error、测试全绿 | ✅ | 上方输出 |
 
+## 许可证检查
+
+- [x] 无新增 NuGet/第三方依赖（仅既有 Windows App SDK / xUnit）。
+- [x] 未复制 IINA 源码、`.xcassets`、SF Symbols 或 IINA 图标；XAML/C# 为原创。
+- [x] 仓库未提交 libmpv 二进制、测试媒体或截图；libmpv 仍在
+  `third_party/libmpv/`（gitignored）。
+- [x] 未改变项目许可证（GPL-3.0-only）。
+
 ## 已知问题 / 偏离
 
 1. **媒体矩阵未覆盖**：本机没有 ffmpeg/样本片源，只实测了

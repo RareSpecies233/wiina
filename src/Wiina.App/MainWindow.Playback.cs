@@ -544,6 +544,19 @@ public sealed partial class MainWindow
             return;
         }
 
+        if (Path.IsPathRooted(input) || input.Contains('\\'))
+        {
+            errors.Add($"找不到文件: {input}");
+            return;
+        }
+
+        if (!input.Contains("://", StringComparison.Ordinal) &&
+            MediaFileTypes.Classify(input) != MediaKind.Unknown)
+        {
+            errors.Add($"找不到文件: {input}");
+            return;
+        }
+
         if (TryNormalizeUrl(input, out string url))
         {
             playable.Add(url);
