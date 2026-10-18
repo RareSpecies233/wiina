@@ -7,6 +7,8 @@
 >
 
     <Grid x:Name="RootGrid"
+          MinWidth="480"
+          MinHeight="360"
           Background="{ThemeResource WindowTintBrush}"
           AllowDrop="True"
           DragOver="OnDragOver"
@@ -155,7 +157,7 @@
                           SelectionMode="Single"
                           IsItemClickEnabled="False"
                           DoubleTapped="OnRecentDoubleTapped"
-                          Height="96">
+                          MinHeight="72">
                     <ListView.ItemTemplate>
                         <DataTemplate>
                             <Grid ColumnSpacing="8" Height="28">

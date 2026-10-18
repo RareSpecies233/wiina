@@ -26,12 +26,15 @@ public enum SidebarSide
     Trailing,
 }
 
-/// <summary>Corner used by the Stage 5 OSD.</summary>
+/// <summary>Where the Stage 5 OSD sits inside the playback window.</summary>
 public enum OsdPosition
 {
     BottomRight,
     BottomLeft,
     TopRight,
+    TopLeft,
+    TopCenter,
+    BottomCenter,
 }
 
 public enum SidebarType

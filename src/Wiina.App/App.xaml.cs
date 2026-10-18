@@ -28,6 +28,7 @@ public partial class App : Application
     private static App? _instance;
     private static SmtcService? _mediaSession;
     private static SettingsWindow? _settingsWindow;
+    private static KeyBindingWindow? _keyBindingWindow;
     private static WelcomeWindow? _welcomeWindow;
     private static AboutWindow? _aboutWindow;
     private static LogViewerWindow? _logWindow;
@@ -87,6 +88,7 @@ public partial class App : Application
 
         Apply(ActiveWindow);
         Apply(_settingsWindow);
+        Apply(_keyBindingWindow);
         Apply(_welcomeWindow);
         Apply(_aboutWindow);
         Apply(_logWindow);
@@ -343,6 +345,26 @@ public partial class App : Application
             if (ReferenceEquals(_settingsWindow, window))
             {
                 _settingsWindow = null;
+            }
+        };
+        window.Activate();
+    }
+
+    public static void ShowKeyBindingWindow()
+    {
+        if (_keyBindingWindow is { } existing)
+        {
+            existing.Activate();
+            return;
+        }
+
+        var window = new KeyBindingWindow();
+        _keyBindingWindow = window;
+        window.Closed += (_, _) =>
+        {
+            if (ReferenceEquals(_keyBindingWindow, window))
+            {
+                _keyBindingWindow = null;
             }
         };
         window.Activate();

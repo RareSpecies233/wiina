@@ -593,7 +593,7 @@
                                 </Grid>
                                 <Slider x:Name="VolumeSlider"
                                         Minimum="0"
-                                        Maximum="130"
+                                        Maximum="100"
                                         StepFrequency="1"
                                         ValueChanged="OnSliderValueChanged" />
                             </StackPanel>

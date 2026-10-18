@@ -78,6 +78,8 @@ public sealed partial class MainWindow : Window
     private double _videoAspect = 16.0 / 9.0;
     private int _videoWidth;
     private int _videoHeight;
+    private bool _userResizedWindow;
+    private bool _initialVideoSizingDone;
     private string? _currentAudioDevice;
     private bool _filterSoftwareDecode;
     private double? _pendingFilterResumeTime;
@@ -259,8 +261,16 @@ public sealed partial class MainWindow : Window
         timeline.SeekRequested += value => _oscVm.RequestSeek(value);
         timeline.SeekStarted += OnSeekStarted;
         timeline.SeekCompleted += OnSeekCompleted;
-        timeline.PreviewRequested += (time, x) => ShowTimePreview(timeline, time, x);
+        timeline.PreviewRequested += (time, ratio) => ShowTimePreview(timeline, time, ratio);
         timeline.PreviewHidden += HideTimePreview;
+        timeline.SizeChanged += (_, _) =>
+        {
+            if (ReferenceEquals(_previewTimeline, timeline))
+            {
+                PositionTimePreview();
+                PositionThumbnail();
+            }
+        };
     }
 
     private void UpdateTimelines()
@@ -573,7 +583,7 @@ public sealed partial class MainWindow : Window
         }
     }
 
-    private void ShowTimePreview(TimelineControl timeline, double seconds, double x)
+    private void ShowTimePreview(TimelineControl timeline, double seconds, double ratio)
     {
         _previewTimeline = timeline;
         if (_seeking ||
@@ -585,7 +595,7 @@ public sealed partial class MainWindow : Window
             return;
         }
 
-        _previewPointerX = ParsePreviewX(timeline, x);
+        _previewRatio = Math.Clamp(ratio, 0, 1);
         TimePreviewText.Text = TimeFormatter.Format(seconds);
         string? chapterTitle = FindChapterTitle(seconds);
         if (string.IsNullOrWhiteSpace(chapterTitle))
@@ -600,22 +610,7 @@ public sealed partial class MainWindow : Window
 
         TimePreview.Visibility = Visibility.Visible;
         TimePreview.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
-        Point point = timeline.TransformToVisual(OverlayLayer).TransformPoint(
-            new Point(x, timeline.ActualHeight / 2));
-        double width = TimePreview.DesiredSize.Width;
-        double height = TimePreview.DesiredSize.Height;
-        double left = Math.Clamp(
-            point.X - width / 2,
-            0,
-            Math.Max(0, OverlayLayer.ActualWidth - width));
-        double top = point.Y - height - 8;
-        if (top < 0)
-        {
-            top = point.Y + timeline.ActualHeight / 2 + 8;
-        }
-
-        top = Math.Clamp(top, 0, Math.Max(0, OverlayLayer.ActualHeight - height));
-        TimePreview.Margin = new Thickness(left, top, 0, 0);
+        PositionTimePreview();
 
         if (_settings.ThumbnailPreviewEnabled && File.Exists(_currentPath))
         {
@@ -631,17 +626,42 @@ public sealed partial class MainWindow : Window
         }
     }
 
-    private double ParsePreviewX(TimelineControl timeline, double x)
+    /// <summary>
+    /// Anchors the preview to the timeline's current rendered position. The
+    /// timeline can move (OSC slide, dock/sidebar, DPI change), so this is
+    /// recomputed from the live transform instead of caching window pixels.
+    /// </summary>
+    private void PositionTimePreview()
     {
+        if (_previewTimeline is null || TimePreview.Visibility != Visibility.Visible)
+        {
+            return;
+        }
+
         try
         {
-            Point point = timeline.TransformToVisual(OverlayLayer).TransformPoint(
-                new Point(x, timeline.ActualHeight / 2));
-            return point.X;
+            double width = Math.Max(TimePreview.DesiredSize.Width, TimePreview.ActualWidth);
+            double height = Math.Max(TimePreview.DesiredSize.Height, TimePreview.ActualHeight);
+            Point origin = _previewTimeline.TransformToVisual(OverlayLayer)
+                .TransformPoint(new Point(0, 0));
+            double centerX = origin.X + _previewTimeline.ActualWidth * _previewRatio;
+            double left = Math.Clamp(
+                centerX - width / 2,
+                8,
+                Math.Max(8, OverlayLayer.ActualWidth - width - 8));
+            double top = origin.Y - height - 8;
+            _previewAboveTimeline = top >= 8;
+            if (!_previewAboveTimeline)
+            {
+                top = origin.Y + _previewTimeline.ActualHeight + 8;
+            }
+
+            top = Math.Clamp(top, 8, Math.Max(8, OverlayLayer.ActualHeight - height - 8));
+            TimePreview.Margin = new Thickness(left, top, 0, 0);
         }
         catch
         {
-            return x;
+            // Layout can race a collapse; the next hover repositions it.
         }
     }
 
@@ -684,6 +704,7 @@ public sealed partial class MainWindow : Window
 
         _oscDragging = true;
         _oscState.IsDragging = true;
+        HideTimePreview();
         _autoHideTimer.Stop();
         _oscDragStart = e.GetCurrentPoint(RootGrid).Position;
         double left = Canvas.GetLeft(OscFloating);
@@ -1158,7 +1179,8 @@ public sealed partial class MainWindow : Window
             120,
             () => _settings.LockAspectRatio,
             () => _videoAspect,
-            OnAppCommand);
+            OnAppCommand,
+            () => _userResizedWindow = true);
 
         if (RootGrid.XamlRoot is { } xamlRoot)
         {
@@ -1181,6 +1203,12 @@ public sealed partial class MainWindow : Window
         OscFloating.SetAvailableWidth(RootGrid.ActualWidth);
         ApplyOscPosition();
         UpdateOsdPlacement();
+        if (_previewTimeline is not null && TimePreview.Visibility == Visibility.Visible)
+        {
+            PositionTimePreview();
+            PositionThumbnail();
+        }
+
         _resizeTimer.Stop();
         _resizeTimer.Start();
     }
@@ -1203,6 +1231,11 @@ public sealed partial class MainWindow : Window
         _resizeTimer.Stop();
         _resizeTimer.Start();
         ConfigureCaptionButtons();
+        if (_previewTimeline is not null && TimePreview.Visibility == Visibility.Visible)
+        {
+            PositionTimePreview();
+            PositionThumbnail();
+        }
     }
 
     private void OnVideoHostLoaded(object sender, RoutedEventArgs e)

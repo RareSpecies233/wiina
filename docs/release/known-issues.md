@@ -12,8 +12,17 @@ Nothing here is hidden; these are known limitations of the v1 build.
   OpenSubtitles search/download, no yt-dlp invocation, no bundled yt-dlp, no
   related network consent or permissions. The corresponding menu entries are
   disabled and say Stage 10.
-- Optional: `installer/wiina.iss` exists for future Inno Setup packaging but is
-  **not built**; no MSIX package is produced. Only the portable zip is official.
+- Optional: `installer/wiina.iss` exists for Inno Setup packaging; the portable
+  zip remains the official v1 distribution. `scripts/release.ps1` compiles the
+  installer only when Inno Setup 6 is installed locally. No MSIX package is
+  produced.
+
+## Acrylic over video
+
+- Windows 11 acrylic is real blur for windows and XAML surfaces, but WinUI 3
+  does not expose `SwapChainPanel` pixels to `AcrylicBrush`. The titlebar and
+  OSC therefore use a strong translucent tint over video rather than a blurred
+  frame. See [../architecture/0003-acrylic.md](../architecture/0003-acrylic.md).
 
 ## HDR
 

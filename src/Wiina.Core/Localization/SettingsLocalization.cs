@@ -30,7 +30,7 @@ public static class SettingsLocalization
         ["ui.osc-position"] = new("OSC position", "Playback controls floating, docked at the bottom, or in the top titlebar.", new[] { "Floating", "Bottom", "Top" }),
         ["ui.osc-autohide"] = new("OSC auto-hide", "Fade out after 2.5 seconds idle; stays visible in Docked layout.", null),
         ["ui.osd-enabled"] = new("Show OSD messages", "Status hints for volume, seeking, track changes, and more.", null),
-        ["ui.osd-position"] = new("OSD position", "Bottom right, bottom left, or top right; the fullscreen clock stays bottom left.", new[] { "Bottom right", "Bottom left", "Top right" }),
+        ["ui.osd-position"] = new("OSD position", "Six placements: bottom/top left or right, plus top or bottom center; the fullscreen clock stays bottom left.", new[] { "Bottom right", "Bottom left", "Top right", "Top left", "Top center", "Bottom center" }),
         ["ui.osd-size"] = new("OSD font size", "Scale the primary text as a percentage; 1–500%.", null),
         ["ui.osd-duration"] = new("OSD hold time", "Seconds before auto-hide; the hide animation stays at 0.5 seconds.", null),
         ["ui.osd-persistent"] = new("Enable persistent OSD", "Toggle an interactive technical info panel; Esc closes it.", null),

@@ -22,6 +22,7 @@ using Wiina.Core.History;
 using Wiina.Core.Input;
 using Wiina.Core.Models;
 using Wiina.Core.Osd;
+using Wiina.Core.State;
 using Wiina.Core.Subtitles;
 using Wiina.Core.Text;
 using Wiina.Mpv;
@@ -101,9 +102,9 @@ public sealed partial class MainWindow
         SubscribeWheel(OscFloating.Timeline);
         SubscribeWheel(OscBottom.Timeline);
         SubscribeWheel(TitleBar.TopTimeline);
-        OscFloating.Volume.WheelVolumeRequested += AdjustVolume;
-        OscBottom.Volume.WheelVolumeRequested += AdjustVolume;
-        TitleBar.TopVolumeControl.WheelVolumeRequested += AdjustVolume;
+        OscFloating.Volume.WheelVolumeRequested += AdjustUiVolume;
+        OscBottom.Volume.WheelVolumeRequested += AdjustUiVolume;
+        TitleBar.TopVolumeControl.WheelVolumeRequested += AdjustUiVolume;
 
         _clickTimer = DispatcherQueue.CreateTimer();
         _clickTimer.IsRepeating = false;
@@ -690,8 +691,9 @@ public sealed partial class MainWindow
 
     private void SetVolume(double value)
     {
-        double clamped = Math.Clamp(value, 0, 130);
+        double clamped = VolumeMapping.ClampActual(value, _settings.MaxVolume);
         Trace($"set volume {clamped:0.##}");
+        _oscVm.SetVolumeFromPlayer(clamped);
         if (_player is { IsRunning: true })
         {
             _player.TrySetPropertyString(
@@ -702,6 +704,7 @@ public sealed partial class MainWindow
         ShowOsd(OsdMessages.Volume(clamped, Loc.CurrentLanguage));
     }
 
+    /// <summary>Keyboard/menu volume: may exceed 100% up to the configured limit.</summary>
     private void AdjustVolume(double delta)
     {
         if (_player is null)
@@ -710,6 +713,17 @@ public sealed partial class MainWindow
         }
 
         SetVolume(_oscVm.Volume + delta);
+    }
+
+    /// <summary>Slider/wheel volume: the UI stops at 100%, so amplification is keyboard-only.</summary>
+    private void AdjustUiVolume(double delta)
+    {
+        if (_player is null)
+        {
+            return;
+        }
+
+        SetVolume(VolumeMapping.ApplyWheelDelta(_oscVm.Volume, delta));
     }
 
     private void ToggleMute()
@@ -1558,7 +1572,84 @@ public sealed partial class MainWindow
             }
 
             ApplyCropFromSettings();
+            TryApplyInitialVideoSize();
         });
+    }
+
+    /// <summary>
+    /// Sizes the window to the first video's display resolution once. The frame
+    /// size maps 1:1 to physical window pixels; oversized frames are halved and
+    /// then capped to the monitor work area. Never overrides a user resize.
+    /// </summary>
+    private void TryApplyInitialVideoSize()
+    {
+        if (_initialVideoSizingDone)
+        {
+            return;
+        }
+
+        if (_userResizedWindow || _mode.Current != PlayerMode.Normal || IsFullscreen)
+        {
+            Trace($"initial size skipped: userResized={_userResizedWindow} mode={_mode.Current} fullscreen={IsFullscreen}");
+            _initialVideoSizingDone = true;
+            return;
+        }
+
+        if (_videoWidth <= 0 || _videoHeight <= 0)
+        {
+            return;
+        }
+
+        int displayWidth = (int)(_player?.GetPropertyInt64("video-params/dw") ?? 0);
+        int displayHeight = (int)(_player?.GetPropertyInt64("video-params/dh") ?? 0);
+        if (displayWidth <= 0)
+        {
+            displayWidth = (int)(_player?.GetPropertyInt64("dwidth") ?? 0);
+        }
+
+        if (displayHeight <= 0)
+        {
+            displayHeight = (int)(_player?.GetPropertyInt64("dheight") ?? 0);
+        }
+
+        if (displayWidth <= 0)
+        {
+            displayWidth = _videoWidth;
+        }
+
+        if (displayHeight <= 0)
+        {
+            displayHeight = _videoHeight;
+        }
+
+        double scale = RootGrid.XamlRoot?.RasterizationScale ?? 1.0;
+        DisplayArea display = DisplayArea.GetFromWindowId(AppWindow.Id, DisplayAreaFallback.Nearest);
+        RectInt32 workArea = display.WorkArea;
+        DipSize? size = WindowSizing.InitialVideoWindowSize(
+            displayWidth, displayHeight, scale, workArea.Width, workArea.Height);
+        if (size is null)
+        {
+            return;
+        }
+
+        (int physicalWidth, int physicalHeight) = WindowSizing.ToPhysical(size.Value, scale);
+        physicalWidth = Math.Min(physicalWidth, workArea.Width);
+        physicalHeight = Math.Min(physicalHeight, workArea.Height);
+
+        _initialVideoSizingDone = true;
+        AppWindow.Resize(new SizeInt32(physicalWidth, physicalHeight));
+
+        PointInt32 position = AppWindow.Position;
+        int x = Math.Clamp(
+            position.X, workArea.X, Math.Max(workArea.X, workArea.X + workArea.Width - physicalWidth));
+        int y = Math.Clamp(
+            position.Y, workArea.Y, Math.Max(workArea.Y, workArea.Y + workArea.Height - physicalHeight));
+        if (x != position.X || y != position.Y)
+        {
+            AppWindow.Move(new PointInt32(x, y));
+        }
+
+        Trace($"initial video window: {displayWidth}x{displayHeight} -> {physicalWidth}x{physicalHeight}px ({scale:0.##}x)");
     }
 
     private void OnFileLoadFailed(int error, string? message)
@@ -2217,7 +2308,7 @@ public sealed partial class MainWindow
         }
         else
         {
-            AdjustVolume(direction * _settings.WheelVolumeStep);
+            AdjustUiVolume(direction * _settings.WheelVolumeStep);
         }
 
         e.Handled = true;

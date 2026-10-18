@@ -514,7 +514,7 @@ public sealed partial class MainWindow
                 Osd.SetEnabled(e.Flag);
                 break;
             case QuickSettingKey.OsdPosition:
-                _settings.OsdPosition = (OsdPosition)Math.Clamp((int)e.Number, 0, 2);
+                _settings.OsdPosition = OsdPositions.FromIndex((int)e.Number);
                 UpdateOsdPlacement();
                 break;
             case QuickSettingKey.OsdSize:
@@ -621,7 +621,7 @@ public sealed partial class MainWindow
                 ApplyMpvString("video-pan-y", FormatDouble(_settings.VideoPanY));
                 break;
             case QuickSettingKey.Volume:
-                ApplyVolumeSilent(e.Number);
+                ApplyVolumeSilent(VolumeMapping.ApplySliderValue(_settings.Volume, e.Number));
                 break;
             case QuickSettingKey.MaxVolume:
                 _settings.MaxVolume = QuickSettings.ClampMaxVolume(e.Number);
@@ -861,6 +861,7 @@ public sealed partial class MainWindow
     private void ApplyVolumeSilent(double value)
     {
         _settings.Volume = QuickSettings.ClampVolume(value, _settings.MaxVolume);
+        _oscVm.SetVolumeFromPlayer(_settings.Volume);
         ApplyMpvString("volume", FormatDouble(_settings.Volume));
     }
 

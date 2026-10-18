@@ -37,6 +37,7 @@ public sealed partial class TimelineControl : UserControl
     public event Action<double>? SeekRequested;
     public event Action? SeekStarted;
     public event Action? SeekCompleted;
+    /// <summary>Seconds under the pointer plus the normalized 0–1 track position.</summary>
     public event Action<double, double>? PreviewRequested;
     public event Action? PreviewHidden;
 
@@ -199,7 +200,10 @@ public sealed partial class TimelineControl : UserControl
 
         Point point = e.GetCurrentPoint(Slider).Position;
         double ratio = Math.Clamp(point.X / Slider.ActualWidth, 0, 1);
-        PreviewRequested?.Invoke(ratio * _duration, point.X);
+        // Pass the normalized position, not an element-local pixel: the host
+        // anchors the preview to the timeline's current layout position, which
+        // stays correct while the OSC slides, docks or changes DPI.
+        PreviewRequested?.Invoke(ratio * _duration, ratio);
     }
 
     private void OnSliderPointerExited(object sender, PointerRoutedEventArgs e)

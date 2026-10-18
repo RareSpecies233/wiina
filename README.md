@@ -32,6 +32,17 @@ Segoe Fluent Icons、Mica/Acrylic、圆角与系统主题。
 - **IINA 快捷键方案**：Default / IINA / Custom，可在 Window 菜单切换并持久化。
 - 详细记录：[docs/acceptance/v1-polish.md](docs/acceptance/v1-polish.md)。
 
+### 后续修复 2：fix/v1-polish-2
+
+- 锁宽高比支持**所有窗口边缘**；时间/章节预览按 timeline 实际位置锚定并 clamp。
+- OSC 音量条上限 100%，键盘可超过（上限在设置-Audio）；OSD 位置扩展为六向。
+- 首次播放按视频分辨率设置窗口（HiDPI 用物理像素；超屏用半尺寸）。
+- 设置底部 footer 移除；键位编辑独立到**亚克力 KeyBindingWindow**（控制 → 键盘方案 → 编辑键位）。
+- 欢迎窗口可缩放并记忆大小/位置；白底黄三角临时图标；`scripts/release.ps1` 版本同步发布脚本。
+- 真视频背景高斯模糊受 WinUI 3 `SwapChainPanel` 限制，当前为桌面 Acrylic + 视频 tint fallback
+  （详见 [0003-acrylic.md](docs/architecture/0003-acrylic.md)）。
+- 详细记录：[docs/acceptance/v1-polish2.md](docs/acceptance/v1-polish2.md)。
+
 ## 关键事实
 
 | 项目 | 决定 |

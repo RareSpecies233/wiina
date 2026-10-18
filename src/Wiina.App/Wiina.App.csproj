@@ -8,6 +8,7 @@
     <RootNamespace>Wiina.App</RootNamespace>
     <AssemblyName>Wiina</AssemblyName>
     <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>Assets\wiina.ico</ApplicationIcon>
     <Platforms>x64</Platforms>
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
     <UseWinUI>true</UseWinUI>
@@ -26,6 +27,11 @@
   <ItemGroup>
     <ProjectReference Include="..\Wiina.Core\Wiina.Core.csproj" />
     <ProjectReference Include="..\Wiina.Mpv\Wiina.Mpv.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="Assets\wiina.ico" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="Assets\wiina.png" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <ItemGroup>

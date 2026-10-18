@@ -2,6 +2,7 @@ using System.ComponentModel;
 using System.Globalization;
 using System.Runtime.CompilerServices;
 using System.Windows.Input;
+using Wiina.Core.State;
 using Wiina.Core.Text;
 
 namespace Wiina.App.ViewModels;
@@ -115,12 +116,13 @@ public sealed class OscViewModel : INotifyPropertyChanged
         get => _volume;
         set
         {
-            double clamped = Math.Clamp(value, 0, 130);
+            double clamped = Math.Clamp(value, 0, 200);
             if (!Set(ref _volume, clamped))
             {
                 return;
             }
 
+            OnPropertyChanged(nameof(VolumeUi));
             OnPropertyChanged(nameof(VolumeGlyph));
             OnPropertyChanged(nameof(VolumeText));
             OnPropertyChanged(nameof(IsOverAmplified));
@@ -129,6 +131,16 @@ public sealed class OscViewModel : INotifyPropertyChanged
                 VolumeRequested?.Invoke(clamped);
             }
         }
+    }
+
+    /// <summary>
+    /// Slider-facing volume: always 0–100. When the player is amplified the
+    /// thumb stays at 100 without discarding the real value.
+    /// </summary>
+    public double VolumeUi
+    {
+        get => VolumeMapping.ToUi(_volume);
+        set => Volume = VolumeMapping.ApplySliderValue(_volume, value);
     }
 
     public double Speed
@@ -258,7 +270,7 @@ public sealed class OscViewModel : INotifyPropertyChanged
         }
     }
 
-    public string VolumeText => $"音量 {Math.Round(Volume)}%";
+    public string VolumeText => $"音量 {VolumeMapping.FormatUi(Volume)}";
 
     public double ProgressRatio => Duration <= 0 ? 0 : Math.Clamp(Position / Duration, 0, 1);
 
@@ -267,7 +279,7 @@ public sealed class OscViewModel : INotifyPropertyChanged
     public void RequestSeek(double seconds) => SeekRequested?.Invoke(Math.Max(0, seconds));
 
     public void RequestVolume(double volume) =>
-        VolumeRequested?.Invoke(Math.Clamp(volume, 0, 130));
+        VolumeRequested?.Invoke(Math.Clamp(volume, 0, 200));
 
     public void BeginScrub()
     {

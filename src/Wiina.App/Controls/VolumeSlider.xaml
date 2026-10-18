@@ -19,14 +19,14 @@
               ToolTipService.ToolTip="{Binding VolumeText}">
             <Slider x:Name="VolumeInput"
                     Minimum="0"
-                    Maximum="130"
+                    Maximum="100"
                     StepFrequency="1"
-                    Value="{Binding Volume, Mode=TwoWay}"
+                    Value="{Binding VolumeUi, Mode=TwoWay}"
                     IsThumbToolTipEnabled="False"
                     VerticalAlignment="Center"
                     PointerWheelChanged="OnSliderWheelChanged"
                     loc:Loc.AutomationName="ui.volume" />
-            <!-- 2 px notch at 100% so over-amplification is visible. -->
+            <!-- 2 px notch at the 100% stop; over-amplification pins the thumb here. -->
             <Border x:Name="UnityNotch"
                     Width="2"
                     Height="12"

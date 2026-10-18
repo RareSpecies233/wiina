@@ -62,6 +62,13 @@ public sealed partial class OsdText : UserControl
         ApplyScale();
     }
 
+    /// <summary>Aligns the card inside its host so six-position placement reads naturally.</summary>
+    public void SetAlignment(HorizontalAlignment horizontal, VerticalAlignment vertical)
+    {
+        OsdRoot.HorizontalAlignment = horizontal;
+        OsdRoot.VerticalAlignment = vertical;
+    }
+
     public void SetDuration(TimeSpan duration)
     {
         _duration = duration <= TimeSpan.Zero

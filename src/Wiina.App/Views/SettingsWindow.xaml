@@ -7,8 +7,8 @@
 >
 
     <Grid x:Name="RootGrid"
-          MinWidth="560"
-          MinHeight="420"
+          MinWidth="600"
+          MinHeight="440"
           Background="{ThemeResource WindowTintBrush}">
         <Grid.Resources>
             <Style x:Key="SettingsNavButtonStyle" TargetType="Button">
@@ -84,7 +84,7 @@
             </Grid.ColumnDefinitions>
 
             <Border Grid.Column="0"
-                    Background="{ThemeResource SidebarAcrylicBrush}"
+                    Background="{ThemeResource SettingsRailBrush}"
                     BorderBrush="{ThemeResource PanelBorderBrush}"
                     BorderThickness="0,0,1,0">
                 <Grid>
@@ -116,7 +116,6 @@
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="*" />
-                    <RowDefinition Height="Auto" />
                 </Grid.RowDefinitions>
 
                 <StackPanel Margin="20,10,16,8" Spacing="2">
@@ -141,19 +140,6 @@
                                 Padding="0,0,4,24"
                                 Spacing="0" />
                 </ScrollViewer>
-
-                <Border Grid.Row="2"
-                        BorderThickness="0,1,0,0"
-                        BorderBrush="{ThemeResource PanelBorderBrush}"
-                        Padding="20,7">
-                    <Grid>
-                        <TextBlock x:Name="StatusText"
-                                   Style="{StaticResource CaptionTextStyle}" />
-                        <TextBlock loc:Loc.Text="ui.applyHint"
-                                   HorizontalAlignment="Right"
-                                   Style="{StaticResource CaptionTextStyle}" />
-                    </Grid>
-                </Border>
             </Grid>
 
             <!-- Search popover list (spec §12.2); opens under the search box. -->

@@ -1,5 +1,6 @@
 using System.Runtime.InteropServices;
 using Microsoft.UI.Xaml;
+using Wiina.Core.State;
 
 namespace Wiina.App.Interop;
 
@@ -11,6 +12,7 @@ internal static class WindowInterop
 {
     private const uint WM_GETMINMAXINFO = 0x0024;
     private const uint WM_SIZING = 0x0214;
+    private const uint WM_EXITSIZEMOVE = 0x0232;
     private const uint WM_NCHITTEST = 0x0084;
     private const uint WM_APPCOMMAND = 0x0319;
 
@@ -24,14 +26,6 @@ internal static class WindowInterop
     public const int AppCommandMediaFastForward = 49;
     public const int AppCommandMediaRewind = 50;
     private const int HTCLIENT = 1;
-    private const int LeftEdge = 1;
-    private const int RightEdge = 2;
-    private const int TopEdge = 3;
-    private const int TopLeft = 4;
-    private const int TopRight = 5;
-    private const int BottomEdge = 6;
-    private const int BottomLeft = 7;
-    private const int BottomRight = 8;
 
     private static readonly Dictionary<nint, Hook> Hooks = new();
 
@@ -98,7 +92,8 @@ internal static class WindowInterop
         int minHeightDip,
         Func<bool> lockAspect,
         Func<double> aspect,
-        Func<int, bool>? appCommand = null)
+        Func<int, bool>? appCommand = null,
+        Action? windowResizeStarted = null)
     {
         nint hwnd = Microsoft.UI.Win32Interop.GetWindowFromWindowId(window.AppWindow.Id);
         if (Hooks.ContainsKey(hwnd))
@@ -112,7 +107,8 @@ internal static class WindowInterop
             minHeightDip,
             lockAspect,
             aspect,
-            appCommand);
+            appCommand,
+            windowResizeStarted);
         Hooks[hwnd] = hook;
         hook.Attach();
     }
@@ -215,7 +211,9 @@ internal static class WindowInterop
         private readonly Func<bool> _lockAspect;
         private readonly Func<double> _aspect;
         private readonly Func<int, bool>? _appCommand;
+        private readonly Action? _windowResizeStarted;
         private readonly SubclassProc _proc;
+        private bool _sizingGesture;
 
         public Hook(
             nint hwnd,
@@ -223,7 +221,8 @@ internal static class WindowInterop
             int minHeightDip,
             Func<bool> lockAspect,
             Func<double> aspect,
-            Func<int, bool>? appCommand)
+            Func<int, bool>? appCommand,
+            Action? windowResizeStarted)
         {
             _hwnd = hwnd;
             _minWidthDip = minWidthDip;
@@ -231,6 +230,7 @@ internal static class WindowInterop
             _lockAspect = lockAspect;
             _aspect = aspect;
             _appCommand = appCommand;
+            _windowResizeStarted = windowResizeStarted;
             _proc = WndProc;
         }
 
@@ -266,61 +266,35 @@ internal static class WindowInterop
                 return 0;
             }
 
+            if (msg == WM_SIZING && !_sizingGesture)
+            {
+                _sizingGesture = true;
+                _windowResizeStarted?.Invoke();
+            }
+            else if (msg == WM_EXITSIZEMOVE)
+            {
+                _sizingGesture = false;
+            }
+
             if (msg == WM_SIZING && _lockAspect())
             {
                 double aspect = _aspect();
-                if (aspect > 0.05)
+                if (aspect > 0.05 &&
+                    Enum.IsDefined(typeof(WindowResizeEdge), (int)wParam))
                 {
                     RECT rect = Marshal.PtrToStructure<RECT>(lParam);
-                    int edge = (int)wParam;
-                    int width = rect.Right - rect.Left;
-                    int height = rect.Bottom - rect.Top;
+                    double scale = GetDpiForWindow(hWnd) / 96.0;
+                    WindowRect resized = WindowGeometry.ResizeWithAspect(
+                        new WindowRect(rect.Left, rect.Top, rect.Right, rect.Bottom),
+                        (WindowResizeEdge)(int)wParam,
+                        aspect,
+                        (int)Math.Round(_minWidthDip * scale),
+                        (int)Math.Round(_minHeightDip * scale));
 
-                    if (edge is LeftEdge or RightEdge)
-                    {
-                        height = (int)Math.Round(width / aspect);
-                    }
-                    else if (edge is TopEdge or BottomEdge)
-                    {
-                        width = (int)Math.Round(height * aspect);
-                    }
-                    else
-                    {
-                        height = (int)Math.Round(width / aspect);
-                    }
-
-                    switch (edge)
-                    {
-                        case LeftEdge:
-                            rect.Left = rect.Right - width;
-                            break;
-                        case RightEdge:
-                            rect.Right = rect.Left + width;
-                            break;
-                        case TopEdge:
-                            rect.Top = rect.Bottom - height;
-                            break;
-                        case BottomEdge:
-                            rect.Bottom = rect.Top + height;
-                            break;
-                        case TopLeft:
-                            rect.Left = rect.Right - width;
-                            rect.Top = rect.Bottom - height;
-                            break;
-                        case TopRight:
-                            rect.Right = rect.Left + width;
-                            rect.Top = rect.Bottom - height;
-                            break;
-                        case BottomLeft:
-                            rect.Left = rect.Right - width;
-                            rect.Bottom = rect.Top + height;
-                            break;
-                        case BottomRight:
-                            rect.Right = rect.Left + width;
-                            rect.Bottom = rect.Top + height;
-                            break;
-                    }
-
+                    rect.Left = resized.Left;
+                    rect.Top = resized.Top;
+                    rect.Right = resized.Right;
+                    rect.Bottom = resized.Bottom;
                     Marshal.StructureToPtr(rect, lParam, fDeleteOld: false);
                     return 1;
                 }

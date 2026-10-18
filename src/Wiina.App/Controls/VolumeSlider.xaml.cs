@@ -7,7 +7,7 @@ namespace Wiina.App.Controls;
 /// <summary>Mute glyph + 70 px volume slider with a notch at the 100% mark.</summary>
 public sealed partial class VolumeSlider : UserControl
 {
-    private const double Maximum = 130;
+    private const double Maximum = 100;
     private const double Nominal = 100;
     private const double WheelStep = 5;
 

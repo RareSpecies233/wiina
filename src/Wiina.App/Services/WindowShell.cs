@@ -40,6 +40,7 @@ internal static class WindowShell
         }
 
         TryUseMica(window);
+        TrySetWindowIcon(window);
 
         if (extendTitleBar)
         {
@@ -125,6 +126,27 @@ internal static class WindowShell
             {
                 // Windows 10 / VM fallback: the solid page background remains.
             }
+        }
+    }
+
+    /// <summary>
+    /// Uses the generated multi-size icon for secondary windows and the taskbar.
+    /// The executable icon is embedded separately; this covers windows created
+    /// after launch and keeps the titlebar/taskbar glyph consistent.
+    /// </summary>
+    private static void TrySetWindowIcon(Window window)
+    {
+        try
+        {
+            string icon = Path.Combine(AppContext.BaseDirectory, "Assets", "wiina.ico");
+            if (File.Exists(icon))
+            {
+                window.AppWindow.SetIcon(icon);
+            }
+        }
+        catch
+        {
+            // Non-fatal: the executable icon is still used by Explorer.
         }
     }
 }

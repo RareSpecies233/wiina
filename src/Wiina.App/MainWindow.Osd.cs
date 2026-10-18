@@ -14,6 +14,7 @@ using Wiina.Core.Models;
 using Wiina.App.Localization;
 using Wiina.Core.Osd;
 using Wiina.Core.Settings;
+using Wiina.Core.State;
 using Wiina.Core.Text;
 
 namespace Wiina.App;
@@ -30,7 +31,8 @@ public sealed partial class MainWindow
     private CancellationTokenSource? _thumbnailCts;
     private long _thumbnailRequest;
     private TimelineControl? _previewTimeline;
-    private double _previewPointerX;
+    private double _previewRatio;
+    private bool _previewAboveTimeline;
     private bool _cacheBuffering;
     private double _cachePercent = 100;
     private double _cacheSpeed;
@@ -175,18 +177,27 @@ public sealed partial class MainWindow
             bottom = Math.Max(bottom, 48);
         }
 
-        Osd.HorizontalAlignment = _settings.OsdPosition == OsdPosition.BottomLeft
-            ? HorizontalAlignment.Left
-            : HorizontalAlignment.Right;
-        Osd.VerticalAlignment = _settings.OsdPosition == OsdPosition.TopRight
+        OsdPosition position = _settings.OsdPosition;
+        bool topPosition = OsdPositions.IsTop(position);
+        bool leftPosition = OsdPositions.IsLeft(position);
+        bool centered = OsdPositions.IsCenter(position);
+        HorizontalAlignment horizontal = centered
+            ? HorizontalAlignment.Center
+            : leftPosition
+                ? HorizontalAlignment.Left
+                : HorizontalAlignment.Right;
+        VerticalAlignment vertical = topPosition
             ? VerticalAlignment.Top
             : VerticalAlignment.Bottom;
-        Osd.Margin = _settings.OsdPosition switch
-        {
-            OsdPosition.BottomLeft => new Thickness(left, 0, 0, bottom),
-            OsdPosition.TopRight => new Thickness(0, top, right, 0),
-            _ => new Thickness(0, 0, right, bottom),
-        };
+
+        Osd.HorizontalAlignment = horizontal;
+        Osd.VerticalAlignment = vertical;
+        Osd.Margin = new Thickness(
+            centered ? 8 : leftPosition ? left : 0,
+            topPosition ? top : 0,
+            centered ? 8 : leftPosition ? 0 : right,
+            topPosition ? 0 : bottom);
+        Osd.SetAlignment(horizontal, vertical);
     }
 
     private bool OsdCoversTimeline()
@@ -556,28 +567,33 @@ public sealed partial class MainWindow
 
         try
         {
-            Point timelineOrigin = _previewTimeline.TransformToVisual(OverlayLayer)
-                .TransformPoint(new Point(0, 0));
             double width = ThumbnailPeek.ActualWidth > 0
                 ? ThumbnailPeek.ActualWidth
                 : ThumbnailPeek.Width;
             double height = ThumbnailPeek.ActualHeight > 0
                 ? ThumbnailPeek.ActualHeight
                 : ThumbnailPeek.Height;
-            double centerX = _previewPointerX;
+            double previewLeft = TimePreview.Margin.Left;
+            double previewTop = TimePreview.Margin.Top;
+            double previewWidth = Math.Max(TimePreview.DesiredSize.Width, TimePreview.ActualWidth);
+            double previewHeight = Math.Max(TimePreview.DesiredSize.Height, TimePreview.ActualHeight);
+            double centerX = previewLeft + previewWidth / 2;
             double left = Math.Clamp(
                 centerX - width / 2,
-                0,
-                Math.Max(0, OverlayLayer.ActualWidth - width));
+                8,
+                Math.Max(8, OverlayLayer.ActualWidth - width - 8));
 
-            Point previewOrigin = TimePreview.TransformToVisual(OverlayLayer)
-                .TransformPoint(new Point(0, 0));
-            bool previewAboveTimeline =
-                previewOrigin.Y + TimePreview.ActualHeight <= timelineOrigin.Y + 1;
-            double top = previewAboveTimeline
-                ? previewOrigin.Y - height - 5
-                : timelineOrigin.Y + _previewTimeline.ActualHeight + 5;
-            top = Math.Clamp(top, 0, Math.Max(0, OverlayLayer.ActualHeight - height));
+            // Keep the thumbnail glued to the preview card, not to the raw
+            // pointer, so edge clamping cannot visually separate the two.
+            double top = _previewAboveTimeline
+                ? previewTop - height - 5
+                : previewTop + previewHeight + 5;
+            if (top < 8)
+            {
+                top = previewTop + previewHeight + 5;
+            }
+
+            top = Math.Clamp(top, 8, Math.Max(8, OverlayLayer.ActualHeight - height - 8));
             ThumbnailPeek.Margin = new Thickness(left, top, 0, 0);
         }
         catch

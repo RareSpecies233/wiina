@@ -105,35 +105,23 @@
                             Grid.Column="2"
                             Orientation="Horizontal"
                             HorizontalAlignment="Right"
-                            VerticalAlignment="Top"
-                            Height="40">
-                    <Button Width="46"
-                            Height="40"
-                            Padding="0"
-                            Background="Transparent"
-                            Style="{StaticResource TitleBarButtonStyle}"
+                            VerticalAlignment="Center"
+                            Height="32">
+                    <Button Style="{StaticResource CaptionButtonStyle}"
                             Content="&#xE921;"
                             Click="OnMinimizeClick"
-                            ToolTipService.ToolTip="最小化"
-                            AutomationProperties.Name="最小化" />
-                    <Button Width="46"
-                            Height="40"
-                            Padding="0"
-                            Background="Transparent"
-                            Style="{StaticResource TitleBarButtonStyle}"
+                            loc:Loc.ToolTip="ui.minimize"
+                            loc:Loc.AutomationName="ui.minimize" />
+                    <Button Style="{StaticResource CaptionButtonStyle}"
                             Content="&#xE922;"
                             Click="OnMaximizeClick"
-                            ToolTipService.ToolTip="最大化"
-                            AutomationProperties.Name="最大化" />
-                    <Button Width="46"
-                            Height="40"
-                            Padding="0"
-                            Background="Transparent"
-                            Style="{StaticResource TitleBarButtonStyle}"
+                            loc:Loc.ToolTip="ui.maximize"
+                            loc:Loc.AutomationName="ui.maximize" />
+                    <Button Style="{StaticResource CaptionCloseButtonStyle}"
                             Content="&#xE8BB;"
                             Click="OnCloseClick"
-                            ToolTipService.ToolTip="关闭"
-                            AutomationProperties.Name="关闭" />
+                            loc:Loc.ToolTip="ui.close"
+                            loc:Loc.AutomationName="ui.close" />
                 </StackPanel>
             </Grid>
 
@@ -141,7 +129,9 @@
                     Grid.Row="1"
                     Height="30"
                     Visibility="Collapsed"
-                    Background="{ThemeResource SubtleBrush}">
+                    Background="{ThemeResource OscAcrylicBrush}"
+                    BorderBrush="{ThemeResource PanelBorderBrush}"
+                    BorderThickness="0,1,0,0">
                 <Grid x:Name="TopOscRoot" Margin="10,0,8,0">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto" />

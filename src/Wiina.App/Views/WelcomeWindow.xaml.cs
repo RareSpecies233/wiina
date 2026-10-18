@@ -1,7 +1,9 @@
+using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 using Windows.ApplicationModel.DataTransfer;
+using Windows.Graphics;
 using Windows.Storage;
 using Windows.Storage.Pickers;
 using Wiina.App.Localization;
@@ -37,18 +39,70 @@ public sealed partial class WelcomeWindow : Window
 
         WindowShell.Prepare(
             this,
-            560,
-            440,
-            resizable: false,
+            (int)Math.Clamp(App.Settings.WelcomeWindowWidth, 480, 1600),
+            (int)Math.Clamp(App.Settings.WelcomeWindowHeight, 360, 1200),
+            resizable: true,
             extendTitleBar: true,
             titleBar: DragRegion,
             dark: dark,
-            minWidth: 560,
-            minHeight: 440);
+            minWidth: 480,
+            minHeight: 360);
+        RestoreWindowBounds();
 
         VersionText.Text = Loc.F("welcome.version", Branding.Version);
         Refresh();
-        Closed += (_, _) => WindowShell.Detach(this);
+        Closed += OnClosed;
+    }
+
+    private void OnClosed(object sender, WindowEventArgs args)
+    {
+        try
+        {
+            double scale = RootGrid.XamlRoot?.RasterizationScale ?? 1;
+            App.Settings.WelcomeWindowWidth = Math.Max(480, AppWindow.Size.Width / scale);
+            App.Settings.WelcomeWindowHeight = Math.Max(360, AppWindow.Size.Height / scale);
+            App.Settings.WelcomeWindowX = AppWindow.Position.X;
+            App.Settings.WelcomeWindowY = AppWindow.Position.Y;
+            App.SaveSettings();
+        }
+        catch
+        {
+            // Bounds persistence must never block closing.
+        }
+
+        WindowShell.Detach(this);
+    }
+
+    private void RestoreWindowBounds()
+    {
+        try
+        {
+            if (App.Settings.WelcomeWindowX == int.MinValue ||
+                App.Settings.WelcomeWindowY == int.MinValue)
+            {
+                return;
+            }
+
+            DisplayArea area = DisplayArea.GetFromWindowId(
+                AppWindow.Id,
+                DisplayAreaFallback.Primary);
+            RectInt32 work = area.WorkArea;
+            int width = AppWindow.Size.Width;
+            int height = AppWindow.Size.Height;
+            int x = Math.Clamp(
+                App.Settings.WelcomeWindowX,
+                work.X - width + 120,
+                work.X + work.Width - 120);
+            int y = Math.Clamp(
+                App.Settings.WelcomeWindowY,
+                work.Y,
+                work.Y + work.Height - 80);
+            AppWindow.MoveAndResize(new RectInt32(x, y, width, height));
+        }
+        catch
+        {
+            // Fall back to the default placement.
+        }
     }
 
     private void Refresh()

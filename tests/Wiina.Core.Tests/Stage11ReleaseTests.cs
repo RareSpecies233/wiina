@@ -23,11 +23,21 @@ public class Stage11ReleaseTests
         return dir?.FullName ?? throw new InvalidOperationException("Repository root not found.");
     }
 
+    private static string BuildVersion()
+    {
+        string props = File.ReadAllText(Path.Combine(RepoRoot(), "Directory.Build.props"));
+        Match match = Regex.Match(props, @"<Version>([^<]+)</Version>");
+        Assert.True(match.Success, "Directory.Build.props has no <Version> element.");
+        return match.Groups[1].Value;
+    }
+
     [Fact]
     public void Package_manifest_covers_the_documented_payload()
     {
-        Assert.Equal("1.0.0", PackageManifest.Version);
-        Assert.Equal("wiina-1.0.0-win-x64.zip", PackageManifest.ArchiveFileName);
+        string version = BuildVersion();
+        Assert.Equal(version, PackageManifest.Version);
+        Assert.Equal($"wiina-{version}-win-x64.zip", PackageManifest.ArchiveFileName);
+        Assert.Equal(version, Branding.Version);
         Assert.Equal("Wiina.exe", PackageManifest.ExecutableFileName);
         Assert.Contains("libmpv-2.dll", PackageManifest.RequiredPayloadFiles);
         Assert.Contains("LICENSE", PackageManifest.RequiredPayloadFiles);
@@ -73,6 +83,28 @@ public class Stage11ReleaseTests
         Assert.Contains("libmpv-2.dll", script);
         Assert.Contains("SOURCE.txt", script);
         Assert.Contains("wiina-", script);
+    }
+
+    [Fact]
+    public void Release_script_updates_every_version_source_and_builds_versioned_artifacts()
+    {
+        string scriptPath = Path.Combine(RepoRoot(), "scripts", "release.ps1");
+        Assert.True(File.Exists(scriptPath), "scripts/release.ps1 is missing.");
+        string script = File.ReadAllText(scriptPath);
+        foreach (string source in new[]
+                 {
+                     "Directory.Build.props", "Branding.cs", "PackageManifest.cs",
+                     "app.manifest", "installer\\wiina.iss",
+                 })
+        {
+            Assert.Contains(source, script);
+        }
+
+        Assert.Contains("package.ps1", script);
+        Assert.Contains("iscc", script, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("SHA256", script);
+        Assert.DoesNotContain("git commit", script);
+        Assert.DoesNotContain("git push", script);
     }
 
     [Fact]

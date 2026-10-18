@@ -5,6 +5,7 @@ using Wiina.Core.Models;
 using Wiina.App.Localization;
 using Wiina.Core.Osd;
 using Wiina.Core.Settings;
+using Wiina.Core.State;
 using Wiina.Core.Subtitles;
 using Wiina.Mpv;
 
@@ -153,7 +154,9 @@ public sealed partial class QuickSettingsView : UserControl
         SetLocalizedItems(OscPositionBox,
             Loc.T("quick.oscFloating"), Loc.T("quick.oscBottom"), Loc.T("quick.oscTop"));
         SetLocalizedItems(OsdPositionBox,
-            Loc.T("quick.osdBottomRight"), Loc.T("quick.osdBottomLeft"), Loc.T("quick.osdTopRight"));
+            Loc.T("quick.osdBottomRight"), Loc.T("quick.osdBottomLeft"),
+            Loc.T("quick.osdTopRight"), Loc.T("quick.osdTopLeft"),
+            Loc.T("quick.osdTopCenter"), Loc.T("quick.osdBottomCenter"));
         SetLocalizedItems(SidebarSideBox,
             Loc.T("quick.sidebarLeft"), Loc.T("quick.sidebarRight"));
     }
@@ -191,7 +194,7 @@ public sealed partial class QuickSettingsView : UserControl
             OscPositionBox.SelectedIndex = Math.Clamp((int)settings.OscPosition, 0, 2);
             OscAutoHideSwitch.IsOn = settings.OscAutoHide;
             OsdEnabledSwitch.IsOn = settings.OsdEnabled;
-            OsdPositionBox.SelectedIndex = Math.Clamp((int)settings.OsdPosition, 0, 2);
+            OsdPositionBox.SelectedIndex = OsdPositions.ToIndex(settings.OsdPosition);
             OsdSizeSlider.Value = OsdSettings.ClampSize(settings.OsdSizePercent);
             OsdDurationBox.Value = OsdSettings.ClampDuration(settings.OsdDurationSeconds);
             OsdPersistentSwitch.IsOn = settings.OsdPersistent;
@@ -214,8 +217,8 @@ public sealed partial class QuickSettingsView : UserControl
             PanYSlider.Value = QuickSettings.ClampPan(settings.VideoPanY);
 
             MaxVolumeBox.Value = QuickSettings.ClampMaxVolume(settings.MaxVolume);
-            VolumeSlider.Maximum = QuickSettings.ClampMaxVolume(settings.MaxVolume);
-            VolumeSlider.Value = QuickSettings.ClampVolume(settings.Volume, settings.MaxVolume);
+            VolumeSlider.Maximum = VolumeMapping.UiMaximum;
+            VolumeSlider.Value = VolumeMapping.ToUi(settings.Volume);
             MuteSwitch.IsOn = settings.Muted;
             AudioDelaySlider.Value = QuickSettings.ClampAudioDelay(settings.AudioDelay);
             EqualizerSwitch.IsOn = settings.EqualizerEnabled;
@@ -375,7 +378,7 @@ public sealed partial class QuickSettingsView : UserControl
         _loading = true;
         try
         {
-            VolumeSlider.Value = Math.Clamp(volume, 0, VolumeSlider.Maximum);
+            VolumeSlider.Value = VolumeMapping.ToUi(volume);
             MuteSwitch.IsOn = muted;
         }
         finally
@@ -383,7 +386,7 @@ public sealed partial class QuickSettingsView : UserControl
             _loading = false;
         }
 
-        VolumeValueText.Text = $"{Math.Round(VolumeSlider.Value)}%";
+        VolumeValueText.Text = VolumeMapping.FormatUi(volume);
     }
 
     public void SetSubtitleVisibility(bool visible)

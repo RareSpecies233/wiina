@@ -2,6 +2,7 @@ using Wiina.Core.Filters;
 using Wiina.Core.Input;
 using Wiina.Core.Localization;
 using Wiina.Core.Models;
+using Wiina.Core.State;
 
 namespace Wiina.Core.Settings;
 
@@ -169,10 +170,10 @@ public static class SettingsCatalog
             "osd overlay message OSD 状态"));
         rows.Add(ChoiceRow(
             "ui.osd-position", SettingsPageId.Ui, "OSD",
-            "OSD 位置", "右下、左下或右上；全屏时钟固定左下。",
-            new[] { "右下", "左下", "右上" },
-            settings => (int)settings.OsdPosition,
-            (settings, value) => settings.OsdPosition = (OsdPosition)Math.Clamp(value, 0, 2),
+            "OSD 位置", "六个位置：左右下角、左右上角、顶部居中或底部居中。",
+            new[] { "右下", "左下", "右上", "左上", "顶部居中", "底部居中" },
+            settings => OsdPositions.ToIndex(settings.OsdPosition),
+            (settings, value) => settings.OsdPosition = OsdPositions.FromIndex(value),
             "osd position OSD 位置"));
         rows.Add(NumberRow(
             "ui.osd-size", SettingsPageId.Ui, "OSD",

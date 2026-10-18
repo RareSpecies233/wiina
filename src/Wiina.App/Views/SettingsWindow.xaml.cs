@@ -16,7 +16,6 @@ using Windows.UI;
 using Wiina.App.Interop;
 using Wiina.App.Localization;
 using Wiina.App.Services;
-using Wiina.Core.Input;
 using Wiina.Core.Localization;
 using Wiina.Core.Models;
 using Wiina.Core.Settings;
@@ -39,18 +38,12 @@ public sealed partial class SettingsWindow : Window
     private readonly List<(SettingsPageId Page, Button Button)> _navButtons = new();
     private readonly List<(SettingsRowDefinition Row, Action Refresh, Border Container)> _rowWidgets = new();
     private readonly List<(string Section, FrameworkElement Element)> _sectionHeaders = new();
-    private readonly List<(string Action, Button Button, TextBlock Chord)> _bindingRows = new();
 
     private SettingsPageId _currentPage = SettingsPageId.General;
     private DispatcherQueueTimer? _saveTimer;
-    private TextBlock? _recorderText;
-    private TextBlock? _bindingStatus;
-    private IReadOnlyList<KeyBindingSetting> _bindings = Array.Empty<KeyBindingSetting>();
-    private string? _selectedAction;
     private bool _loading;
     private bool _saving;
     private bool _applying;
-    private bool _recording;
 
     public SettingsWindow()
         : this(ParsePage(App.Settings.SettingsPage), null)
@@ -88,10 +81,6 @@ public sealed partial class SettingsWindow : Window
         _saveTimer.IsRepeating = false;
         _saveTimer.Tick += (_, _) => SaveNow();
 
-        RootGrid.AddHandler(
-            UIElement.KeyDownEvent,
-            new KeyEventHandler(OnCaptureKeyDown),
-            handledEventsToo: true);
         RootGrid.Loaded += (_, _) => RootGrid.Focus(FocusState.Programmatic);
 
         App.SettingsChanged += OnSettingsChanged;
@@ -122,6 +111,11 @@ public sealed partial class SettingsWindow : Window
         _navButtons.Clear();
         foreach (SettingsPageInfo page in SettingsCatalog.Pages)
         {
+            if (page.Id == SettingsPageId.KeyBindings)
+            {
+                // Key bindings live in a dedicated window; no left-rail entry.
+                continue;
+            }
             var content = new StackPanel
             {
                 Orientation = Orientation.Horizontal,
@@ -157,7 +151,15 @@ public sealed partial class SettingsWindow : Window
 
     private void Navigate(SettingsPageId page, string? rowId = null)
     {
-        StopRecording(clearStatus: true);
+        if (page == SettingsPageId.KeyBindings)
+        {
+            // The standalone page was removed from navigation; keep stale
+            // persisted page ids and search deep links working via the
+            // Control → 键盘方案 row that opens the dedicated window.
+            page = SettingsPageId.Control;
+            rowId = "control.keybindings";
+        }
+
         _currentPage = page;
         App.Settings.SettingsPage = page.ToString();
 
@@ -175,24 +177,18 @@ public sealed partial class SettingsWindow : Window
         _rowWidgets.Clear();
         _sectionHeaders.Clear();
         SectionPanel.Children.Clear();
-        _bindingRows.Clear();
-        _recorderText = null;
-        _bindingStatus = null;
-
-        if (page == SettingsPageId.KeyBindings)
-        {
-            BuildKeyBindingsPage();
-            if (rowId is not null)
-            {
-                DispatcherQueue.TryEnqueue(() => HighlightRow(rowId));
-            }
-
-            return;
-        }
 
         string? section = null;
+        SettingsRowDefinition? keyBindingsRow = null;
         foreach (SettingsRowDefinition row in SettingsCatalog.RowsFor(page))
         {
+            if (row.Id == "control.keybindings")
+            {
+                // Ordered below the keyboard profile row.
+                keyBindingsRow = row;
+                continue;
+            }
+
             if (!string.Equals(section, row.Section, StringComparison.Ordinal))
             {
                 section = row.Section;
@@ -200,6 +196,17 @@ public sealed partial class SettingsWindow : Window
             }
 
             AddRow(row);
+
+            if (keyBindingsRow is not null && row.Id == "control.key-profile")
+            {
+                AddRow(keyBindingsRow);
+                keyBindingsRow = null;
+            }
+        }
+
+        if (keyBindingsRow is not null)
+        {
+            AddRow(keyBindingsRow);
         }
 
         BuildSectionDots(page);
@@ -358,7 +365,9 @@ public sealed partial class SettingsWindow : Window
             FontSize = 13,
             TextWrapping = TextWrapping.Wrap,
         });
-        string description = SettingsLocalization.Description(row, Loc.CurrentLanguage);
+        string description = row.Id == "control.keybindings"
+            ? Loc.T("settings.keyBindingsHint")
+            : SettingsLocalization.Description(row, Loc.CurrentLanguage);
         if (!row.IsAvailable)
         {
             description += "\n" + Loc.F(
@@ -614,7 +623,7 @@ public sealed partial class SettingsWindow : Window
                     Content = Loc.T("settings.openKeyBindings"),
                     Style = (Style)RootGrid.Resources["SettingsActionButtonStyle"],
                 };
-                button.Click += (_, _) => Navigate(SettingsPageId.KeyBindings);
+                button.Click += (_, _) => App.ShowKeyBindingWindow();
                 return button;
             }
 
@@ -649,9 +658,8 @@ public sealed partial class SettingsWindow : Window
         "reset-video" or "reset-audio" or "reset-subtitles" or "reset-control" or
             "reset-all-settings" => Loc.T("settings.reset"),
         "clear-history" or "clear-thumbnails" => Loc.T("settings.clear"),
-        "export-diagnostics" or "open-keybindings" => actionId == "export-diagnostics"
-            ? Loc.T("settings.export")
-            : Loc.T("settings.open"),
+        "export-diagnostics" => Loc.T("settings.export"),
+        "open-keybindings" => Loc.T("settings.openKeyBindings"),
         "install-plugin" => Loc.T("settings.install"),
         "open-url-dialog" or "open-log-viewer" or "open-inspector" or "open-about" or
             "open-video-filters" or "open-audio-filters" => Loc.T("settings.open"),
@@ -698,7 +706,6 @@ public sealed partial class SettingsWindow : Window
         }
         else
         {
-            StatusText.Text = Loc.T("settings.editing");
             _saveTimer?.Stop();
             _saveTimer?.Start();
         }
@@ -748,15 +755,10 @@ public sealed partial class SettingsWindow : Window
         try
         {
             App.SaveSettings();
-            StatusText.Text = Loc.F("settings.saved", DateTime.Now.ToString("HH:mm:ss"));
-            if (_bindingStatus is not null && _currentPage == SettingsPageId.KeyBindings)
-            {
-                _bindingStatus.Text = Loc.T("keybindings.saved");
-            }
         }
         catch (Exception ex)
         {
-            StatusText.Text = Loc.F("settings.saveFailed", ex.Message);
+            _ = ShowMessageAsync(Loc.T("ui.wiinaSettings"), Loc.F("settings.saveFailed", ex.Message));
         }
         finally
         {
@@ -867,7 +869,7 @@ public sealed partial class SettingsWindow : Window
                     break;
 
                 case "open-keybindings":
-                    Navigate(SettingsPageId.KeyBindings);
+                    App.ShowKeyBindingWindow();
                     break;
 
                 case "reset-video":
@@ -947,8 +949,7 @@ public sealed partial class SettingsWindow : Window
 
                 case "export-diagnostics":
                 {
-                    string path = App.ExportDiagnostics();
-                    StatusText.Text = Loc.F("settings.exported", path);
+                    App.ExportDiagnostics();
                     break;
                 }
 
@@ -960,14 +961,12 @@ public sealed partial class SettingsWindow : Window
                             Loc.T("settings.clear")))
                     {
                         App.ClearHistory();
-                        StatusText.Text = Loc.T("settings.historyCleared");
                     }
 
                     break;
 
                 case "clear-thumbnails":
                     App.ActiveWindow?.ClearThumbnailCache();
-                    StatusText.Text = Loc.T("settings.thumbCacheCleared");
                     break;
 
                 case "reset-all-settings":
@@ -979,7 +978,6 @@ public sealed partial class SettingsWindow : Window
                     {
                         App.ResetSettings();
                         Navigate(SettingsPageId.General);
-                        StatusText.Text = Loc.T("settings.defaultsRestored");
                     }
 
                     break;
@@ -991,7 +989,26 @@ public sealed partial class SettingsWindow : Window
         }
         catch (Exception ex)
         {
-            StatusText.Text = Loc.F("settings.actionFailed", ex.Message);
+            _ = ShowMessageAsync(Loc.T("settings.actionFailed"), ex.Message);
+        }
+    }
+
+    private async Task ShowMessageAsync(string title, string message)
+    {
+        try
+        {
+            var dialog = new ContentDialog
+            {
+                XamlRoot = RootGrid.XamlRoot,
+                Title = title,
+                Content = message,
+                CloseButtonText = Loc.T("ui.close"),
+            };
+            await dialog.ShowAsync();
+        }
+        catch
+        {
+            // A dialog is already open or the window is closing.
         }
     }
 
@@ -1049,450 +1066,6 @@ public sealed partial class SettingsWindow : Window
         App.Settings.SubtitleBold = false;
         App.Settings.SubtitleItalic = false;
     }
-
-    // ------------------------------------------------------- key bindings
-
-    private void BuildKeyBindingsPage()
-    {
-        _bindings = KeyBindings.Resolve(
-                App.Settings.KeyBindings,
-                App.Settings.KeyBindingProfile)
-            .ToList();
-
-        var toolbar = new StackPanel
-        {
-            Spacing = 6,
-            Margin = new Thickness(0, 6, 0, 8),
-        };
-        var recordRow = new StackPanel
-        {
-            Orientation = Orientation.Horizontal,
-            Spacing = 6,
-        };
-        AddToolbarButton(recordRow, Loc.T("keybindings.record"), StartRecording);
-        AddToolbarButton(recordRow, Loc.T("keybindings.clear"), ClearSelectedBinding);
-        AddToolbarButton(recordRow, Loc.T("keybindings.resetOne"), ResetSelectedAction);
-        AddToolbarButton(recordRow, Loc.T("keybindings.resetAll"), ResetAllBindings);
-        toolbar.Children.Add(recordRow);
-
-        var ioRow = new StackPanel
-        {
-            Orientation = Orientation.Horizontal,
-            Spacing = 6,
-        };
-        AddToolbarButton(ioRow, Loc.T("keybindings.import"), () => _ = ImportBindingsAsync());
-        AddToolbarButton(ioRow, Loc.T("keybindings.export"), () => _ = ExportBindingsAsync());
-        toolbar.Children.Add(ioRow);
-        PagePanel.Children.Add(toolbar);
-
-        var recorder = new Border
-        {
-            Padding = new Thickness(10, 8, 10, 8),
-            CornerRadius = new CornerRadius(6),
-            BorderThickness = new Thickness(1),
-            BorderBrush = new SolidColorBrush(Color.FromArgb(0x66, 0x4C, 0xC2, 0xFF)),
-            Background = new SolidColorBrush(Color.FromArgb(0x14, 0x4C, 0xC2, 0xFF)),
-            Margin = new Thickness(0, 0, 0, 6),
-        };
-        _recorderText = new TextBlock
-        {
-            Text = Loc.T("keybindings.hint"),
-            FontSize = 12,
-            TextWrapping = TextWrapping.Wrap,
-        };
-        recorder.Child = _recorderText;
-        PagePanel.Children.Add(recorder);
-
-        _bindingStatus = new TextBlock
-        {
-            FontSize = 11,
-            Opacity = 0.7,
-            TextWrapping = TextWrapping.Wrap,
-            Margin = new Thickness(0, 0, 0, 6),
-        };
-        PagePanel.Children.Add(_bindingStatus);
-
-        SectionPanel.Children.Clear();
-        var sectionContent = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6 };
-        sectionContent.Children.Add(new Ellipse
-        {
-            Width = 3,
-            Height = 3,
-            Fill = new SolidColorBrush(Color.FromArgb(0x66, 0xFF, 0xFF, 0xFF)),
-            VerticalAlignment = VerticalAlignment.Center,
-        });
-        sectionContent.Children.Add(new TextBlock
-        {
-            Text = Loc.T("keybindings.section"),
-            FontSize = 11,
-            Opacity = 0.75,
-        });
-        SectionPanel.Children.Add(new Button
-        {
-            Content = sectionContent,
-            Style = (Style)RootGrid.Resources["SettingsSectionButtonStyle"],
-        });
-
-        var byAction = _bindings
-            .GroupBy(binding => binding.Action, StringComparer.OrdinalIgnoreCase)
-            .ToDictionary(
-                group => group.Key,
-                group => group.Select(binding => binding.Chord)
-                    .OrderBy(chord => chord, StringComparer.Ordinal)
-                    .ToArray(),
-                StringComparer.OrdinalIgnoreCase);
-
-        foreach (PlayerActionInfo info in PlayerActionCatalog.All
-                     .OrderBy(item => item.Category, StringComparer.Ordinal)
-                     .ThenBy(item => item.Label, StringComparer.Ordinal))
-        {
-            string chords = byAction.TryGetValue(info.Action, out string[]? values)
-                ? string.Join(" / ", values)
-                : Loc.T("keybindings.unbound");
-
-            var content = new Grid { ColumnSpacing = 10 };
-            content.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-            content.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-
-            var text = new StackPanel { Spacing = 1 };
-            text.Children.Add(new TextBlock { Text = info.Label, FontSize = 13 });
-            text.Children.Add(new TextBlock
-            {
-                Text = info.Category,
-                FontSize = 11,
-                Opacity = 0.6,
-            });
-            content.Children.Add(text);
-
-            var chord = new TextBlock
-            {
-                Text = chords,
-                FontFamily = new FontFamily("Cascadia Mono"),
-                FontSize = 12,
-                VerticalAlignment = VerticalAlignment.Center,
-                Opacity = chords == Loc.T("keybindings.unbound") ? 0.5 : 0.95,
-            };
-            Grid.SetColumn(chord, 1);
-            content.Children.Add(chord);
-
-            var button = new Button
-            {
-                Content = content,
-                Height = 44,
-                Padding = new Thickness(10, 2, 10, 2),
-                Background = new SolidColorBrush(TransparentColor),
-                BorderThickness = new Thickness(1),
-                BorderBrush = new SolidColorBrush(TransparentColor),
-                CornerRadius = new CornerRadius(6),
-                HorizontalAlignment = HorizontalAlignment.Stretch,
-                HorizontalContentAlignment = HorizontalAlignment.Stretch,
-            };
-            string action = info.Action;
-            button.Click += (_, _) => SelectBindingAction(action);
-            PagePanel.Children.Add(button);
-            _bindingRows.Add((action, button, chord));
-        }
-
-        SelectBindingAction(_selectedAction ?? _bindingRows.FirstOrDefault().Action);
-    }
-
-    private void AddToolbarButton(StackPanel toolbar, string text, Action action)
-    {
-        var button = new Button
-        {
-            Content = text,
-            Style = (Style)RootGrid.Resources["SettingsActionButtonStyle"],
-        };
-        button.Click += (_, _) => action();
-        toolbar.Children.Add(button);
-    }
-
-    private void SelectBindingAction(string? action)
-    {
-        _selectedAction = action;
-        foreach ((string id, Button button, TextBlock _) in _bindingRows)
-        {
-            bool selected = string.Equals(id, action, StringComparison.OrdinalIgnoreCase);
-            button.Background = new SolidColorBrush(selected ? AccentTint : TransparentColor);
-            button.BorderBrush = new SolidColorBrush(selected ? AccentColor : TransparentColor);
-        }
-
-        if (_recorderText is not null)
-        {
-            _recorderText.Text = action is null
-                ? Loc.T("keybindings.hint")
-                : Loc.F("keybindings.hintSelected", PlayerActionCatalog.Label(action));
-        }
-    }
-
-    private void StartRecording()
-    {
-        if (_selectedAction is null)
-        {
-            if (_bindingStatus is not null)
-            {
-                _bindingStatus.Text = Loc.T("keybindings.pickFirst");
-            }
-
-            return;
-        }
-
-        _recording = true;
-        if (_recorderText is not null)
-        {
-            _recorderText.Text =
-                Loc.F("keybindings.recording", PlayerActionCatalog.Label(_selectedAction));
-        }
-
-        RootGrid.Focus(FocusState.Programmatic);
-    }
-
-    private void StopRecording(bool clearStatus)
-    {
-        if (!_recording)
-        {
-            return;
-        }
-
-        _recording = false;
-        if (_recorderText is not null && _selectedAction is not null)
-        {
-            _recorderText.Text =
-                Loc.F("keybindings.selectedAfter", PlayerActionCatalog.Label(_selectedAction));
-        }
-        else if (_recorderText is not null && clearStatus)
-        {
-            _recorderText.Text = Loc.T("keybindings.hint");
-        }
-    }
-
-    private void OnCaptureKeyDown(object sender, KeyRoutedEventArgs e)
-    {
-        if (!_recording || _selectedAction is null)
-        {
-            return;
-        }
-
-        VirtualKey key = e.Key;
-        if (key is VirtualKey.Control or VirtualKey.Shift or VirtualKey.Menu or
-            VirtualKey.LeftWindows or VirtualKey.RightWindows)
-        {
-            e.Handled = true;
-            return;
-        }
-
-        if (key == VirtualKey.Escape)
-        {
-            StopRecording(clearStatus: false);
-            e.Handled = true;
-            return;
-        }
-
-        if (key == VirtualKey.Back)
-        {
-            ClearSelectedBinding();
-            e.Handled = true;
-            return;
-        }
-
-        KeyModifiers modifiers = KeyModifiers.None;
-        if (WindowInterop.IsKeyDown(VirtualKey.Control))
-        {
-            modifiers |= KeyModifiers.Control;
-        }
-
-        if (WindowInterop.IsKeyDown(VirtualKey.Menu))
-        {
-            modifiers |= KeyModifiers.Alt;
-        }
-
-        if (WindowInterop.IsKeyDown(VirtualKey.Shift))
-        {
-            modifiers |= KeyModifiers.Shift;
-        }
-
-        if (WindowInterop.IsKeyDown(VirtualKey.LeftWindows) ||
-            WindowInterop.IsKeyDown(VirtualKey.RightWindows))
-        {
-            modifiers |= KeyModifiers.Windows;
-        }
-
-        if (KeyChordMapper.TryMap(key, modifiers, out KeyChord chord))
-        {
-            e.Handled = true;
-            _ = ApplyRecordedChordAsync(chord.ToString());
-        }
-    }
-
-    private async Task ApplyRecordedChordAsync(string chord)
-    {
-        if (_selectedAction is null)
-        {
-            return;
-        }
-
-        string action = _selectedAction;
-        string? conflict = KeyBindings.FindConflict(_bindings, chord, action);
-        if (conflict is not null)
-        {
-            bool replace = await Dialogs.ConfirmAsync(
-                RootGrid.XamlRoot,
-                Loc.T("keybindings.conflictTitle"),
-                Loc.F(
-                    "keybindings.conflictBody",
-                    chord,
-                    PlayerActionCatalog.Label(conflict),
-                    PlayerActionCatalog.Label(action)),
-                Loc.T("keybindings.replace"));
-            if (!replace)
-            {
-                StopRecording(clearStatus: false);
-                return;
-            }
-        }
-
-        _bindings = KeyBindings.SetBinding(_bindings, action, chord);
-        PersistBindings();
-        StopRecording(clearStatus: false);
-        BuildKeyBindingsPage();
-        if (_bindingStatus is not null)
-        {
-            _bindingStatus.Text =
-                Loc.F("keybindings.bound", PlayerActionCatalog.Label(action), chord);
-        }
-    }
-
-    private void ClearSelectedBinding()
-    {
-        if (_selectedAction is null)
-        {
-            return;
-        }
-
-        string action = _selectedAction;
-        _bindings = KeyBindings.ClearAction(_bindings, action);
-        PersistBindings();
-        StopRecording(clearStatus: false);
-        BuildKeyBindingsPage();
-        if (_bindingStatus is not null)
-        {
-            _bindingStatus.Text = Loc.F(
-                "keybindings.clearedAction",
-                PlayerActionCatalog.Label(action));
-        }
-    }
-
-    private void ResetSelectedAction()
-    {
-        if (_selectedAction is null)
-        {
-            return;
-        }
-
-        string action = _selectedAction;
-        _bindings = KeyBindings.ResetAction(_bindings, action);
-        PersistBindings();
-        BuildKeyBindingsPage();
-        if (_bindingStatus is not null)
-        {
-            _bindingStatus.Text = Loc.F(
-                "keybindings.resetOneAction",
-                PlayerActionCatalog.Label(action));
-        }
-    }
-
-    private async void ResetAllBindings()
-    {
-        if (!await Dialogs.ConfirmAsync(
-                RootGrid.XamlRoot,
-                Loc.T("keybindings.resetAllTitle"),
-                Loc.T("keybindings.resetAllBody"),
-                Loc.T("settings.reset")))
-        {
-            return;
-        }
-
-        App.Settings.KeyBindings = new List<KeyBindingSetting>();
-        App.SaveSettings();
-        App.ActiveWindow?.RebuildKeyMap();
-        _bindings = KeyBindings.CreateDefaults();
-        BuildKeyBindingsPage();
-        if (_bindingStatus is not null)
-        {
-            _bindingStatus.Text = Loc.T("keybindings.resetAllDone");
-        }
-    }
-
-    private void PersistBindings()
-    {
-        App.Settings.KeyBindings = _bindings
-            .Select(binding => new KeyBindingSetting(binding.Action, binding.Chord))
-            .ToList();
-        App.Settings.KeyBindingProfile = KeyBindingProfiles.Custom;
-        App.SaveSettings();
-        App.ActiveWindow?.RebuildKeyMap();
-    }
-
-    private async Task ImportBindingsAsync()
-    {
-        var picker = new FileOpenPicker
-        {
-            SuggestedStartLocation = PickerLocationId.DocumentsLibrary,
-        };
-        picker.FileTypeFilter.Add(".json");
-        WindowShell.InitializePicker(this, picker);
-        StorageFile? file = await picker.PickSingleFileAsync();
-        if (file is null)
-        {
-            return;
-        }
-
-        string json = await FileIO.ReadTextAsync(file);
-        if (!KeyBindings.TryImportJson(
-                json,
-                out IReadOnlyList<KeyBindingSetting> imported,
-                out string error))
-        {
-            await Dialogs.ShowMessageAsync(
-                RootGrid.XamlRoot,
-                Loc.T("keybindings.importFailed"),
-                error);
-            return;
-        }
-
-        _bindings = imported.ToList();
-        PersistBindings();
-        BuildKeyBindingsPage();
-        if (_bindingStatus is not null)
-        {
-            _bindingStatus.Text = string.IsNullOrWhiteSpace(error)
-                ? Loc.F("keybindings.imported", imported.Count)
-                : Loc.F("keybindings.importedPartial", imported.Count, error);
-        }
-    }
-
-    private async Task ExportBindingsAsync()
-    {
-        var picker = new FileSavePicker
-        {
-            SuggestedStartLocation = PickerLocationId.DocumentsLibrary,
-            SuggestedFileName = "wiina-keybindings",
-        };
-        picker.FileTypeChoices.Add("JSON", new List<string> { ".json" });
-        WindowShell.InitializePicker(this, picker);
-        StorageFile? file = await picker.PickSaveFileAsync();
-        if (file is null)
-        {
-            return;
-        }
-
-        await FileIO.WriteTextAsync(file, KeyBindings.ExportJson(_bindings));
-        if (_bindingStatus is not null)
-        {
-            _bindingStatus.Text = Loc.F("keybindings.exported", file.Name);
-        }
-    }
-
     private void OnLanguageChanged(object? sender, EventArgs e)
     {
         DispatcherQueue.TryEnqueue(() =>

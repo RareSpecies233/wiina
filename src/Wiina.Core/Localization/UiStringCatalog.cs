@@ -191,6 +191,13 @@ public static class UiStrings
     public const string ui_pipShortcut = "ui.pipShortcut";
     public const string ui_restore = "ui.restore";
     public const string ui_restorePip = "ui.restorePip";
+    public const string ui_minimize = "ui.minimize";
+    public const string ui_maximize = "ui.maximize";
+    public const string keybindings_windowTitle = "keybindings.windowTitle";
+    public const string keybindings_profile = "keybindings.profile";
+    public const string keybindings_profileHint = "keybindings.profileHint";
+    public const string keybindings_profileChanged = "keybindings.profileChanged";
+    public const string keybindings_cancelRecording = "keybindings.cancelRecording";
     public const string ui_activeVideoFilters = "ui.activeVideoFilters";
     public const string ui_loadSubtitle = "ui.loadSubtitle";
     public const string ui_inspector = "ui.inspector";
@@ -222,6 +229,7 @@ public static class UiStrings
     public const string settings_noPlugins = "settings.noPlugins";
     public const string settings_installPlugin = "settings.installPlugin";
     public const string settings_openKeyBindings = "settings.openKeyBindings";
+    public const string settings_keyBindingsHint = "settings.keyBindingsHint";
     public const string settings_choose = "settings.choose";
     public const string settings_open = "settings.open";
     public const string settings_reset = "settings.reset";
@@ -453,6 +461,9 @@ public static class UiStrings
     public const string quick_osdBottomRight = "quick.osdBottomRight";
     public const string quick_osdBottomLeft = "quick.osdBottomLeft";
     public const string quick_osdTopRight = "quick.osdTopRight";
+    public const string quick_osdTopLeft = "quick.osdTopLeft";
+    public const string quick_osdTopCenter = "quick.osdTopCenter";
+    public const string quick_osdBottomCenter = "quick.osdBottomCenter";
     public const string quick_sidebarLeft = "quick.sidebarLeft";
     public const string quick_sidebarRight = "quick.sidebarRight";
     public const string quick_noAudioDevices = "quick.noAudioDevices";
@@ -597,6 +608,8 @@ public static class UiStrings
         Add("ui.about", "关于 Wiina", "About Wiina");
         Add("ui.loadSelected", "载入所选", "Load selected");
         Add("ui.close", "关闭", "Close");
+        Add("ui.minimize", "最小化", "Minimize");
+        Add("ui.maximize", "最大化", "Maximize");
         Add("ui.position", "位置", "Position");
         Add("ui.exitPip", "退出画中画", "Exit Picture-in-Picture");
         Add("ui.closePip", "关闭画中画", "Close Picture-in-Picture");
@@ -784,7 +797,8 @@ public static class UiStrings
         Add("settings.noActiveWindow", "没有活动的播放窗口", "No active player window");
         Add("settings.noPlugins", "（未安装插件）", "(No plugins installed)");
         Add("settings.installPlugin", "安装插件…（Stage 9）", "Install plugin… (Stage 9)");
-        Add("settings.openKeyBindings", "打开按键绑定", "Open key bindings");
+        Add("settings.openKeyBindings", "编辑键位…", "Edit key bindings…");
+        Add("settings.keyBindingsHint", "在独立窗口中录制、清除、重置或导入导出快捷键。", "Record, clear, reset, import, or export shortcuts in a dedicated window.");
         Add("settings.choose", "选择…", "Choose…");
         Add("settings.open", "打开", "Open");
         Add("settings.reset", "重置", "Reset");
@@ -817,6 +831,11 @@ public static class UiStrings
         Add("keybindings.resetAllDone", "已恢复全部默认绑定。", "All default bindings restored.");
         Add("keybindings.invalid", "无法识别该组合键：{0}", "Unrecognized key combination: {0}");
         Add("keybindings.conflict", "该组合键已被“{0}”使用。", "That combination is already used by “{0}”.");
+        Add("keybindings.windowTitle", "按键绑定", "Key Bindings");
+        Add("keybindings.profile", "键盘方案", "Keyboard profile");
+        Add("keybindings.profileHint", "方案决定默认组合键。修改任意动作会自动切换到“自定义”并立即保存。", "The profile supplies the default chords. Editing any action switches to Custom and saves immediately.");
+        Add("keybindings.profileChanged", "已切换到“{0}”方案。", "Switched to the “{0}” profile.");
+        Add("keybindings.cancelRecording", "取消录制", "Cancel recording");
         Add("common.save", "保存", "Save");
         Add("common.cancel", "取消", "Cancel");
         Add("common.close", "关闭", "Close");
@@ -1016,6 +1035,9 @@ public static class UiStrings
         Add("quick.osdBottomRight", "右下", "Bottom right");
         Add("quick.osdBottomLeft", "左下", "Bottom left");
         Add("quick.osdTopRight", "右上", "Top right");
+        Add("quick.osdTopLeft", "左上", "Top left");
+        Add("quick.osdTopCenter", "顶部居中", "Top center");
+        Add("quick.osdBottomCenter", "底部居中", "Bottom center");
         Add("quick.sidebarLeft", "左侧（leading）", "Left (leading)");
         Add("quick.sidebarRight", "右侧（trailing）", "Right (trailing)");
         Add("quick.noAudioDevices", "libmpv 未报告音频输出设备。", "libmpv did not report audio output devices.");
