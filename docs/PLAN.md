@@ -1,12 +1,13 @@
-# Wiina 实施计划（v0.2 · 第一轮已确认，第二轮待确认）
+# Wiina 实施计划（v0.3 · 第二轮已确认，第三轮待确认）
 
-> 状态：**计划对齐中**。第一轮已确认：**首版全量规格**、`Wiina` + GPL-3.0-only、
-> IINA 结构 + Fluent 皮肤 + Apple Music 式侧栏、fetch 脚本 + 发布包附带 libmpv、PR 由我推分支并给描述。
-> 第二轮需要确认“全量”的边界与阶段拆分（见 §9）。
+> 状态：**计划对齐中**。已确认：首版全量规格、`Wiina` + GPL-3.0-only、IINA 结构 + Fluent 皮肤 + Apple Music 式侧栏、
+> fetch 脚本 + 发布包附带 libmpv、PR 由我推分支并给描述、多窗口、严格 600×480 / 560×440、
+> 在线字幕用户自备 API key、yt-dlp 仅用系统 PATH、插件兼容 IINA API 子集。
+> 第三轮：确认插件 API 的具体模块边界（见 §9），然后冻结 v1.0 并开始 Stage 0。
 > 输入规格：[IINA-macOS-UI-复刻规格.md](reference/IINA-macOS-UI-复刻规格.md)（1230 行，基于 IINA `develop` @ `5c15f81`）。
 > 许可证审计：[AUDIT.md](licensing/AUDIT.md)。视频管线决策：[ADR-0001](architecture/0001-video-pipeline.md)。
 
-### 第一轮确认记录（2026-10-18）
+### 确认记录
 
 | 议题 | 决定 |
 |---|---|
@@ -15,7 +16,11 @@
 | 视觉 | IINA 结构 + Windows 11 Fluent 皮肤 + Apple Music 式半透明侧栏 |
 | libmpv | 仓库不提交；`tools/fetch-libmpv.ps1` + 发布包附带 |
 | PR | 我推阶段分支并给 PR 描述；你在 GitHub 上手动开/合并 |
-| 窗口尺寸 | 默认采用设置 900×640 / 欢迎 720×520（待你确认是否严格按规格 600×480 / 560×440） |
+| 插件 | 兼容 IINA 插件 API 子集（模块清单第三轮确认） |
+| 在线字幕 | 用户自备 OpenSubtitles.com API key；不内置共享 key |
+| yt-dlp | 仅使用系统 PATH 中的 yt-dlp；不自动下载/更新 |
+| 多窗口 | v1 支持（共享设置、独立播放状态） |
+| 窗口尺寸 | 严格按规格：设置 600×480；欢迎 560×440 |
 
 
 ---
@@ -73,11 +78,13 @@
 
 - **v1 = 规格全量**：本地/URL/拖放播放、轨道/字幕/章节、OSC 三种位置、侧栏四页 + 播放列表/章节、
   OSD/时间预览/缩略图、全屏/迷你/PiP、多窗口、设置 11 页（含按键编辑、插件管理、网络、高级）、欢迎、
-  检查器、菜单树、**插件系统（WebView2）**、**在线字幕（OpenSubtitles）**、**yt-dlp**、**10 段均衡器/滤镜 UI**。
-- **v2（后续）**：杜比视界、系统级 PiP、插件中心/在线商店、更多语言、winget 自动发布。
+  检查器、菜单树、**插件系统（WebView2，兼容 IINA API 子集）**、**在线字幕（OpenSubtitles，用户自备 key）**、
+  **yt-dlp（仅系统 PATH）**、**10 段均衡器/滤镜 UI**。
+- **v2（后续）**：杜比视界、系统级 PiP、插件商店/自动更新、`iina.ws`（WebSocket 服务端）、`iina.subtitle`
+  自定义字幕源中未覆盖的部分、更多语言、winget 自动发布。
 - **明确不做**：Touch Bar、Force Touch、macOS Services、SF Symbols、iina-cli 兼容层、浏览器扩展。
-- **“全量”的边界**（第二轮确认）：插件是否要求 **IINA 插件 API 兼容**，还是“同等 UI 能力 + Wiina 自有 JS API”；
-  在线字幕是否必须 **不填 API key 即可用**；多窗口是否要跨窗口共享播放列表/设置。见 §9。
+- **“全量”的边界**：插件按 Stage 9 的模块清单兼容（第三轮确认）；不承诺所有现成 IINA 插件零修改运行。
+- **窗口**：设置 600×480（左栏 200，内容最小 400）；欢迎 560×440；严格按规格。
 
 ### 2.5 mpv 分发
 
@@ -236,8 +243,8 @@ XAML 内容（标题栏/OSC/侧栏/OSD/预览）绘制在 SwapChainPanel 之上
 | OSD 字号 | 20（可设置 1–500） | 次要 ×0.5，clamp 11–25 |
 | 时间预览圆角 | 8 | |
 | 缩略图 | 宽 160，圆角 4，1px `#99FFFFFF` 边框 | |
-| 设置窗口 | 900×640（建议；规格 600×480 太挤） | 左栏 220，内容最小 560 |
-| 欢迎窗口 | 720×520（建议；规格 560×440） | |
+| 设置窗口 | 600×480 | 左栏 200，内容最小 400；紧凑行距 |
+| 欢迎窗口 | 560×440 | 内容边距 30；最近文件行高 28 |
 | 插件窗口 | 600×400 | v1（Stage 9） |
 | OSC 自动隐藏 | 2.5s | 可设置 |
 | OSD 自动隐藏 | 1s / 0.5s 淡出 | |
@@ -343,7 +350,7 @@ XAML 内容（标题栏/OSC/侧栏/OSD/预览）绘制在 SwapChainPanel 之上
 |---|---|---|
 | 本地文件 / 文件夹 / 拖放 / 命令行 | ✅ | |
 | URL / 网络流 | ✅ | mpv 原生协议 |
-| yt-dlp 解析 | ✅ | 首次使用征得同意后下载/更新；也可用系统 PATH 中的 yt-dlp |
+| yt-dlp 解析 | ✅ | **仅使用系统 PATH 中的 yt-dlp**；不自动下载/更新；缺失时提示安装 |
 | 硬件解码 / HDR 色调映射 | ✅ | hwdec 自动；HDR→SDR 默认；HDR 输出精调放 v2 |
 | 轨道切换（视频/音频/字幕/次字幕） | ✅ | |
 | 外挂字幕 / 延迟 / 位置 / 缩放 / 编码 | ✅ | |
@@ -360,7 +367,7 @@ XAML 内容（标题栏/OSC/侧栏/OSD/预览）绘制在 SwapChainPanel 之上
 | 欢迎 / 最近文件 / 继续播放 | ✅ | |
 | 检查器 / 按键编辑 / 关于 / 日志 / 打开 URL | ✅ | |
 | 菜单树（含动态子菜单） | ✅ | 规格 §14 |
-| 插件系统（WebView2） | ✅ | overlay / sidebar / standalone / 权限 / 简单模式；API 兼容性见 §9 |
+| 插件系统（WebView2） | ✅ | IINA API 子集（Stage 9）；overlay / sidebar / standalone / 权限 / 简单模式 |
 | 10 段均衡器 / 视频·音频滤镜 UI | ✅ | mpv `af`/`vf` + 预设；滤镜编辑窗口 |
 | 安装器 / 文件关联 / winget | ✅ 基础 | zip + Inno Setup；winget 可后补 |
 | 杜比视界 / 系统 PiP / 插件商店 | v2 | |
@@ -481,27 +488,31 @@ XAML 内容（标题栏/OSC/侧栏/OSD/预览）绘制在 SwapChainPanel 之上
 
 验收：滤镜/EQ 重启后保留；ASS 字幕样式开关正确；检查器字段与 mpv 属性一致。
 
-### Stage 9 — 插件系统（L）
+### Stage 9 — 插件系统（IINA API 子集）（L）
 
 交付：
 - WebView2 宿主：全屏 overlay（点击穿透 hit-test）、侧栏页、独立窗口（600×400 起）。
-- 插件清单 `Info.json`：id/name/version/entry/permissions；权限模型（overlay/sidebar/standaloneWindow/network-request/file-system）。
-- 安装/卸载/启用/禁用；从文件夹或 URL 安装；插件菜单项；错误隔离（插件崩溃不影响播放）。
-- JS API（Wiina 自有，见 §9 的兼容性选项）：core/mpv/event/overlay/sidebar/standaloneWindow/menu/utils/preferences。
-- 简单模式（HTML/CSS）；插件数据目录；权限拒绝时的明确报错。
-- 插件中心/在线商店放 v2。
+- `Info.json` 同 IINA：`name/version/identifier/author/entry/globalEntry/preferencesPage/preferenceDefaults/helpPage/sidebarTab/permissions/allowedDomains/localized`；支持文件夹与 zip 包。
+- 权限同 IINA：`show-osd`、`show-alert`、`video-overlay`、`network-request`、`file-system`；安装时展示，运行时校验。
+- **Tier A（必须）**：`core / event / mpv / overlay / sidebar / standaloneWindow / menu / console / preferences / utils / file / http / playlist`。
+- **Tier B（尽量）**：`input / global`。
+- 简单模式（HTML/CSS）、`postMessage/onMessage`、CommonJS `require`、`setTimeout/setInterval`、`iina-plugin-definition` 类型（开发用）。
+- 安装/卸载/启用/禁用/权限确认；插件菜单；错误隔离（插件崩溃不影响播放）；插件数据目录；权限拒绝时明确报错。
+- `iina.subtitle` 自定义字幕源 → Stage 10；`iina.ws`、插件商店/自动更新 → v2。
+- 兼容性矩阵文档：逐项列出“已支持 / 有差异 / 未实现”，不假装 100% 兼容。
 
-验收：三个示例插件（overlay 时钟、侧栏字幕搜索、独立窗口歌词）可安装运行；权限拒绝路径正确；插件崩溃可恢复。
+验收：3 个示例插件（overlay 时钟、侧栏字幕搜索、独立窗口歌词）+ 至少 2 个现成 IINA 插件可运行；权限拒绝路径正确；插件崩溃可恢复。
 
 ### Stage 10 — 在线服务与网络（L）
 
 交付：
-- 在线字幕：OpenSubtitles.com 搜索/下载/保存、hash 匹配、语言过滤、API key 设置、失败重试与错误提示。
-- yt-dlp：检测系统 PATH、首次使用征得同意后下载/更新、URL 解析、清晰度/格式选择（基础）、失败回退给 mpv 原生。
+- 在线字幕：OpenSubtitles.com 搜索/下载/保存、hash 匹配、语言过滤、**用户自备 API key**、失败重试与错误提示。
+- `iina.subtitle` 自定义字幕源 API（`item` / `invokeProvider`），让字幕类插件可注册搜索源。
+- yt-dlp：**仅检测系统 PATH**；不自动下载/更新；缺失时提示安装；URL 解析、清晰度/格式选择（基础）、失败回退给 mpv 原生。
 - 网络设置：代理、请求头、缓存、user-agent、yt-dlp 路径、OpenSubtitles key；打开 URL 对话框（历史/请求头）。
 - 网络流 OSD（打开中/缓冲/跳转）。
 
-验收：YouTube/Bilibili 等 2–3 个站点可播；字幕搜索/下载/加载闭环；断网/限流有可读错误。
+验收：装好 yt-dlp 后 YouTube/Bilibili 等 2–3 个站点可播；未安装时有可读提示；字幕搜索/下载/加载闭环；断网/限流有可读错误。
 
 ### Stage 11 — 打磨与发布（M/L）
 
@@ -543,34 +554,24 @@ XAML 内容（标题栏/OSC/侧栏/OSD/预览）绘制在 SwapChainPanel 之上
 
 ---
 
-## 9. 第二轮需要你确认（“全量”的边界）
+## 9. 第三轮需要你确认（插件 API 边界）
 
-> 建议已标 ★；可以回复“按建议”，或逐条改。
+> 建议已标 ★；可以回复“按建议”，或逐条改。其余事项已在前两轮确认。
 
-1. **插件 API**：
-   - ★ A. **Wiina 自有 JS API**：实现 §15 的全部 UI 能力（overlay/sidebar/standalone/权限），但**不兼容** IINA 插件。
-   - B. **兼容 IINA 插件 API 子集**：能跑一部分现成 IINA 插件，工作量和兼容性风险显著增加。
-   - C. **只做简单模式**：HTML/CSS overlay + 侧栏/独立窗口宿主，不做完整 JS API。
-2. **在线字幕**：
-   - ★ A. **用户自备 OpenSubtitles.com API key**（免费注册）；我们不内置/共享 key。
-   - B. 内置共享 key（不推荐：配额、ToS、泄露风险）。
-   - C. 先接其他免费源（需逐个评估许可/稳定性）。
-3. **yt-dlp**：
-   - ★ A. **首次使用征得同意后自动下载/更新**到 `%LOCALAPPDATA%\Wiina\bin\`；也可用系统 PATH。
-   - B. 只用系统 PATH 中的 yt-dlp，缺失时提示用户自行安装。
-   - C. 随安装包附带（体积、更新、许可都要处理）。
-4. **多窗口**：
-   - ★ A. **支持**：共享设置、独立播放状态、Window 菜单。
-   - B. 单窗口，后续再加（会偏离 §14 菜单项）。
-5. **窗口尺寸**：
-   - ★ A. 设置 **900×640**、欢迎 **720×520**（更符合 Windows 11 习惯）。
-   - B. 严格按规格：600×480 / 560×440。
-   - C. 设置窗口可缩放、默认 900×640；欢迎 720×520。
-6. **阶段拆分**：
-   - ★ A. 当前 **Stage 0–11**（每阶段一个 PR）。
-   - B. 合并 Stage 8/9/10 为两个阶段（PR 更少，但单个 PR 更大、验收更难）。
-   - C. 再拆细（每个子功能一个阶段，PR 更多但更容易回滚）。
-7. **GitHub remote**：请把仓库 URL 给我（或先允许我本地做 Stage 0，稍后接远程）。
+1. **模块覆盖**：
+   - ★ A. **Tier A + `input`/`global`**：core/event/mpv/overlay/sidebar/standaloneWindow/menu/console/preferences/utils/file/http/playlist + input/global；`ws` 与 `subtitle` provider 放 v2/Stage 10。
+   - B. **只做 Tier A**：13 个模块；`input`/`global` 也放 v2。
+   - C. **Stage 9 一次做全部**（含 `ws`），`subtitle` 仍在 Stage 10。
+2. **插件包与安装**：
+   - ★ A. **文件夹 + zip**；从本地文件夹/zip 安装；插件管理页列出/启停/卸载。
+   - B. 只支持文件夹（开发方便，用户安装麻烦）。
+   - C. A + 从 URL 安装 + 插件商店（商店进 v1，工作量大）。
+3. **兼容性验收目标**：
+   - ★ A. **我挑 2–3 个常见 IINA 插件**作为目标（overlay 类、菜单类、侧栏类各一），Stage 9 验收跑通。
+   - B. 你指定插件（回复名字/链接），我按你的清单验收。
+4. **兼容性预期**：API 级兼容，不保证依赖 macOS 路径/AppleScript/`osascript`/`open -a` 的插件；这类调用会写“unsupported”日志并安全失败。你接受吗？
+   - ★ 接受（推荐）
+   - 不接受：需要额外的 macOS 兼容层（会显著扩大范围）
 
 ---
 

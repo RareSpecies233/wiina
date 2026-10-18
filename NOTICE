@@ -13,7 +13,10 @@ corresponding source is available as described below.
    copied into this project. The behavioral specification in
    docs/reference/ was derived from IINA and is distributed under GPL-3.0.
    IINA is a separate project; this project is not affiliated with or endorsed
-   by IINA or its authors.
+   by IINA or its authors. The IINA plugin API compatibility layer is
+   implemented from IINA's public API documentation (GPL-3.0); any IINA plugin
+   type definitions or sample code used during development remain GPL-3.0 and
+   are not relicensed by Wiina.
 
 2. mpv / libmpv (https://mpv.io/, https://github.com/mpv-player/mpv)
    License: GNU General Public License v2.0 or later (GPL-2.0-or-later) for the
@@ -51,9 +54,8 @@ corresponding source is available as described below.
 
 9. yt-dlp (https://github.com/yt-dlp/yt-dlp)
    License: The Unlicense (public domain).
-   Use: Resolving URLs for mpv (v1). Downloaded at runtime with the user's
-   consent and stored under %LOCALAPPDATA%\Wiina\bin\; the binary is not
-   committed to this repository and is not bundled in the source archive.
+   Use: Resolving URLs for mpv (v1). Wiina invokes a user-installed yt-dlp
+   found on PATH; it does not download, bundle, or redistribute the binary.
 
 10. OpenSubtitles.com API (https://www.opensubtitles.com/)
     License/terms: OpenSubtitles API terms of service.
