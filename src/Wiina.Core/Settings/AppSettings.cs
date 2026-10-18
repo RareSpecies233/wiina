@@ -18,6 +18,70 @@ public sealed class AppSettings
 
     public double SidebarWidth { get; set; } = 360;
 
+    /// <summary>Last sidebar page shown by a tab/menu action.</summary>
+    public SidebarType SidebarType { get; set; } = SidebarType.Settings;
+
+    /// <summary>Last quick-settings tab (layout/video/audio/subtitles).</summary>
+    public QuickSettingsPage QuickSettingsPage { get; set; } = QuickSettingsPage.Video;
+
+    /// <summary>App-level animation switch (quick settings → layout).</summary>
+    public bool AnimationsEnabled { get; set; } = true;
+
+    public bool OscAutoHide { get; set; } = true;
+
+    // ---- Quick settings: video (persisted and re-applied on startup) ----
+
+    public string VideoAspect { get; set; } = "no";
+
+    /// <summary>0 = no crop; otherwise the crop aspect ratio.</summary>
+    public double VideoCropAspect { get; set; }
+
+    public int VideoRotation { get; set; }
+
+    public bool VideoFlipHorizontal { get; set; }
+
+    public bool VideoFlipVertical { get; set; }
+
+    public bool VideoDeinterlace { get; set; }
+
+    public bool VideoHardwareDecode { get; set; } = true;
+
+    public double VideoZoom { get; set; }
+
+    public double VideoPanX { get; set; }
+
+    public double VideoPanY { get; set; }
+
+    // ---- Quick settings: audio ----
+
+    public double Volume { get; set; } = 100;
+
+    public double MaxVolume { get; set; } = 130;
+
+    public bool Muted { get; set; }
+
+    public double AudioDelay { get; set; }
+
+    public string AudioDevice { get; set; } = "auto";
+
+    // ---- Quick settings: subtitles ----
+
+    public bool SubtitleVisible { get; set; } = true;
+
+    public double SubtitleDelay { get; set; }
+
+    public double SubtitlePosition { get; set; } = 100;
+
+    public double SubtitleScale { get; set; } = 1;
+
+    public double SubtitleFontSize { get; set; } = 55;
+
+    public string SubtitleColor { get; set; } = "#FFFFFFFF";
+
+    public double SubtitleBorderSize { get; set; } = 3;
+
+    public int? SecondarySubtitleId { get; set; }
+
     public bool AlwaysOnTop { get; set; }
 
     public bool LockAspectRatio { get; set; } = true;

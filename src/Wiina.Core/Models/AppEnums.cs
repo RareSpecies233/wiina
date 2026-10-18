@@ -30,6 +30,7 @@ public enum SidebarType
 {
     Settings,
     Playlist,
+    Chapters,
     Plugins,
 }
 

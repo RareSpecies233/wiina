@@ -32,6 +32,7 @@ public static class PlayerActions
     public const string ExitFullscreen = "exit-fullscreen";
     public const string PictureInPicture = "picture-in-picture";
     public const string Sidebar = "sidebar";
+    public const string SidebarSettings = "sidebar-settings";
     public const string Layout = "layout";
     public const string MusicMode = "music-mode";
     public const string Theme = "theme";
@@ -173,6 +174,7 @@ public sealed class KeyMap
         map.TryBind("Esc", PlayerActions.ExitFullscreen);
         map.TryBind("Ctrl+Shift+P", PlayerActions.PictureInPicture);
         map.TryBind("Ctrl+Shift+B", PlayerActions.Sidebar);
+        map.TryBind("Ctrl+Shift+S", PlayerActions.SidebarSettings);
         map.TryBind("Ctrl+Shift+L", PlayerActions.Layout);
         map.TryBind("Ctrl+Shift+M", PlayerActions.MusicMode);
         map.TryBind("Ctrl+Shift+T", PlayerActions.Theme);

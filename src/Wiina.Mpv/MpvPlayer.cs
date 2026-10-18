@@ -36,6 +36,13 @@ public sealed record MpvPlaylistItem(
     }
 }
 
+/// <summary>One entry of mpv's <c>audio-device-list</c>.</summary>
+public sealed record MpvAudioDevice(string Name, string Description)
+{
+    public string DisplayName =>
+        string.IsNullOrWhiteSpace(Description) ? Name : Description;
+}
+
 /// <summary>
 /// Thread-safe libmpv wrapper. The mpv event loop runs on a dedicated
 /// background thread; UI code must marshal events to the dispatcher itself.
@@ -60,6 +67,7 @@ public sealed class MpvPlayer : IDisposable
     private IReadOnlyList<TrackInfo> _trackCache = Array.Empty<TrackInfo>();
     private IReadOnlyList<ChapterInfo> _chapterCache = Array.Empty<ChapterInfo>();
     private IReadOnlyList<MpvPlaylistItem> _playlistCache = Array.Empty<MpvPlaylistItem>();
+    private IReadOnlyList<MpvAudioDevice> _audioDeviceCache = Array.Empty<MpvAudioDevice>();
 
     /// <summary>Raised on the mpv event thread with the raw DXGI swapchain pointer.</summary>
     public event Action<long>? DisplaySwapChainChanged;
@@ -87,6 +95,9 @@ public sealed class MpvPlayer : IDisposable
 
     /// <summary>Raised with the parsed <c>playlist</c> node.</summary>
     public event Action<IReadOnlyList<MpvPlaylistItem>>? PlaylistChanged;
+
+    /// <summary>Raised with the parsed <c>audio-device-list</c> node.</summary>
+    public event Action<IReadOnlyList<MpvAudioDevice>>? AudioDeviceListChanged;
 
     /// <summary>Raised with the current playlist index.</summary>
     public event Action<int>? PlaylistPositionChanged;
@@ -298,6 +309,8 @@ public sealed class MpvPlayer : IDisposable
         TryObserveProperty("chapter-list", MpvFormat.Node);
         TryObserveProperty("chapter", MpvFormat.Int64);
         TryObserveProperty("playlist", MpvFormat.Node);
+        TryObserveProperty("audio-device-list", MpvFormat.Node);
+        TryObserveProperty("audio-device", MpvFormat.String);
         TryObserveProperty("playlist-pos", MpvFormat.Int64);
         TryObserveProperty("playlist-count", MpvFormat.Int64);
         TryObserveProperty("playlist-current-pos", MpvFormat.Int64);
@@ -317,6 +330,9 @@ public sealed class MpvPlayer : IDisposable
 
     /// <summary>Last parsed playlist (updated on the mpv event thread).</summary>
     public IReadOnlyList<MpvPlaylistItem> GetPlaylist() => _playlistCache;
+
+    /// <summary>Last parsed audio device list (updated on the mpv event thread).</summary>
+    public IReadOnlyList<MpvAudioDevice> GetAudioDevices() => _audioDeviceCache;
 
     public int GetCurrentChapter() => (int)GetPropertyInt64("chapter");
 
@@ -640,6 +656,14 @@ public sealed class MpvPlayer : IDisposable
                     PlaylistChanged?.Invoke(playlist);
                     break;
                 }
+                case "audio-device-list":
+                {
+                    IReadOnlyList<MpvAudioDevice> devices =
+                        ParseAudioDevices(MpvNodeValue.Read(data));
+                    _audioDeviceCache = devices;
+                    AudioDeviceListChanged?.Invoke(devices);
+                    break;
+                }
                 case "video-params":
                 {
                     MpvNodeValue? node = MpvNodeValue.Read(data);
@@ -724,6 +748,30 @@ public sealed class MpvPlayer : IDisposable
         }
 
         return chapters;
+    }
+
+    private static IReadOnlyList<MpvAudioDevice> ParseAudioDevices(MpvNodeValue? root)
+    {
+        var devices = new List<MpvAudioDevice>();
+        if (root?.ArrayValue is null)
+        {
+            return devices;
+        }
+
+        foreach (MpvNodeValue item in root.ArrayValue)
+        {
+            string? name = item["name"]?.AsString();
+            if (string.IsNullOrWhiteSpace(name))
+            {
+                continue;
+            }
+
+            devices.Add(new MpvAudioDevice(
+                name,
+                item["description"]?.AsString() ?? name));
+        }
+
+        return devices;
     }
 
     private static IReadOnlyList<MpvPlaylistItem> ParsePlaylist(MpvNodeValue? root)

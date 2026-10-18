@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="utf-8"?>
+<UserControl
+    x:Class="Wiina.App.Controls.ChaptersView"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <Grid Margin="16,10,16,4">
+            <TextBlock Text="章节" Style="{StaticResource SectionTitleStyle}" />
+            <TextBlock x:Name="CountText"
+                       HorizontalAlignment="Right"
+                       Style="{StaticResource CaptionTextStyle}"
+                       Text="0 个" />
+        </Grid>
+
+        <ListView x:Name="ChapterList"
+                  Grid.Row="1"
+                  SelectionMode="Single"
+                  HorizontalContentAlignment="Stretch"
+                  DoubleTapped="OnListDoubleTapped"
+                  KeyDown="OnListKeyDown">
+            <ListView.ItemTemplate>
+                <DataTemplate>
+                    <Grid Height="38"
+                          ColumnSpacing="10"
+                          Background="Transparent">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="52" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="16" />
+                        </Grid.ColumnDefinitions>
+
+                        <TextBlock Text="{Binding TimeText}"
+                                   Style="{StaticResource CaptionTextStyle}"
+                                   FontFamily="Cascadia Mono"
+                                   VerticalAlignment="Center" />
+
+                        <TextBlock Grid.Column="1"
+                                   Text="{Binding Title}"
+                                   Style="{StaticResource BodyTextStyle}"
+                                   TextTrimming="CharacterEllipsis"
+                                   VerticalAlignment="Center" />
+
+                        <TextBlock Grid.Column="2"
+                                   Text="{Binding IndicatorGlyph}"
+                                   Foreground="{ThemeResource AccentBrush}"
+                                   FontFamily="{StaticResource IconFont}"
+                                   FontSize="12"
+                                   VerticalAlignment="Center" />
+                    </Grid>
+                </DataTemplate>
+            </ListView.ItemTemplate>
+        </ListView>
+
+        <TextBlock x:Name="EmptyHint"
+                   Grid.Row="1"
+                   Margin="24"
+                   Text="当前媒体没有章节。带章节的 MKV/MP4 会在这里列出。"
+                   Style="{StaticResource CaptionTextStyle}"
+                   TextWrapping="Wrap"
+                   HorizontalAlignment="Center"
+                   VerticalAlignment="Center"
+                   TextAlignment="Center" />
+    </Grid>
+</UserControl>

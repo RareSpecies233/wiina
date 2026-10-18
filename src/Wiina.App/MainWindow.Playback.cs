@@ -123,6 +123,7 @@ public sealed partial class MainWindow
         player.TrackListChanged += OnTrackListChanged;
         player.ChapterListChanged += OnChapterListChanged;
         player.PlaylistChanged += OnPlaylistChanged;
+        player.AudioDeviceListChanged += OnAudioDeviceListChanged;
         player.PlaylistPositionChanged += OnPlaylistPositionChanged;
         player.ChapterChanged += OnChapterChanged;
         player.VideoSizeChanged += OnVideoSizeChanged;
@@ -1234,6 +1235,8 @@ public sealed partial class MainWindow
                         $"visible={_player?.GetPropertyFlag("sub-visibility")}");
                 }
             }
+
+            RefreshSidebarTracks();
         });
     }
 
@@ -1247,6 +1250,7 @@ public sealed partial class MainWindow
             _chapters = _chapterList;
             _oscVm.Chapters = _chapterList.Select(chapter => chapter.Time).ToArray();
             UpdateTimelines();
+            RefreshSidebarChapters();
         });
     }
 
@@ -1262,12 +1266,23 @@ public sealed partial class MainWindow
             {
                 _currentPlaylistIndex = current;
             }
+
+            RefreshSidebarPlaylist();
         });
     }
 
     private void OnPlaylistPositionChanged(int position)
     {
-        DispatcherQueue.TryEnqueue(() => _currentPlaylistIndex = position);
+        DispatcherQueue.TryEnqueue(() =>
+        {
+            _currentPlaylistIndex = position;
+            UpdateSidebarPlaylistPosition(position);
+        });
+    }
+
+    private void OnAudioDeviceListChanged(IReadOnlyList<MpvAudioDevice> devices)
+    {
+        DispatcherQueue.TryEnqueue(RefreshSidebarDevices);
     }
 
     private void OnChapterChanged(int chapter)
@@ -1275,6 +1290,7 @@ public sealed partial class MainWindow
         DispatcherQueue.TryEnqueue(() =>
         {
             _currentChapterIndex = chapter;
+            UpdateSidebarChapter(chapter);
             if (_chapterChangeOsc && chapter >= 0 && chapter < _chapterList.Count)
             {
                 ChapterInfo info = _chapterList[chapter];
@@ -1295,7 +1311,18 @@ public sealed partial class MainWindow
         }
 
         Trace($"video size: {width}x{height}");
-        DispatcherQueue.TryEnqueue(() => _videoAspect = (double)width / height);
+        DispatcherQueue.TryEnqueue(() =>
+        {
+            _videoWidth = width;
+            _videoHeight = height;
+            _videoAspect = (double)width / height;
+            foreach (SidebarHost host in new[] { SidebarLeading, SidebarTrailing })
+            {
+                host.QuickSettings.SetVideoSize(width, height);
+            }
+
+            ApplyCropFromSettings();
+        });
     }
 
     private void OnFileLoadFailed(int error, string? message)
@@ -1348,11 +1375,25 @@ public sealed partial class MainWindow
         {
             SaveCurrentHistory();
         }
+        else if (name == "sub-visibility")
+        {
+            _settings.SubtitleVisible = value;
+            SyncSidebarSubtitleVisibility();
+        }
     }
 
     private void OnStage3StringProperty(string name, string? value)
     {
-        // Reserved for Stage 5/6 properties (loop mode, network state, …).
+        if (name == "audio-device")
+        {
+            _currentAudioDevice = value;
+            if (!string.IsNullOrWhiteSpace(value))
+            {
+                _settings.AudioDevice = value;
+            }
+
+            SyncSidebarAudioDevice(value);
+        }
     }
 
     private void OnMediaLoadedStage3()
@@ -1975,6 +2016,7 @@ public sealed partial class MainWindow
         PlayerActions.ExitFullscreen => "退出全屏",
         PlayerActions.PictureInPicture => "画中画（占位）",
         PlayerActions.Sidebar => "侧边栏",
+        PlayerActions.SidebarSettings => "快速设置侧栏",
         PlayerActions.Layout => "布局切换",
         PlayerActions.MusicMode => "音乐模式（占位）",
         PlayerActions.Theme => "主题切换",
@@ -2147,6 +2189,9 @@ public sealed partial class MainWindow
             case PlayerActions.Sidebar:
                 ToggleSidebar();
                 return true;
+            case PlayerActions.SidebarSettings:
+                ShowSettingsSidebar();
+                return true;
             case PlayerActions.Layout:
                 ToggleLayout();
                 return true;
@@ -2256,6 +2301,16 @@ public sealed partial class MainWindow
     private void OnVideoTapped(object sender, TappedRoutedEventArgs e)
     {
         Trace("video tapped");
+        if (HasVisibleSidebar &&
+            _settings.Layout == WindowLayoutMode.EdgeToEdge)
+        {
+            // Spec §7.2/§7.8: edge-to-edge consumes the click and closes the
+            // sidebars; docked layout leaves them open.
+            HideSidebar();
+            e.Handled = true;
+            return;
+        }
+
         if (_suppressClick || _windowDragging)
         {
             return;

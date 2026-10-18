@@ -1,0 +1,763 @@
+<?xml version="1.0" encoding="utf-8"?>
+<UserControl
+    x:Class="Wiina.App.Controls.QuickSettingsView"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <StackPanel Orientation="Horizontal"
+                    Spacing="2"
+                    Margin="12,6,12,4">
+            <ToggleButton x:Name="LayoutPageButton"
+                          Style="{StaticResource SidebarPageButtonStyle}"
+                          Content="布局"
+                          Tag="Layout"
+                          Click="OnPageButtonClick"
+                          IsChecked="True" />
+            <ToggleButton x:Name="VideoPageButton"
+                          Style="{StaticResource SidebarPageButtonStyle}"
+                          Content="视频"
+                          Tag="Video"
+                          Click="OnPageButtonClick" />
+            <ToggleButton x:Name="AudioPageButton"
+                          Style="{StaticResource SidebarPageButtonStyle}"
+                          Content="音频"
+                          Tag="Audio"
+                          Click="OnPageButtonClick" />
+            <ToggleButton x:Name="SubtitlePageButton"
+                          Style="{StaticResource SidebarPageButtonStyle}"
+                          Content="字幕"
+                          Tag="Subtitles"
+                          Click="OnPageButtonClick" />
+        </StackPanel>
+
+        <ScrollViewer Grid.Row="1"
+                      Padding="16,4,16,16"
+                      VerticalScrollBarVisibility="Auto"
+                      HorizontalScrollBarVisibility="Disabled">
+            <Grid>
+                <!-- ================================================== Layout -->
+                <StackPanel x:Name="LayoutPage" Spacing="14">
+                    <Border Style="{StaticResource CardBorderStyle}" Padding="12">
+                        <StackPanel Spacing="10">
+                            <Grid>
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                    <FontIcon Glyph="&#xE790;" FontSize="14" Foreground="{ThemeResource SecondaryTextBrush}" />
+                                    <TextBlock Text="外观" Style="{StaticResource SectionTitleStyle}" />
+                                </StackPanel>
+                                <Button Style="{StaticResource CardHeaderButtonStyle}"
+                                        Content="&#xE72C;"
+                                        HorizontalAlignment="Right"
+                                        Tag="appearance"
+                                        Click="OnResetClick"
+                                        ToolTipService.ToolTip="重置外观" />
+                            </Grid>
+
+                            <Grid ColumnSpacing="12">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="主题" Style="{StaticResource BodyTextStyle}" />
+                                <ComboBox x:Name="ThemeBox"
+                                          Grid.Column="1"
+                                          Width="150"
+                                          SelectionChanged="OnComboChanged" />
+                            </Grid>
+
+                            <Grid ColumnSpacing="12">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="启用界面动画" Style="{StaticResource BodyTextStyle}" />
+                                <ToggleSwitch x:Name="AnimationsSwitch"
+                                              Grid.Column="1"
+                                              MinWidth="0"
+                                              OnContent="开"
+                                              OffContent="关"
+                                              Toggled="OnToggleChanged" />
+                            </Grid>
+                        </StackPanel>
+                    </Border>
+
+                    <Border Style="{StaticResource CardBorderStyle}" Padding="12">
+                        <StackPanel Spacing="10">
+                            <Grid>
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                    <FontIcon Glyph="&#xE737;" FontSize="14" Foreground="{ThemeResource SecondaryTextBrush}" />
+                                    <TextBlock Text="窗口" Style="{StaticResource SectionTitleStyle}" />
+                                </StackPanel>
+                                <Button Style="{StaticResource CardHeaderButtonStyle}"
+                                        Content="&#xE72C;"
+                                        HorizontalAlignment="Right"
+                                        Tag="window"
+                                        Click="OnResetClick"
+                                        ToolTipService.ToolTip="重置窗口设置" />
+                            </Grid>
+
+                            <Grid ColumnSpacing="12">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="侧边栏布局" Style="{StaticResource BodyTextStyle}" />
+                                <ComboBox x:Name="LayoutBox"
+                                          Grid.Column="1"
+                                          Width="170"
+                                          SelectionChanged="OnComboChanged" />
+                            </Grid>
+
+                            <Grid ColumnSpacing="12">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="窗口置顶" Style="{StaticResource BodyTextStyle}" />
+                                <ToggleSwitch x:Name="AlwaysOnTopSwitch"
+                                              Grid.Column="1"
+                                              MinWidth="0"
+                                              Toggled="OnToggleChanged" />
+                            </Grid>
+
+                            <Grid ColumnSpacing="12">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="锁定宽高比" Style="{StaticResource BodyTextStyle}" />
+                                <ToggleSwitch x:Name="LockAspectSwitch"
+                                              Grid.Column="1"
+                                              MinWidth="0"
+                                              Toggled="OnToggleChanged" />
+                            </Grid>
+                        </StackPanel>
+                    </Border>
+
+                    <Border Style="{StaticResource CardBorderStyle}" Padding="12">
+                        <StackPanel Spacing="10">
+                            <Grid>
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                    <FontIcon Glyph="&#xE8B9;" FontSize="14" Foreground="{ThemeResource SecondaryTextBrush}" />
+                                    <TextBlock Text="OSC" Style="{StaticResource SectionTitleStyle}" />
+                                </StackPanel>
+                                <Button Style="{StaticResource CardHeaderButtonStyle}"
+                                        Content="&#xE72C;"
+                                        HorizontalAlignment="Right"
+                                        Tag="osc"
+                                        Click="OnResetClick"
+                                        ToolTipService.ToolTip="重置 OSC 设置" />
+                            </Grid>
+
+                            <Grid ColumnSpacing="12">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="位置" Style="{StaticResource BodyTextStyle}" />
+                                <ComboBox x:Name="OscPositionBox"
+                                          Grid.Column="1"
+                                          Width="150"
+                                          SelectionChanged="OnComboChanged" />
+                            </Grid>
+
+                            <Grid ColumnSpacing="12">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="2.5 秒自动隐藏" Style="{StaticResource BodyTextStyle}" />
+                                <ToggleSwitch x:Name="OscAutoHideSwitch"
+                                              Grid.Column="1"
+                                              MinWidth="0"
+                                              Toggled="OnToggleChanged" />
+                            </Grid>
+                        </StackPanel>
+                    </Border>
+
+                    <Border Style="{StaticResource CardBorderStyle}" Padding="12">
+                        <StackPanel Spacing="10">
+                            <Grid>
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                    <FontIcon Glyph="&#xE700;" FontSize="14" Foreground="{ThemeResource SecondaryTextBrush}" />
+                                    <TextBlock Text="侧边栏" Style="{StaticResource SectionTitleStyle}" />
+                                </StackPanel>
+                                <Button Style="{StaticResource CardHeaderButtonStyle}"
+                                        Content="&#xE72C;"
+                                        HorizontalAlignment="Right"
+                                        Tag="sidebar"
+                                        Click="OnResetClick"
+                                        ToolTipService.ToolTip="重置侧边栏设置" />
+                            </Grid>
+
+                            <Grid ColumnSpacing="12">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="默认一侧" Style="{StaticResource BodyTextStyle}" />
+                                <ComboBox x:Name="SidebarSideBox"
+                                          Grid.Column="1"
+                                          Width="150"
+                                          SelectionChanged="OnComboChanged" />
+                            </Grid>
+
+                            <StackPanel Spacing="2">
+                                <Grid>
+                                    <TextBlock Text="宽度" Style="{StaticResource BodyTextStyle}" />
+                                    <TextBlock x:Name="SidebarWidthText"
+                                               HorizontalAlignment="Right"
+                                               Style="{StaticResource CaptionTextStyle}" />
+                                </Grid>
+                                <Slider x:Name="SidebarWidthSlider"
+                                        StepFrequency="1"
+                                        ValueChanged="OnSliderValueChanged" />
+                            </StackPanel>
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+
+                <!-- =================================================== Video -->
+                <StackPanel x:Name="VideoPage" Spacing="14" Visibility="Collapsed">
+                    <TextBlock x:Name="VideoHint"
+                               Text="打开媒体后可调整视频设置。"
+                               Style="{StaticResource CaptionTextStyle}"
+                               TextWrapping="Wrap"
+                               Visibility="Collapsed" />
+
+                    <Border Style="{StaticResource CardBorderStyle}" Padding="12">
+                        <StackPanel Spacing="10">
+                            <Grid>
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                    <FontIcon Glyph="&#xE714;" FontSize="14" Foreground="{ThemeResource SecondaryTextBrush}" />
+                                    <TextBlock Text="视频轨道" Style="{StaticResource SectionTitleStyle}" />
+                                </StackPanel>
+                                <Button Style="{StaticResource CardHeaderButtonStyle}"
+                                        Content="&#xE72C;"
+                                        HorizontalAlignment="Right"
+                                        Tag="video-track"
+                                        Click="OnResetClick"
+                                        ToolTipService.ToolTip="重置视频轨道" />
+                            </Grid>
+                            <ComboBox x:Name="VideoTrackBox"
+                                      HorizontalAlignment="Stretch"
+                                      SelectionChanged="OnComboChanged" />
+                        </StackPanel>
+                    </Border>
+
+                    <Border Style="{StaticResource CardBorderStyle}" Padding="12">
+                        <StackPanel Spacing="10">
+                            <Grid>
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                    <FontIcon Glyph="&#xE7C4;" FontSize="14" Foreground="{ThemeResource SecondaryTextBrush}" />
+                                    <TextBlock Text="画面" Style="{StaticResource SectionTitleStyle}" />
+                                </StackPanel>
+                                <Button Style="{StaticResource CardHeaderButtonStyle}"
+                                        Content="&#xE72C;"
+                                        HorizontalAlignment="Right"
+                                        Tag="video-picture"
+                                        Click="OnResetClick"
+                                        ToolTipService.ToolTip="重置画面设置" />
+                            </Grid>
+
+                            <Grid ColumnSpacing="12">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="宽高比" Style="{StaticResource BodyTextStyle}" />
+                                <ComboBox x:Name="AspectBox"
+                                          Grid.Column="1"
+                                          Width="140"
+                                          SelectionChanged="OnComboChanged" />
+                            </Grid>
+
+                            <Grid ColumnSpacing="12">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="裁剪" Style="{StaticResource BodyTextStyle}" />
+                                <ComboBox x:Name="CropBox"
+                                          Grid.Column="1"
+                                          Width="140"
+                                          SelectionChanged="OnComboChanged" />
+                            </Grid>
+
+                            <Grid ColumnSpacing="12">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="旋转" Style="{StaticResource BodyTextStyle}" />
+                                <ComboBox x:Name="RotationBox"
+                                          Grid.Column="1"
+                                          Width="140"
+                                          SelectionChanged="OnComboChanged" />
+                            </Grid>
+
+                            <Grid ColumnSpacing="12">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="水平翻转" Style="{StaticResource BodyTextStyle}" />
+                                <ToggleSwitch x:Name="FlipHorizontalSwitch"
+                                              Grid.Column="1"
+                                              MinWidth="0"
+                                              Toggled="OnToggleChanged" />
+                            </Grid>
+
+                            <Grid ColumnSpacing="12">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="垂直翻转" Style="{StaticResource BodyTextStyle}" />
+                                <ToggleSwitch x:Name="FlipVerticalSwitch"
+                                              Grid.Column="1"
+                                              MinWidth="0"
+                                              Toggled="OnToggleChanged" />
+                            </Grid>
+
+                            <Grid ColumnSpacing="12">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="去隔行" Style="{StaticResource BodyTextStyle}" />
+                                <ToggleSwitch x:Name="DeinterlaceSwitch"
+                                              Grid.Column="1"
+                                              MinWidth="0"
+                                              Toggled="OnToggleChanged" />
+                            </Grid>
+
+                            <Grid ColumnSpacing="12">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="硬件解码" Style="{StaticResource BodyTextStyle}" />
+                                <ToggleSwitch x:Name="HardwareDecodeSwitch"
+                                              Grid.Column="1"
+                                              MinWidth="0"
+                                              Toggled="OnToggleChanged" />
+                            </Grid>
+                        </StackPanel>
+                    </Border>
+
+                    <Border Style="{StaticResource CardBorderStyle}" Padding="12">
+                        <StackPanel Spacing="8">
+                            <Grid>
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                    <FontIcon Glyph="&#xE71E;" FontSize="14" Foreground="{ThemeResource SecondaryTextBrush}" />
+                                    <TextBlock Text="缩放与平移" Style="{StaticResource SectionTitleStyle}" />
+                                </StackPanel>
+                                <Button Style="{StaticResource CardHeaderButtonStyle}"
+                                        Content="&#xE72C;"
+                                        HorizontalAlignment="Right"
+                                        Tag="video-zoom"
+                                        Click="OnResetClick"
+                                        ToolTipService.ToolTip="重置缩放与平移" />
+                            </Grid>
+
+                            <StackPanel Spacing="2">
+                                <Grid>
+                                    <TextBlock Text="缩放" Style="{StaticResource BodyTextStyle}" />
+                                    <TextBlock x:Name="ZoomValueText"
+                                               HorizontalAlignment="Right"
+                                               Style="{StaticResource CaptionTextStyle}" />
+                                </Grid>
+                                <Slider x:Name="ZoomSlider"
+                                        Minimum="-1"
+                                        Maximum="1"
+                                        StepFrequency="0.05"
+                                        ValueChanged="OnSliderValueChanged" />
+                            </StackPanel>
+
+                            <StackPanel Spacing="2">
+                                <Grid>
+                                    <TextBlock Text="水平平移" Style="{StaticResource BodyTextStyle}" />
+                                    <TextBlock x:Name="PanXValueText"
+                                               HorizontalAlignment="Right"
+                                               Style="{StaticResource CaptionTextStyle}" />
+                                </Grid>
+                                <Slider x:Name="PanXSlider"
+                                        Minimum="-1"
+                                        Maximum="1"
+                                        StepFrequency="0.01"
+                                        ValueChanged="OnSliderValueChanged" />
+                            </StackPanel>
+
+                            <StackPanel Spacing="2">
+                                <Grid>
+                                    <TextBlock Text="垂直平移" Style="{StaticResource BodyTextStyle}" />
+                                    <TextBlock x:Name="PanYValueText"
+                                               HorizontalAlignment="Right"
+                                               Style="{StaticResource CaptionTextStyle}" />
+                                </Grid>
+                                <Slider x:Name="PanYSlider"
+                                        Minimum="-1"
+                                        Maximum="1"
+                                        StepFrequency="0.01"
+                                        ValueChanged="OnSliderValueChanged" />
+                            </StackPanel>
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+
+                <!-- =================================================== Audio -->
+                <StackPanel x:Name="AudioPage" Spacing="14" Visibility="Collapsed">
+                    <TextBlock x:Name="AudioHint"
+                               Text="打开媒体后可切换音频轨道；音量/静音对空闲播放器同样有效。"
+                               Style="{StaticResource CaptionTextStyle}"
+                               TextWrapping="Wrap"
+                               Visibility="Collapsed" />
+
+                    <Border Style="{StaticResource CardBorderStyle}" Padding="12">
+                        <StackPanel Spacing="10">
+                            <Grid>
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                    <FontIcon Glyph="&#xE8D6;" FontSize="14" Foreground="{ThemeResource SecondaryTextBrush}" />
+                                    <TextBlock Text="音频轨道" Style="{StaticResource SectionTitleStyle}" />
+                                </StackPanel>
+                                <Button Style="{StaticResource CardHeaderButtonStyle}"
+                                        Content="&#xE72C;"
+                                        HorizontalAlignment="Right"
+                                        Tag="audio-track"
+                                        Click="OnResetClick"
+                                        ToolTipService.ToolTip="重置音频轨道" />
+                            </Grid>
+                            <ComboBox x:Name="AudioTrackBox"
+                                      HorizontalAlignment="Stretch"
+                                      SelectionChanged="OnComboChanged" />
+                        </StackPanel>
+                    </Border>
+
+                    <Border Style="{StaticResource CardBorderStyle}" Padding="12">
+                        <StackPanel Spacing="10">
+                            <Grid>
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                    <FontIcon Glyph="&#xE767;" FontSize="14" Foreground="{ThemeResource SecondaryTextBrush}" />
+                                    <TextBlock Text="音量" Style="{StaticResource SectionTitleStyle}" />
+                                </StackPanel>
+                                <Button Style="{StaticResource CardHeaderButtonStyle}"
+                                        Content="&#xE72C;"
+                                        HorizontalAlignment="Right"
+                                        Tag="audio-volume"
+                                        Click="OnResetClick"
+                                        ToolTipService.ToolTip="重置音量" />
+                            </Grid>
+
+                            <StackPanel Spacing="2">
+                                <Grid>
+                                    <TextBlock Text="音量" Style="{StaticResource BodyTextStyle}" />
+                                    <TextBlock x:Name="VolumeValueText"
+                                               HorizontalAlignment="Right"
+                                               Style="{StaticResource CaptionTextStyle}" />
+                                </Grid>
+                                <Slider x:Name="VolumeSlider"
+                                        Minimum="0"
+                                        Maximum="130"
+                                        StepFrequency="1"
+                                        ValueChanged="OnSliderValueChanged" />
+                            </StackPanel>
+
+                            <Grid ColumnSpacing="12">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="最大音量" Style="{StaticResource BodyTextStyle}" />
+                                <NumberBox x:Name="MaxVolumeBox"
+                                           Grid.Column="1"
+                                           Width="110"
+                                           Minimum="100"
+                                           Maximum="200"
+                                           SmallChange="5"
+                                           ValueChanged="OnNumberBoxChanged" />
+                            </Grid>
+
+                            <Grid ColumnSpacing="12">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="静音" Style="{StaticResource BodyTextStyle}" />
+                                <ToggleSwitch x:Name="MuteSwitch"
+                                              Grid.Column="1"
+                                              MinWidth="0"
+                                              Toggled="OnToggleChanged" />
+                            </Grid>
+                        </StackPanel>
+                    </Border>
+
+                    <Border Style="{StaticResource CardBorderStyle}" Padding="12">
+                        <StackPanel Spacing="8">
+                            <Grid>
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                    <FontIcon Glyph="&#xE916;" FontSize="14" Foreground="{ThemeResource SecondaryTextBrush}" />
+                                    <TextBlock Text="音频延迟" Style="{StaticResource SectionTitleStyle}" />
+                                </StackPanel>
+                                <Button Style="{StaticResource CardHeaderButtonStyle}"
+                                        Content="&#xE72C;"
+                                        HorizontalAlignment="Right"
+                                        Tag="audio-delay"
+                                        Click="OnResetClick"
+                                        ToolTipService.ToolTip="重置音频延迟" />
+                            </Grid>
+                            <Grid>
+                                <TextBlock Text="延迟（秒）" Style="{StaticResource BodyTextStyle}" />
+                                <TextBlock x:Name="AudioDelayText"
+                                           HorizontalAlignment="Right"
+                                           Style="{StaticResource CaptionTextStyle}" />
+                            </Grid>
+                            <Slider x:Name="AudioDelaySlider"
+                                    Minimum="-10"
+                                    Maximum="10"
+                                    StepFrequency="0.1"
+                                    ValueChanged="OnSliderValueChanged" />
+                        </StackPanel>
+                    </Border>
+
+                    <Border Style="{StaticResource CardBorderStyle}" Padding="12">
+                        <StackPanel Spacing="10">
+                            <Grid>
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                    <FontIcon Glyph="&#xE7F5;" FontSize="14" Foreground="{ThemeResource SecondaryTextBrush}" />
+                                    <TextBlock Text="输出设备" Style="{StaticResource SectionTitleStyle}" />
+                                </StackPanel>
+                                <Button Style="{StaticResource CardHeaderButtonStyle}"
+                                        Content="&#xE72C;"
+                                        HorizontalAlignment="Right"
+                                        Tag="audio-device"
+                                        Click="OnResetClick"
+                                        ToolTipService.ToolTip="重置音频设备" />
+                            </Grid>
+                            <ComboBox x:Name="AudioDeviceBox"
+                                      HorizontalAlignment="Stretch"
+                                      SelectionChanged="OnComboChanged" />
+                            <Grid ColumnSpacing="8">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock x:Name="AudioDeviceHint"
+                                           Text="设备列表来自 libmpv。"
+                                           Style="{StaticResource CaptionTextStyle}"
+                                           TextWrapping="Wrap" />
+                                <Button x:Name="RefreshDevicesButton"
+                                        Grid.Column="1"
+                                        Style="{StaticResource CardHeaderButtonStyle}"
+                                        Content="&#xE72C;"
+                                        Click="OnRefreshDevicesClick"
+                                        ToolTipService.ToolTip="刷新设备列表" />
+                            </Grid>
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+
+                <!-- ================================================= Subtitles -->
+                <StackPanel x:Name="SubtitlesPage" Spacing="14" Visibility="Collapsed">
+                    <TextBlock x:Name="SubtitleHint"
+                               Text="打开媒体后可切换字幕轨道与样式。"
+                               Style="{StaticResource CaptionTextStyle}"
+                               TextWrapping="Wrap"
+                               Visibility="Collapsed" />
+
+                    <Border Style="{StaticResource CardBorderStyle}" Padding="12">
+                        <StackPanel Spacing="10">
+                            <Grid>
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                    <FontIcon Glyph="&#xE8D8;" FontSize="14" Foreground="{ThemeResource SecondaryTextBrush}" />
+                                    <TextBlock Text="字幕轨道" Style="{StaticResource SectionTitleStyle}" />
+                                </StackPanel>
+                                <Button Style="{StaticResource CardHeaderButtonStyle}"
+                                        Content="&#xE72C;"
+                                        HorizontalAlignment="Right"
+                                        Tag="subtitle-track"
+                                        Click="OnResetClick"
+                                        ToolTipService.ToolTip="重置字幕轨道" />
+                            </Grid>
+
+                            <Grid ColumnSpacing="12">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="主字幕" Style="{StaticResource BodyTextStyle}" />
+                                <ComboBox x:Name="SubtitleTrackBox"
+                                          Grid.Column="1"
+                                          Width="180"
+                                          SelectionChanged="OnComboChanged" />
+                            </Grid>
+
+                            <Grid ColumnSpacing="12">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="次字幕" Style="{StaticResource BodyTextStyle}" />
+                                <ComboBox x:Name="SecondarySubtitleBox"
+                                          Grid.Column="1"
+                                          Width="180"
+                                          SelectionChanged="OnComboChanged" />
+                            </Grid>
+
+                            <Grid ColumnSpacing="12">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="显示字幕" Style="{StaticResource BodyTextStyle}" />
+                                <ToggleSwitch x:Name="SubtitleVisibleSwitch"
+                                              Grid.Column="1"
+                                              MinWidth="0"
+                                              Toggled="OnToggleChanged" />
+                            </Grid>
+
+                            <Button x:Name="LoadSubtitleButton"
+                                    HorizontalAlignment="Stretch"
+                                    Click="OnLoadSubtitleClick">
+                                <StackPanel Orientation="Horizontal"
+                                            Spacing="8"
+                                            HorizontalAlignment="Center">
+                                    <FontIcon Glyph="&#xE710;" FontSize="14" />
+                                    <TextBlock Text="加载字幕…" />
+                                </StackPanel>
+                            </Button>
+                        </StackPanel>
+                    </Border>
+
+                    <Border Style="{StaticResource CardBorderStyle}" Padding="12">
+                        <StackPanel Spacing="10">
+                            <Grid>
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                    <FontIcon Glyph="&#xE916;" FontSize="14" Foreground="{ThemeResource SecondaryTextBrush}" />
+                                    <TextBlock Text="位置与时间" Style="{StaticResource SectionTitleStyle}" />
+                                </StackPanel>
+                                <Button Style="{StaticResource CardHeaderButtonStyle}"
+                                        Content="&#xE72C;"
+                                        HorizontalAlignment="Right"
+                                        Tag="subtitle-timing"
+                                        Click="OnResetClick"
+                                        ToolTipService.ToolTip="重置字幕位置" />
+                            </Grid>
+
+                            <StackPanel Spacing="2">
+                                <Grid>
+                                    <TextBlock Text="延迟（秒）" Style="{StaticResource BodyTextStyle}" />
+                                    <TextBlock x:Name="SubtitleDelayText"
+                                               HorizontalAlignment="Right"
+                                               Style="{StaticResource CaptionTextStyle}" />
+                                </Grid>
+                                <Slider x:Name="SubtitleDelaySlider"
+                                        Minimum="-30"
+                                        Maximum="30"
+                                        StepFrequency="0.1"
+                                        ValueChanged="OnSliderValueChanged" />
+                            </StackPanel>
+
+                            <StackPanel Spacing="2">
+                                <Grid>
+                                    <TextBlock Text="垂直位置" Style="{StaticResource BodyTextStyle}" />
+                                    <TextBlock x:Name="SubtitlePositionText"
+                                               HorizontalAlignment="Right"
+                                               Style="{StaticResource CaptionTextStyle}" />
+                                </Grid>
+                                <Slider x:Name="SubtitlePositionSlider"
+                                        Minimum="0"
+                                        Maximum="150"
+                                        StepFrequency="1"
+                                        ValueChanged="OnSliderValueChanged" />
+                            </StackPanel>
+
+                            <StackPanel Spacing="2">
+                                <Grid>
+                                    <TextBlock Text="缩放" Style="{StaticResource BodyTextStyle}" />
+                                    <TextBlock x:Name="SubtitleScaleText"
+                                               HorizontalAlignment="Right"
+                                               Style="{StaticResource CaptionTextStyle}" />
+                                </Grid>
+                                <Slider x:Name="SubtitleScaleSlider"
+                                        Minimum="0.5"
+                                        Maximum="2"
+                                        StepFrequency="0.05"
+                                        ValueChanged="OnSliderValueChanged" />
+                            </StackPanel>
+                        </StackPanel>
+                    </Border>
+
+                    <Border Style="{StaticResource CardBorderStyle}" Padding="12">
+                        <StackPanel Spacing="10">
+                            <Grid>
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                    <FontIcon Glyph="&#xE8D2;" FontSize="14" Foreground="{ThemeResource SecondaryTextBrush}" />
+                                    <TextBlock Text="样式" Style="{StaticResource SectionTitleStyle}" />
+                                </StackPanel>
+                                <Button Style="{StaticResource CardHeaderButtonStyle}"
+                                        Content="&#xE72C;"
+                                        HorizontalAlignment="Right"
+                                        Tag="subtitle-style"
+                                        Click="OnResetClick"
+                                        ToolTipService.ToolTip="重置字幕样式" />
+                            </Grid>
+
+                            <Grid ColumnSpacing="12">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="字号" Style="{StaticResource BodyTextStyle}" />
+                                <NumberBox x:Name="SubtitleFontSizeBox"
+                                           Grid.Column="1"
+                                           Width="110"
+                                           Minimum="8"
+                                           Maximum="120"
+                                           SmallChange="2"
+                                           ValueChanged="OnNumberBoxChanged" />
+                            </Grid>
+
+                            <Grid ColumnSpacing="12">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="颜色" Style="{StaticResource BodyTextStyle}" />
+                                <ComboBox x:Name="SubtitleColorBox"
+                                          Grid.Column="1"
+                                          Width="140"
+                                          SelectionChanged="OnComboChanged" />
+                            </Grid>
+
+                            <Grid ColumnSpacing="12">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="边框" Style="{StaticResource BodyTextStyle}" />
+                                <NumberBox x:Name="SubtitleBorderBox"
+                                           Grid.Column="1"
+                                           Width="110"
+                                           Minimum="0"
+                                           Maximum="10"
+                                           SmallChange="1"
+                                           ValueChanged="OnNumberBoxChanged" />
+                            </Grid>
+
+                            <TextBlock x:Name="SubtitleStyleWarning"
+                                       Style="{StaticResource CaptionTextStyle}"
+                                       TextWrapping="Wrap"
+                                       Visibility="Collapsed" />
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+            </Grid>
+        </ScrollViewer>
+    </Grid>
+</UserControl>

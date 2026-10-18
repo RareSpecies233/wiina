@@ -54,24 +54,33 @@ public sealed partial class MainWindow : Window
     private readonly DispatcherQueueTimer _autoHideTimer;
     private readonly OscVisibilityController _oscState = new();
     private readonly OscViewModel _oscVm = new();
+    private readonly SidebarState _sidebar = new();
     private AppSettings _settings;
     private MpvPlayer? _player;
     private nint _swapChain;
     private bool _started;
-    private bool _sidebarVisible;
     private bool _compact;
+    private bool _titleBarVisible = true;
+    private bool _sidebarResizing;
+    private bool _updatingSidebar;
     private bool _oscDragging;
     private bool _seeking;
     private bool _wasPlayingBeforeSeek;
     private bool _chromeShown = true;
     private bool _pointerOverChrome;
     private bool? _animationsEnabled;
+    private DispatcherQueueTimer? _settingsSaveTimer;
     private Point _oscDragStart;
     private Point _oscOrigin;
     private IReadOnlyList<ChapterInfo> _chapters = Array.Empty<ChapterInfo>();
     private double _videoAspect = 16.0 / 9.0;
+    private int _videoWidth;
+    private int _videoHeight;
+    private string? _currentAudioDevice;
 
-    private bool AnimationsEnabled
+    private bool AnimationsEnabled => _settings.AnimationsEnabled && SystemAnimationsEnabled;
+
+    private bool SystemAnimationsEnabled
     {
         get
         {
@@ -152,8 +161,6 @@ public sealed partial class MainWindow : Window
         TitleBar.ThemeClicked += (_, _) => CycleTheme();
         TitleBar.IconsClicked += async (_, _) => await ShowIconDialogAsync();
         TitleBar.WindowClicked += (_, _) => ShowWindowMenu();
-        SidebarLeading.CloseClicked += (_, _) => HideSidebar();
-        SidebarTrailing.CloseClicked += (_, _) => HideSidebar();
 
         VideoHost.Loaded += OnVideoHostLoaded;
         VideoFrame.SizeChanged += OnVideoFrameSizeChanged;
@@ -163,12 +170,14 @@ public sealed partial class MainWindow : Window
 
         ApplySettings();
         InitializeStage3();
+        InitializeSidebar();
     }
 
     private void ApplySettings()
     {
         ApplyTheme();
         ApplyLayout();
+        _oscState.AutoHideEnabled = _settings.OscAutoHide;
 
         if (AppWindow.Presenter is OverlappedPresenter presenter)
         {
@@ -243,6 +252,8 @@ public sealed partial class MainWindow : Window
             timeline.SetChapters(_oscVm.Chapters);
             timeline.SetAbLoop(_oscVm.AbLoopA ?? 0, _oscVm.AbLoopB ?? 0);
         }
+
+        UpdateSidebarProgress();
     }
 
     private void OnSeekStarted()
@@ -402,7 +413,8 @@ public sealed partial class MainWindow : Window
             !_oscState.AutoHideEnabled ||
             _oscDragging ||
             _seeking ||
-            _sidebarVisible ||
+            _sidebarResizing ||
+            HasVisibleSidebar ||
             _pointerOverChrome)
         {
             return;
@@ -687,24 +699,6 @@ public sealed partial class MainWindow : Window
         SaveSettings();
     }
 
-    private void ShowSettingsSidebar()
-    {
-        _settings.SidebarSide = SidebarSide.Trailing;
-        _sidebarVisible = true;
-        _autoHideTimer.Stop();
-        ShowChrome();
-        ApplyLayout();
-    }
-
-    private void ShowPlaylistSidebar()
-    {
-        _settings.SidebarSide = SidebarSide.Trailing;
-        _sidebarVisible = true;
-        _autoHideTimer.Stop();
-        ShowChrome();
-        ApplyLayout();
-    }
-
     private void SetOscPosition(OscPosition position)
     {
         _settings.OscPosition = position;
@@ -738,7 +732,16 @@ public sealed partial class MainWindow : Window
         AddSubItem(oscMenu, "顶部", () => SetOscPosition(OscPosition.Top));
         flyout.Items.Add(oscMenu);
 
-        AddItem("侧边栏", ToggleSidebar);
+        AddItem("快速设置侧栏 (Ctrl+Shift+S)", ShowSettingsSidebar);
+        AddItem("播放列表侧栏 (Ctrl+Shift+B)", ShowPlaylistSidebar);
+        AddItem("章节侧栏", ShowChaptersSidebar);
+        AddItem("插件侧栏（Stage 9）", ShowPluginsSidebar);
+
+        var sideMenu = new MenuFlyoutSubItem { Text = "侧边栏位置" };
+        AddSubItem(sideMenu, "左侧", () => MoveSidebarTo(SidebarSide.Leading));
+        AddSubItem(sideMenu, "右侧", () => MoveSidebarTo(SidebarSide.Trailing));
+        flyout.Items.Add(sideMenu);
+
         AddItem("主题", CycleTheme);
         AddItem("置顶", TogglePin);
 
@@ -808,6 +811,8 @@ public sealed partial class MainWindow : Window
                     break;
                 case "volume":
                     _oscVm.SetVolumeFromPlayer(value);
+                    _settings.Volume = QuickSettings.ClampVolume(value, _settings.MaxVolume);
+                    SyncSidebarVolume();
                     break;
                 case "demuxer-cache-time":
                     _oscVm.SetBufferFromPlayer(value);
@@ -834,6 +839,8 @@ public sealed partial class MainWindow : Window
                     break;
                 case "mute":
                     _oscVm.SetMutedFromPlayer(value);
+                    _settings.Muted = value;
+                    SyncSidebarVolume();
                     break;
                 default:
                     OnStage3FlagProperty(name, value);
@@ -900,6 +907,8 @@ public sealed partial class MainWindow : Window
 
         ShowChrome();
         OnMediaLoadedStage3();
+        RefreshSidebarContent();
+        ApplyCropFromSettings();
     }
 
     private void ApplyTheme()
@@ -950,11 +959,13 @@ public sealed partial class MainWindow : Window
             visible = false;
         }
 
+        _titleBarVisible = visible;
         AppWindow.TitleBar.PreferredHeightOption = visible
             ? TitleBarHeightOption.Standard
             : TitleBarHeightOption.Collapsed;
         TitleBar.Visibility = Visibility.Visible;
         OscTop.Margin = new Thickness(0, visible ? 40 : 0, 0, 0);
+        UpdateSidebarMargins();
     }
 
     private void TrySetBackdrop()
@@ -972,7 +983,15 @@ public sealed partial class MainWindow : Window
 
     private void ApplyLayout()
     {
-        _compact = RootGrid.ActualWidth > 0 && RootGrid.ActualWidth < 420;
+        _compact = RootGrid.ActualWidth > 0 &&
+            RootGrid.ActualWidth < SidebarState.CompactWindowWidth;
+        if (_compact)
+        {
+            CollapseSidebarsInstant();
+        }
+
+        UpdateSidebarMargins();
+
         bool docked = _settings.Layout == WindowLayoutMode.Docked;
         Grid.SetRow(VideoFrame, docked ? 1 : 0);
         Grid.SetRowSpan(VideoFrame, docked ? 1 : 3);
@@ -988,35 +1007,27 @@ public sealed partial class MainWindow : Window
              (docked && _settings.OscPosition == OscPosition.Floating));
         OscBottom.Visibility = useBottomOsc ? Visibility.Visible : Visibility.Collapsed;
 
-        bool sidebarVisible = !_compact && _sidebarVisible;
-        OscFloating.Visibility = !docked && !_compact && !sidebarVisible && !topOsc &&
+        bool sidebarVisible = !_compact && HasVisibleSidebar;
+        bool showLeading = sidebarVisible && _sidebar.IsVisible(SidebarSide.Leading);
+        bool showTrailing = sidebarVisible && _sidebar.IsVisible(SidebarSide.Trailing);
+
+        // The floating OSC stays available while a sidebar is open (the sidebar
+        // suppresses auto-hide rather than hiding the controls); it is kept
+        // inside the free area so it never sits under the panel.
+        OscFloating.Visibility = !docked && !_compact && !topOsc &&
             _settings.OscPosition == OscPosition.Floating
             ? Visibility.Visible
             : Visibility.Collapsed;
         OscFloating.SetAvailableWidth(RootGrid.ActualWidth);
 
-        bool showLeading = sidebarVisible &&
-            _settings.SidebarSide == SidebarSide.Leading;
-        bool showTrailing = sidebarVisible &&
-            _settings.SidebarSide == SidebarSide.Trailing;
-        SidebarLeading.Visibility = showLeading ? Visibility.Visible : Visibility.Collapsed;
-        SidebarTrailing.Visibility = showTrailing ? Visibility.Visible : Visibility.Collapsed;
-        _oscState.IsSuppressed = sidebarVisible;
+        _oscState.IsSuppressed = sidebarVisible || _sidebarResizing;
 
-        double sidebarTop = _settings.OscPosition == OscPosition.Top ? 70 : 40;
-        SidebarLeading.Margin = new Thickness(0, sidebarTop, 0, 0);
-        SidebarTrailing.Margin = new Thickness(0, sidebarTop, 0, 0);
-
-        double left = docked && showLeading ? _settings.SidebarWidth : 0;
-        double right = docked && showTrailing ? _settings.SidebarWidth : 0;
-        Thickness chromeMargin = new(left, 0, right, 0);
-
-        VideoFrame.Margin = docked ? chromeMargin : new Thickness(0);
-        TitleBar.Margin = new Thickness(0);
-
-        // The bottom bar spans the full window; the sidebar overlays its right
-        // edge in docked mode. Stage 4 will make the fragments compress.
-        OscBottom.Margin = new Thickness(0);
+        UpdateDockedInsets();
+        OscCanvas.Margin = new Thickness(
+            showLeading ? _sidebar.Width : 0,
+            0,
+            showTrailing ? _sidebar.Width : 0,
+            0);
 
         if (docked)
         {
@@ -1030,8 +1041,6 @@ public sealed partial class MainWindow : Window
         }
 
         FadeChrome(_chromeShown ? 1 : 0, _chromeShown);
-        _resizeTimer.Stop();
-        _resizeTimer.Start();
         ApplyOscPosition();
         ResetAutoHideTimer();
     }
@@ -1072,7 +1081,8 @@ public sealed partial class MainWindow : Window
 
     private void UpdateCompactState()
     {
-        bool compact = RootGrid.ActualWidth > 0 && RootGrid.ActualWidth < 420;
+        bool compact = RootGrid.ActualWidth > 0 &&
+            RootGrid.ActualWidth < SidebarState.CompactWindowWidth;
         if (compact == _compact)
         {
             return;
@@ -1119,6 +1129,7 @@ public sealed partial class MainWindow : Window
             _player.Start(width, height);
             _player.ObserveProperty("display-swapchain", MpvFormat.Int64);
             InitializePlayerStage3(_player);
+            ApplyPersistedQuickSettings();
 
             _oscVm.SetDurationFromPlayer(_player.GetPropertyDouble("duration"));
             _oscVm.SetPositionFromPlayer(_player.GetPropertyDouble("time-pos"));
@@ -1241,20 +1252,6 @@ public sealed partial class MainWindow : Window
             OscPosition.Bottom => OscPosition.Top,
             _ => OscPosition.Floating,
         };
-        ApplyLayout();
-        SaveSettings();
-    }
-
-    private void ToggleSidebar()
-    {
-        _sidebarVisible = !_sidebarVisible;
-        ApplyLayout();
-        SaveSettings();
-    }
-
-    private void HideSidebar()
-    {
-        _sidebarVisible = false;
         ApplyLayout();
         SaveSettings();
     }
@@ -1417,6 +1414,9 @@ public sealed partial class MainWindow : Window
         Trace("Window closed");
         _resizeTimer.Stop();
         _autoHideTimer.Stop();
+        _settingsSaveTimer?.Stop();
+        _settings.SidebarWidth = _sidebar.Width;
+        SidebarHost.Log = null;
         WindowInterop.SetCursorVisible(true);
         OnClosedStage3();
         SaveSettings();
