@@ -1,0 +1,64 @@
+# ---- Build output ----
+[Bb]in/
+[Oo]bj/
+artifacts/
+publish/
+*.binlog
+
+# ---- Visual Studio / Rider ----
+.vs/
+.idea/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+*.vcxproj.filters
+*.VC.db
+*.VC.opendb
+
+# ---- WinUI / MSIX ----
+*.pri
+*.xbf
+AppPackages/
+BundleArtifacts/
+Package.StoreAssociation.xml
+*.appx
+*.appxbundle
+*.msix
+*.msixbundle
+
+# ---- Local reference checkouts (not part of the product) ----
+repo/
+.scratch/
+
+# ---- Third-party native binaries (fetched by tools/fetch-libmpv.ps1) ----
+third_party/libmpv/
+third_party/mpv/
+runtime/
+
+# ---- Test media (copyrighted/large; use your own files) ----
+test-media/
+*.mkv
+*.mp4
+*.mov
+*.avi
+*.webm
+*.m4a
+*.flac
+*.wav
+
+# ---- Logs / local data ----
+*.log
+logs/
+crashdumps/
+
+# ---- OS noise ----
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ---- Secrets ----
+*.pfx
+*.snk
+.env
+.env.*
