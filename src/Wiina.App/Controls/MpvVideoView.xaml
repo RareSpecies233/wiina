@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<UserControl
+    x:Class="Wiina.App.Controls.MpvVideoView"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!-- The panel is laid out at the physical buffer size and scaled back by
+         1/dpi. mpv owns the DXGI composition swapchain; this control only
+         attaches/detaches it so the surface can move between the main window
+         and the PiP window. -->
+    <SwapChainPanel x:Name="VideoPanel"
+                    HorizontalAlignment="Left"
+                    VerticalAlignment="Top">
+        <SwapChainPanel.RenderTransform>
+            <CompositeTransform x:Name="VideoTransform" />
+        </SwapChainPanel.RenderTransform>
+    </SwapChainPanel>
+</UserControl>

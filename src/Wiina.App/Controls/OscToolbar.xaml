@@ -5,10 +5,11 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
 
     <StackPanel Orientation="Horizontal" Spacing="1" VerticalAlignment="Center">
-        <Button Style="{StaticResource OscIconButtonStyle}"
+        <Button x:Name="PipButton"
+                Style="{StaticResource OscIconButtonStyle}"
                 Content="&#xE8B9;"
-                IsEnabled="False"
-                ToolTipService.ToolTip="画中画（Stage 6）"
+                Click="OnPipClick"
+                ToolTipService.ToolTip="画中画 (Ctrl+Shift+P)"
                 AutomationProperties.Name="画中画" />
         <Button Style="{StaticResource OscIconButtonStyle}"
                 Content="&#xE8FD;"

@@ -50,7 +50,6 @@ public sealed partial class MainWindow : Window
         ("AppIcon", "\uE8B7"),
     };
 
-    private readonly SettingsStore _settingsStore = new();
     private readonly DispatcherQueueTimer _resizeTimer;
     private readonly DispatcherQueueTimer _autoHideTimer;
     private readonly OscVisibilityController _oscState = new();
@@ -60,6 +59,7 @@ public sealed partial class MainWindow : Window
     private MpvPlayer? _player;
     private nint _swapChain;
     private bool _started;
+    private bool _closed;
     private bool _compact;
     private bool _titleBarVisible = true;
     private bool _sidebarResizing;
@@ -120,9 +120,15 @@ public sealed partial class MainWindow : Window
     }
 
     public MainWindow()
+        : this(Array.Empty<string>())
     {
+    }
+
+    public MainWindow(IReadOnlyList<string> startupPaths)
+    {
+        _startupPaths = startupPaths;
         InitializeComponent();
-        _settings = _settingsStore.Load();
+        _settings = App.Settings;
 
         Title = "Wiina";
         ExtendsContentIntoTitleBar = true;
@@ -167,12 +173,18 @@ public sealed partial class MainWindow : Window
         VideoFrame.SizeChanged += OnVideoFrameSizeChanged;
         RootGrid.SizeChanged += OnRootSizeChanged;
         RootGrid.Loaded += OnRootLoaded;
+        Activated += (_, _) =>
+        {
+            RootGrid.Focus(FocusState.Programmatic);
+            App.ActivateWindow(this);
+        };
         Closed += OnClosed;
 
         ApplySettings();
         InitializeStage3();
         InitializeSidebar();
         InitializeStage5();
+        InitializeStage6();
     }
 
     private void ApplySettings()
@@ -207,6 +219,9 @@ public sealed partial class MainWindow : Window
         OscFloating.Toolbar.MoreClicked += OnMoreClicked;
         OscBottom.Toolbar.MoreClicked += OnMoreClicked;
         OscTop.Toolbar.MoreClicked += OnMoreClicked;
+        OscFloating.Toolbar.PipClicked += (_, _) => TogglePip();
+        OscBottom.Toolbar.PipClicked += (_, _) => TogglePip();
+        OscTop.Toolbar.PipClicked += (_, _) => TogglePip();
 
         OscFloating.DragHandle.PointerPressed += OnOscDragStart;
         OscFloating.DragHandle.PointerMoved += OnOscDragMove;
@@ -291,11 +306,21 @@ public sealed partial class MainWindow : Window
 
     private void OnRootPointerEntered(object sender, PointerRoutedEventArgs e)
     {
+        if (_mode.Current != PlayerMode.Normal)
+        {
+            return;
+        }
+
         ShowChrome();
     }
 
     private void OnRootPointerMoved(object sender, PointerRoutedEventArgs e)
     {
+        if (_mode.Current != PlayerMode.Normal)
+        {
+            return;
+        }
+
         Point point = e.GetCurrentPoint(RootGrid).Position;
         _pointerOverChrome = IsOverChrome(point);
 
@@ -322,6 +347,12 @@ public sealed partial class MainWindow : Window
 
     private void OnRootPointerExited(object sender, PointerRoutedEventArgs e)
     {
+        if (_mode.Current != PlayerMode.Normal)
+        {
+            _pointerOverChrome = false;
+            return;
+        }
+
         // Root PointerExited also fires when the pointer moves between child
         // elements; only a real window exit should hide the chrome.
         if (WindowInterop.IsCursorInsideWindow(this))
@@ -364,6 +395,11 @@ public sealed partial class MainWindow : Window
 
     private void ShowChrome()
     {
+        if (_mode.Current != PlayerMode.Normal)
+        {
+            return;
+        }
+
         if (!_chromeShown)
         {
             _chromeShown = true;
@@ -378,6 +414,11 @@ public sealed partial class MainWindow : Window
 
     private void HideChrome(bool force = false)
     {
+        if (_mode.Current != PlayerMode.Normal)
+        {
+            return;
+        }
+
         if (_settings.Layout == WindowLayoutMode.Docked)
         {
             // Docked titlebar/bottom bar are part of the layout: never fade
@@ -410,7 +451,8 @@ public sealed partial class MainWindow : Window
     private void ResetAutoHideTimer()
     {
         _autoHideTimer.Stop();
-        if (_settings.Layout == WindowLayoutMode.Docked ||
+        if (_mode.Current != PlayerMode.Normal ||
+            _settings.Layout == WindowLayoutMode.Docked ||
             !_oscState.AutoHideEnabled ||
             _oscDragging ||
             _seeking ||
@@ -426,6 +468,11 @@ public sealed partial class MainWindow : Window
 
     private void FadeChrome(double opacity, bool hitTest)
     {
+        if (_mode.Current != PlayerMode.Normal)
+        {
+            return;
+        }
+
         if (_settings.Layout == WindowLayoutMode.Docked)
         {
             opacity = 1;
@@ -792,6 +839,12 @@ public sealed partial class MainWindow : Window
 
         AddItem("主题", CycleTheme);
         AddItem("置顶", TogglePin);
+        AddItem("全屏 / 退出全屏", EnterFullscreenFromMenu);
+        AddItem("画中画", TogglePip);
+        AddItem("迷你播放器 / 音乐模式", ToggleMini);
+        AddItem("新建窗口", NewWindow);
+        AddItem("在新窗口打开…", () => _ = OpenInNewWindowAsync());
+        AddItem("关闭当前窗口", CloseCurrentWindow);
         AddItem("技术信息 OSD", TogglePersistentOsd);
 
         var windowMenu = new MenuFlyoutSubItem { Text = "窗口尺寸" };
@@ -819,26 +872,7 @@ public sealed partial class MainWindow : Window
 
     private void ToggleFullscreen()
     {
-        if (AppWindow.Presenter.Kind == AppWindowPresenterKind.FullScreen)
-        {
-            AppWindow.SetPresenter(AppWindowPresenterKind.Overlapped);
-        }
-        else
-        {
-            AppWindow.SetPresenter(AppWindowPresenterKind.FullScreen);
-        }
-
-        SyncFullscreenState();
-        if (AppWindow.Presenter.Kind == AppWindowPresenterKind.FullScreen)
-        {
-            SetTitleBarVisible(false);
-        }
-        else
-        {
-            SetTitleBarVisible(_chromeShown);
-        }
-
-        DispatcherQueue.TryEnqueue(ApplyVideoLayout);
+        RequestMode(IsFullscreen ? PlayerMode.Normal : PlayerMode.Fullscreen);
     }
 
     private void SyncFullscreenState()
@@ -1020,7 +1054,7 @@ public sealed partial class MainWindow : Window
     /// </summary>
     private void SetTitleBarVisible(bool visible)
     {
-        if (AppWindow.Presenter.Kind == AppWindowPresenterKind.FullScreen)
+        if (AppWindow.Presenter.Kind == AppWindowPresenterKind.FullScreen || InMiniMode)
         {
             visible = false;
         }
@@ -1049,6 +1083,18 @@ public sealed partial class MainWindow : Window
 
     private void ApplyLayout()
     {
+        if (InMiniMode)
+        {
+            ApplyMiniLayout();
+            return;
+        }
+
+        if (InPipMode)
+        {
+            ApplyPipMainLayout();
+            return;
+        }
+
         _compact = RootGrid.ActualWidth > 0 &&
             RootGrid.ActualWidth < SidebarState.CompactWindowWidth;
         if (_compact)
@@ -1089,6 +1135,7 @@ public sealed partial class MainWindow : Window
         _oscState.IsSuppressed = sidebarVisible || _sidebarResizing;
 
         UpdateDockedInsets();
+        OscCanvas.Visibility = Visibility.Visible;
         OscCanvas.Margin = new Thickness(
             showLeading ? _sidebar.Width : 0,
             0,
@@ -1126,7 +1173,8 @@ public sealed partial class MainWindow : Window
             285,
             120,
             () => _settings.LockAspectRatio,
-            () => _videoAspect);
+            () => _videoAspect,
+            OnAppCommand);
 
         if (RootGrid.XamlRoot is { } xamlRoot)
         {
@@ -1134,7 +1182,7 @@ public sealed partial class MainWindow : Window
         }
 
         RootGrid.Focus(FocusState.Programmatic);
-        InitializeSmtc();
+        UpdateSmtc();
     }
 
     private void OnVideoFrameSizeChanged(object sender, SizeChangedEventArgs e)
@@ -1243,7 +1291,14 @@ public sealed partial class MainWindow : Window
             _swapChain = (nint)swapChain;
             try
             {
-                SwapChainPanelInterop.SetSwapChain(VideoHost, _swapChain);
+                if (InPipMode && _pipWindow is { } pip)
+                {
+                    pip.AttachSwapChain(_swapChain);
+                }
+                else
+                {
+                    VideoHost.Attach(_swapChain);
+                }
             }
             catch (Exception ex)
             {
@@ -1255,6 +1310,14 @@ public sealed partial class MainWindow : Window
     private void ApplyVideoLayout()
     {
         UpdateCompactState();
+
+        // While the swapchain lives in the PiP window the main surface must not
+        // resize it; the PiP window owns the composition size for now.
+        if (InPipMode)
+        {
+            return;
+        }
+
         double dpi = VideoFrame.XamlRoot?.RasterizationScale ?? 1.0;
         double dipWidth = VideoFrame.ActualWidth;
         double dipHeight = VideoFrame.ActualHeight;
@@ -1266,12 +1329,7 @@ public sealed partial class MainWindow : Window
         int pixelWidth = Math.Max(1, (int)Math.Round(dipWidth * dpi));
         int pixelHeight = Math.Max(1, (int)Math.Round(dipHeight * dpi));
 
-        VideoHost.Width = pixelWidth;
-        VideoHost.Height = pixelHeight;
-
-        float inverse = (float)(1.0 / dpi);
-        VideoTransform.ScaleX = inverse;
-        VideoTransform.ScaleY = inverse;
+        VideoHost.SetBufferSize(pixelWidth, pixelHeight, dpi);
 
         VideoFrame.Clip = new RectangleGeometry
         {
@@ -1300,12 +1358,22 @@ public sealed partial class MainWindow : Window
     private void TogglePin()
     {
         _settings.AlwaysOnTop = !_settings.AlwaysOnTop;
-        if (AppWindow.Presenter is OverlappedPresenter presenter)
+        TitleBar.IsPinned = _settings.AlwaysOnTop;
+
+        if (InMiniMode)
         {
-            presenter.IsAlwaysOnTop = _settings.AlwaysOnTop;
+            SetTopmost(_settings.AlwaysOnTop);
+            ShowOsd(_settings.AlwaysOnTop ? "迷你播放器：置顶已开启" : "迷你播放器：置顶已关闭");
+        }
+        else if (IsFullscreen)
+        {
+            ShowOsd("全屏中，置顶设置将在退出全屏后生效");
+        }
+        else
+        {
+            SetTopmost(_settings.AlwaysOnTop);
         }
 
-        TitleBar.IsPinned = _settings.AlwaysOnTop;
         SaveSettings();
     }
 
@@ -1380,11 +1448,22 @@ public sealed partial class MainWindow : Window
     private void ShowWindowMenu()
     {
         var flyout = new MenuFlyout();
+        AddItem("新建窗口 (Ctrl+N)", NewWindow);
+        AddItem("在新窗口打开… (Ctrl+Shift+N)", () => _ = OpenInNewWindowAsync());
+        AddItem("关闭当前窗口 (Ctrl+W)", CloseCurrentWindow);
+        flyout.Items.Add(new MenuFlyoutSeparator());
         AddItem("0.5×", () => ResizeToScale(0.5));
         AddItem("1×", () => ResizeToScale(1.0));
         AddItem("2×", () => ResizeToScale(2.0));
         flyout.Items.Add(new MenuFlyoutSeparator());
         AddItem("适合屏幕", FitToScreen);
+        AddItem("全屏 / 退出全屏 (F11)", EnterFullscreenFromMenu);
+        AddItem("画中画 (Ctrl+Shift+P)", () => RequestMode(
+            _mode.Current == PlayerMode.PiP ? PlayerMode.Normal : PlayerMode.PiP));
+        AddItem("迷你播放器 (Ctrl+Shift+M)", () => RequestMode(
+            _mode.Current == PlayerMode.Mini ? PlayerMode.Normal : PlayerMode.Mini));
+        flyout.Items.Add(new MenuFlyoutSeparator());
+        AddItem(_settings.AlwaysOnTop ? "取消置顶" : "置顶", TogglePin);
         flyout.ShowAt(TitleBar);
 
         void AddItem(string text, Action action)
@@ -1432,12 +1511,17 @@ public sealed partial class MainWindow : Window
 
     private void OnEscape(KeyboardAccelerator sender, KeyboardAcceleratorInvokedEventArgs args)
     {
+        if (_mode.Current != PlayerMode.Normal)
+        {
+            args.Handled = true;
+            RequestMode(PlayerMode.Normal);
+            return;
+        }
+
         if (AppWindow.Presenter.Kind == AppWindowPresenterKind.FullScreen)
         {
             args.Handled = true;
-            AppWindow.SetPresenter(AppWindowPresenterKind.Overlapped);
-            SyncFullscreenState();
-            DispatcherQueue.TryEnqueue(ApplyVideoLayout);
+            RequestMode(PlayerMode.Normal);
         }
     }
 
@@ -1469,13 +1553,18 @@ public sealed partial class MainWindow : Window
     {
         try
         {
-            SizeInt32 size = AppWindow.Size;
-            PointInt32 position = AppWindow.Position;
-            _settings.WindowWidth = size.Width;
-            _settings.WindowHeight = size.Height;
-            _settings.WindowX = position.X;
-            _settings.WindowY = position.Y;
-            _settingsStore.Save(_settings);
+            if (!InMiniMode && !IsFullscreen)
+            {
+                SizeInt32 size = AppWindow.Size;
+                PointInt32 position = AppWindow.Position;
+                _settings.WindowWidth = size.Width;
+                _settings.WindowHeight = size.Height;
+                _settings.WindowX = position.X;
+                _settings.WindowY = position.Y;
+            }
+
+            _settings.SidebarWidth = _sidebar.Width;
+            App.SaveSettings();
         }
         catch (Exception ex)
         {
@@ -1486,31 +1575,36 @@ public sealed partial class MainWindow : Window
     private void OnClosed(object sender, WindowEventArgs args)
     {
         Trace("Window closed");
+        _closed = true;
+        App.SettingsChanged -= OnSharedSettingsChanged;
         _resizeTimer.Stop();
         _autoHideTimer.Stop();
         _settingsSaveTimer?.Stop();
         _settings.SidebarWidth = _sidebar.Width;
         SidebarHost.Log = null;
         WindowInterop.SetCursorVisible(true);
-        OnClosedStage3();
-        DisposeStage5();
-        SaveSettings();
-        WindowInterop.Detach(this);
 
-        if (_swapChain != 0)
+        if (_pipWindow is { } pip)
         {
+            _pipWindow = null;
             try
             {
-                SwapChainPanelInterop.SetSwapChain(VideoHost, 0);
+                pip.DetachSwapChain();
+                pip.CloseFromMain();
             }
             catch
             {
                 // Window is going away.
             }
-
-            _swapChain = 0;
         }
 
+        OnClosedStage3();
+        DisposeStage5();
+        SaveSettings();
+        WindowInterop.Detach(this);
+
+        VideoHost.Detach();
+        _swapChain = 0;
         _player?.Dispose();
         _player = null;
     }

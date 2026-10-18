@@ -21,7 +21,10 @@ public sealed class SmtcService : IDisposable
     public event Action? NextRequested;
     public event Action? PreviousRequested;
 
-    public bool Initialize(Window window)
+    /// <summary>Seek requested from the system transport timeline (seconds).</summary>
+    public event Action<double>? SeekRequested;
+
+    public bool Initialize(Window? window = null)
     {
         if (_initialized)
         {
@@ -44,6 +47,7 @@ public sealed class SmtcService : IDisposable
             _controls.IsPreviousEnabled = true;
             _controls.PlaybackStatus = MediaPlaybackStatus.Stopped;
             _controls.ButtonPressed += OnButtonPressed;
+            _controls.PlaybackPositionChangeRequested += OnPlaybackPositionChangeRequested;
             return true;
         }
         catch
@@ -119,6 +123,17 @@ public sealed class SmtcService : IDisposable
         }
     }
 
+    private void OnPlaybackPositionChangeRequested(
+        SystemMediaTransportControls sender,
+        PlaybackPositionChangeRequestedEventArgs args)
+    {
+        double seconds = args.RequestedPlaybackPosition.TotalSeconds;
+        if (double.IsFinite(seconds) && seconds >= 0)
+        {
+            SeekRequested?.Invoke(seconds);
+        }
+    }
+
     public void Dispose()
     {
         if (_controls is null)
@@ -129,6 +144,7 @@ public sealed class SmtcService : IDisposable
         try
         {
             _controls.ButtonPressed -= OnButtonPressed;
+            _controls.PlaybackPositionChangeRequested -= OnPlaybackPositionChangeRequested;
             _controls.IsEnabled = false;
         }
         catch

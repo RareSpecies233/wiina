@@ -18,7 +18,8 @@ public sealed record TrackInfo(
     string? Codec = null,
     bool IsDefault = false,
     bool IsSelected = false,
-    bool IsExternal = false)
+    bool IsExternal = false,
+    bool IsAlbumArt = false)
 {
     public string DisplayName
     {

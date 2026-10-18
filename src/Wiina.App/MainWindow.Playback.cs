@@ -39,7 +39,6 @@ public sealed partial class MainWindow
     private readonly List<MpvPlaylistItem> _playlistItems = new();
     private readonly List<string> _pendingSubtitles = new();
 
-    private SmtcService? _smtc;
     private DispatcherQueueTimer? _clickTimer;
     private DispatcherQueueTimer? _suppressClickTimer;
     private DispatcherQueueTimer? _historyTimer;
@@ -59,7 +58,6 @@ public sealed partial class MainWindow
     private bool _windowDragCandidate;
     private bool _windowDragging;
     private bool _suppressClick;
-    private bool _smtcInitialized;
     private bool _chapterChangeOsc;
     private bool _wantSubtitleSelection;
     private Point _dragStartPoint;
@@ -130,31 +128,7 @@ public sealed partial class MainWindow
         player.VideoSizeChanged += OnVideoSizeChanged;
         player.FileLoadFailed += OnFileLoadFailed;
         player.CommandFailed += OnCommandFailed;
-    }
-
-    private void InitializeSmtc()
-    {
-        if (_smtcInitialized)
-        {
-            return;
-        }
-
-        _smtcInitialized = true;
-        _smtc = new SmtcService();
-        if (!_smtc.Initialize(this))
-        {
-            _smtc.Dispose();
-            _smtc = null;
-            Trace("SystemMediaTransportControls unavailable");
-            return;
-        }
-
-        _smtc.PlayRequested += () => DispatcherQueue.TryEnqueue(() => PlayOrPause(true));
-        _smtc.PauseRequested += () => DispatcherQueue.TryEnqueue(() => PlayOrPause(false));
-        _smtc.StopRequested += () => DispatcherQueue.TryEnqueue(StopPlayback);
-        _smtc.NextRequested += () => DispatcherQueue.TryEnqueue(PlaylistNext);
-        _smtc.PreviousRequested += () => DispatcherQueue.TryEnqueue(PlaylistPrevious);
-        UpdateSmtc();
+        player.MetadataChanged += OnMetadataChanged;
     }
 
     private void OnClosedStage3()
@@ -169,18 +143,16 @@ public sealed partial class MainWindow
         _historyTimer?.Stop();
         _clickTimer?.Stop();
         _suppressClickTimer?.Stop();
-        _smtc?.Dispose();
-        _smtc = null;
     }
 
     // ---------------------------------------------------------------- opening
 
     private void OpenStartupMedia()
     {
-        Trace($"startup paths ({App.StartupPaths.Count}): {string.Join(" | ", App.StartupPaths)}");
-        if (App.StartupPaths.Count > 0)
+        Trace($"startup paths ({_startupPaths.Count}): {string.Join(" | ", _startupPaths)}");
+        if (_startupPaths.Count > 0)
         {
-            OpenPaths(App.StartupPaths);
+            OpenPaths(_startupPaths);
             return;
         }
 
@@ -576,6 +548,7 @@ public sealed partial class MainWindow
         }
 
         _resumeApplied = false;
+        _autoMiniPath = null;
         _abLoopStage = 0;
         _abLoopA = 0;
         _abLoopB = 0;
@@ -1243,6 +1216,9 @@ public sealed partial class MainWindow
             }
 
             RefreshSidebarTracks();
+            UpdateAlbumArtState();
+            MaybeAutoEnterMini();
+            UpdateMiniPlayerState();
         });
     }
 
@@ -1274,6 +1250,7 @@ public sealed partial class MainWindow
             }
 
             RefreshSidebarPlaylist();
+            UpdateMiniPlaylist();
         });
     }
 
@@ -1283,6 +1260,7 @@ public sealed partial class MainWindow
         {
             _currentPlaylistIndex = position;
             UpdateSidebarPlaylistPosition(position);
+            UpdateMiniPlaylist();
         });
     }
 
@@ -1309,9 +1287,25 @@ public sealed partial class MainWindow
         });
     }
 
-    private void OnVideoSizeChanged(int width, int height)
+    private void OnMetadataChanged(IReadOnlyDictionary<string, string> metadata)
     {
-        if (width <= 0 || height <= 0)
+        DispatcherQueue.TryEnqueue(() =>
+        {
+            _artist = metadata.TryGetValue("artist", out string? artist) ? artist : null;
+            _album = metadata.TryGetValue("album", out string? album) ? album : null;
+            if (metadata.TryGetValue("title", out string? title) &&
+                !string.IsNullOrWhiteSpace(title))
+            {
+                _currentTitle = title;
+                SetWindowTitle(title);
+            }
+
+            UpdateMiniPlayerState();
+        });
+    }
+
+    private void OnVideoSizeChanged(int width, int height)
+    {        if (width <= 0 || height <= 0)
         {
             return;
         }
@@ -1425,6 +1419,10 @@ public sealed partial class MainWindow
             _resumeApplied = false;
             TryResumePlayback();
             FlushPendingSubtitles();
+            UpdateAlbumArtState();
+            UpdateMiniPlayerState();
+            UpdateMiniPlaylist();
+            MaybeAutoEnterMini();
             UpdateSmtc();
         }
         catch (Exception ex)
@@ -1506,6 +1504,9 @@ public sealed partial class MainWindow
         string resolved = string.IsNullOrWhiteSpace(title) ? "Wiina" : title;
         TitleBar.Title = resolved;
         Title = resolved;
+        App.UpdateWindowTitle(this, resolved);
+        _pipWindow?.SetTitle(resolved);
+        UpdateMiniPlayerState();
     }
 
     private void ShowOsd(string message, string? secondary = null)
@@ -1515,7 +1516,8 @@ public sealed partial class MainWindow
 
     private void UpdateSmtc()
     {
-        _smtc?.Update(
+        App.PublishMediaState(
+            this,
             !string.IsNullOrWhiteSpace(_currentPath),
             _oscVm.IsPlaying,
             _currentTitle,
@@ -1579,6 +1581,28 @@ public sealed partial class MainWindow
         flyout.Items.Add(BuildTrackMenu());
         flyout.Items.Add(BuildSubtitleMenu());
         flyout.Items.Add(BuildPlaylistMenu());
+        flyout.Items.Add(new MenuFlyoutSeparator());
+
+        var modeMenu = new MenuFlyoutSubItem { Text = "窗口模式" };
+        modeMenu.Items.Add(Item(
+            _mode.Current == PlayerMode.Fullscreen ? "退出全屏 (F11)" : "全屏 (F11)",
+            EnterFullscreenFromMenu));
+        modeMenu.Items.Add(Item(
+            _mode.Current == PlayerMode.PiP ? "退出画中画" : "画中画 (Ctrl+Shift+P)",
+            TogglePip));
+        modeMenu.Items.Add(Item(
+            _mode.Current == PlayerMode.Mini ? "退出迷你播放器" : "迷你播放器 (Ctrl+Shift+M)",
+            ToggleMini));
+        modeMenu.Items.Add(Item(
+            _settings.AlwaysOnTop ? "取消置顶" : "置顶",
+            TogglePin,
+            isChecked: _settings.AlwaysOnTop));
+        flyout.Items.Add(modeMenu);
+        flyout.Items.Add(Item("新建窗口 (Ctrl+N)", NewWindow));
+        flyout.Items.Add(Item(
+            "在新窗口打开… (Ctrl+Shift+N)",
+            () => _ = OpenInNewWindowAsync()));
+        flyout.Items.Add(Item("关闭当前窗口 (Ctrl+W)", CloseCurrentWindow));
         flyout.Items.Add(new MenuFlyoutSeparator());
 
         flyout.Items.Add(Item("截图", CaptureScreenshot, "Ctrl+S"));
@@ -2022,11 +2046,11 @@ public sealed partial class MainWindow
         PlayerActions.SpeedReset => "速度复位",
         PlayerActions.ToggleFullscreen => "全屏",
         PlayerActions.ExitFullscreen => "退出全屏",
-        PlayerActions.PictureInPicture => "画中画（占位）",
+        PlayerActions.PictureInPicture => "画中画",
         PlayerActions.Sidebar => "侧边栏",
         PlayerActions.SidebarSettings => "快速设置侧栏",
         PlayerActions.Layout => "布局切换",
-        PlayerActions.MusicMode => "音乐模式（占位）",
+        PlayerActions.MusicMode => "音乐模式",
         PlayerActions.Theme => "主题切换",
         PlayerActions.OscPosition => "OSC 位置",
         PlayerActions.LoopMode => "循环模式",
@@ -2045,6 +2069,9 @@ public sealed partial class MainWindow
         PlayerActions.WindowDouble => "窗口 2×",
         PlayerActions.WindowShrink => "缩小窗口",
         PlayerActions.WindowGrow => "放大窗口",
+        PlayerActions.NewWindow => "新建窗口",
+        PlayerActions.OpenInNewWindow => "在新窗口打开",
+        PlayerActions.CloseWindow => "关闭当前窗口",
         PlayerActions.Quit => "退出",
         _ => action,
     };
@@ -2199,16 +2226,16 @@ public sealed partial class MainWindow
                 ToggleFullscreen();
                 return true;
             case PlayerActions.ExitFullscreen:
-                if (AppWindow.Presenter.Kind == AppWindowPresenterKind.FullScreen)
+                if (_mode.Current != PlayerMode.Normal ||
+                    AppWindow.Presenter.Kind == AppWindowPresenterKind.FullScreen)
                 {
-                    AppWindow.SetPresenter(AppWindowPresenterKind.Overlapped);
-                    SyncFullscreenState();
-                    DispatcherQueue.TryEnqueue(ApplyVideoLayout);
+                    RequestMode(PlayerMode.Normal);
                 }
 
                 return true;
             case PlayerActions.PictureInPicture:
-                ShowOsd("画中画将在 Stage 6 提供");
+                RequestMode(
+                    _mode.Current == PlayerMode.PiP ? PlayerMode.Normal : PlayerMode.PiP);
                 return true;
             case PlayerActions.Sidebar:
                 ToggleSidebar();
@@ -2220,7 +2247,8 @@ public sealed partial class MainWindow
                 ToggleLayout();
                 return true;
             case PlayerActions.MusicMode:
-                ShowOsd("音乐模式将在 Stage 6 提供");
+                RequestMode(
+                    _mode.Current == PlayerMode.Mini ? PlayerMode.Normal : PlayerMode.Mini);
                 return true;
             case PlayerActions.Theme:
                 CycleTheme();
@@ -2275,6 +2303,15 @@ public sealed partial class MainWindow
                 return true;
             case PlayerActions.WindowGrow:
                 ScaleWindow(1.1);
+                return true;
+            case PlayerActions.NewWindow:
+                NewWindow();
+                return true;
+            case PlayerActions.OpenInNewWindow:
+                _ = OpenInNewWindowAsync();
+                return true;
+            case PlayerActions.CloseWindow:
+                CloseCurrentWindow();
                 return true;
             case PlayerActions.Quit:
                 Close();
@@ -2440,6 +2477,12 @@ public sealed partial class MainWindow
 
     private void OnVideoPointerWheelChanged(object sender, PointerRoutedEventArgs e)
     {
+        // Mini mode handles its own wheel-to-volume bubble; PiP has no video.
+        if (_mode.Current != PlayerMode.Normal)
+        {
+            return;
+        }
+
         Point point = e.GetCurrentPoint(RootGrid).Position;
         if (IsOverChrome(point))
         {

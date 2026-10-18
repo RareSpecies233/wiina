@@ -26,6 +26,18 @@
         <Setter Property="FontSize" Value="14" />
     </Style>
 
+    <Style x:Key="MiniIconButtonStyle" TargetType="Button">
+        <Setter Property="Width" Value="30" />
+        <Setter Property="Height" Value="30" />
+        <Setter Property="Padding" Value="0" />
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="CornerRadius" Value="15" />
+        <Setter Property="Foreground" Value="{ThemeResource PrimaryTextBrush}" />
+        <Setter Property="FontFamily" Value="{StaticResource IconFont}" />
+        <Setter Property="FontSize" Value="15" />
+    </Style>
+
     <Style x:Key="PanelBorderStyle" TargetType="Border">
         <Setter Property="Background" Value="{ThemeResource PanelBrush}" />
         <Setter Property="BorderBrush" Value="{ThemeResource PanelBorderBrush}" />

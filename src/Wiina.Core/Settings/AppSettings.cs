@@ -116,6 +116,20 @@ public sealed class AppSettings
 
     public bool AlwaysOnTop { get; set; }
 
+    // ---- Stage 6: modes, PiP, mini/music mode, multi-window ----
+
+    /// <summary>Audio-only files enter mini/music mode automatically.</summary>
+    public bool AutoSwitchToMusicMode { get; set; } = true;
+
+    /// <summary>Last mini-player playlist panel state (spec §10.4).</summary>
+    public bool MusicModeShowPlaylist { get; set; }
+
+    /// <summary>Last PiP window width in physical pixels (16:9 is enforced).</summary>
+    public int PipWidth { get; set; } = 480;
+
+    /// <summary>Last PiP window height in physical pixels (16:9 is enforced).</summary>
+    public int PipHeight { get; set; } = 270;
+
     public bool LockAspectRatio { get; set; } = true;
 
     /// <summary>Floating OSC centre X as a 0..1 fraction of the video area.</summary>

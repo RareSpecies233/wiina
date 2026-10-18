@@ -50,3 +50,27 @@ public enum SingleClickAction
     Fullscreen,
     None,
 }
+
+/// <summary>
+/// Window presentation modes owned by <see cref="State.ModeStateMachine"/>.
+/// Exactly one mode is active at a time (mutual exclusion).
+/// </summary>
+public enum PlayerMode
+{
+    Normal,
+    Fullscreen,
+    PiP,
+    Mini,
+}
+
+/// <summary>Transport command routed from SMTC / media keys to a window.</summary>
+public enum MediaCommand
+{
+    Play,
+    Pause,
+    TogglePlayPause,
+    Stop,
+    Next,
+    Previous,
+    Seek,
+}

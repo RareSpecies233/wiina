@@ -96,6 +96,9 @@ public sealed class MpvPlayer : IDisposable
     /// <summary>Raised with the parsed <c>playlist</c> node.</summary>
     public event Action<IReadOnlyList<MpvPlaylistItem>>? PlaylistChanged;
 
+    /// <summary>Raised with the parsed <c>metadata</c> map (title/artist/album).</summary>
+    public event Action<IReadOnlyDictionary<string, string>>? MetadataChanged;
+
     /// <summary>Raised with the parsed <c>audio-device-list</c> node.</summary>
     public event Action<IReadOnlyList<MpvAudioDevice>>? AudioDeviceListChanged;
 
@@ -335,6 +338,7 @@ public sealed class MpvPlayer : IDisposable
         TryObserveProperty("playlist-count", MpvFormat.Int64);
         TryObserveProperty("playlist-current-pos", MpvFormat.Int64);
         TryObserveProperty("video-params", MpvFormat.Node);
+        TryObserveProperty("metadata", MpvFormat.Node);
         TryObserveProperty("shuffle", MpvFormat.Flag);
         TryObserveProperty("loop-playlist", MpvFormat.String);
         TryObserveProperty("sub-visibility", MpvFormat.Flag);
@@ -755,6 +759,27 @@ public sealed class MpvPlayer : IDisposable
 
                     break;
                 }
+
+                case "metadata":
+                {
+                    MpvNodeValue? node = MpvNodeValue.Read(data);
+                    var metadata = new Dictionary<string, string>(
+                        StringComparer.OrdinalIgnoreCase);
+                    if (node?.MapValue is not null)
+                    {
+                        foreach ((string key, MpvNodeValue value) in node.MapValue)
+                        {
+                            string? text = value.AsString();
+                            if (!string.IsNullOrWhiteSpace(text))
+                            {
+                                metadata[key] = text;
+                            }
+                        }
+                    }
+
+                    MetadataChanged?.Invoke(metadata);
+                    break;
+                }
             }
         }
         catch (Exception ex)
@@ -800,7 +825,9 @@ public sealed class MpvPlayer : IDisposable
                 item["codec"]?.AsString(),
                 item["default"]?.AsFlag() ?? false,
                 item["selected"]?.AsFlag() ?? false,
-                item["external"]?.AsFlag() ?? false));
+                item["external"]?.AsFlag() ?? false,
+                (item["image"]?.AsFlag() ?? false) ||
+                (item["albumart"]?.AsFlag() ?? false)));
         }
 
         return tracks;

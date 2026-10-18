@@ -16,10 +16,15 @@ public sealed partial class OscToolbar : UserControl
 
     public event EventHandler? MoreClicked;
 
+    public event EventHandler? PipClicked;
+
     public Microsoft.UI.Xaml.FrameworkElement MoreAnchor => MoreButton;
 
     private void OnMoreClick(object sender, Microsoft.UI.Xaml.RoutedEventArgs e) =>
         MoreClicked?.Invoke(this, EventArgs.Empty);
+
+    private void OnPipClick(object sender, Microsoft.UI.Xaml.RoutedEventArgs e) =>
+        PipClicked?.Invoke(this, EventArgs.Empty);
 
     private void OnDataContextChanged(object sender, Microsoft.UI.Xaml.DataContextChangedEventArgs e)
     {

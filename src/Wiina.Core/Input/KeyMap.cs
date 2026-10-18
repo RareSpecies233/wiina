@@ -53,6 +53,9 @@ public static class PlayerActions
     public const string WindowDouble = "window-double";
     public const string WindowShrink = "window-shrink";
     public const string WindowGrow = "window-grow";
+    public const string NewWindow = "new-window";
+    public const string OpenInNewWindow = "open-in-new-window";
+    public const string CloseWindow = "close-window";
     public const string Quit = "quit";
 }
 
@@ -173,6 +176,7 @@ public sealed class KeyMap
         map.TryBind("F11", PlayerActions.ToggleFullscreen);
         map.TryBind("Esc", PlayerActions.ExitFullscreen);
         map.TryBind("Ctrl+Shift+P", PlayerActions.PictureInPicture);
+        map.TryBind("Ctrl+P", PlayerActions.PictureInPicture);
         map.TryBind("Ctrl+Shift+B", PlayerActions.Sidebar);
         map.TryBind("Ctrl+Shift+S", PlayerActions.SidebarSettings);
         map.TryBind("Ctrl+Shift+L", PlayerActions.Layout);
@@ -184,6 +188,9 @@ public sealed class KeyMap
         map.TryBind("Ctrl+2", PlayerActions.WindowDouble);
         map.TryBind("Ctrl+-", PlayerActions.WindowShrink);
         map.TryBind("Ctrl+Plus", PlayerActions.WindowGrow);
+        map.TryBind("Ctrl+N", PlayerActions.NewWindow);
+        map.TryBind("Ctrl+Shift+N", PlayerActions.OpenInNewWindow);
+        map.TryBind("Ctrl+W", PlayerActions.CloseWindow);
         map.TryBind("Q", PlayerActions.Quit);
         map.TryBind("Ctrl+Q", PlayerActions.Quit);
 

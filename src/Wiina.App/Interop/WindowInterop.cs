@@ -12,6 +12,17 @@ internal static class WindowInterop
     private const uint WM_GETMINMAXINFO = 0x0024;
     private const uint WM_SIZING = 0x0214;
     private const uint WM_NCHITTEST = 0x0084;
+    private const uint WM_APPCOMMAND = 0x0319;
+
+    /// <summary>APPCOMMAND_* values carried by WM_APPCOMMAND (media keys).</summary>
+    public const int AppCommandMediaNextTrack = 11;
+    public const int AppCommandMediaPreviousTrack = 12;
+    public const int AppCommandMediaStop = 13;
+    public const int AppCommandMediaPlayPause = 14;
+    public const int AppCommandMediaPlay = 46;
+    public const int AppCommandMediaPause = 47;
+    public const int AppCommandMediaFastForward = 49;
+    public const int AppCommandMediaRewind = 50;
     private const int HTCLIENT = 1;
     private const int LeftEdge = 1;
     private const int RightEdge = 2;
@@ -86,7 +97,8 @@ internal static class WindowInterop
         int minWidthDip,
         int minHeightDip,
         Func<bool> lockAspect,
-        Func<double> aspect)
+        Func<double> aspect,
+        Func<int, bool>? appCommand = null)
     {
         nint hwnd = Microsoft.UI.Win32Interop.GetWindowFromWindowId(window.AppWindow.Id);
         if (Hooks.ContainsKey(hwnd))
@@ -99,7 +111,8 @@ internal static class WindowInterop
             minWidthDip,
             minHeightDip,
             lockAspect,
-            aspect);
+            aspect,
+            appCommand);
         Hooks[hwnd] = hook;
         hook.Attach();
     }
@@ -201,6 +214,7 @@ internal static class WindowInterop
         private readonly int _minHeightDip;
         private readonly Func<bool> _lockAspect;
         private readonly Func<double> _aspect;
+        private readonly Func<int, bool>? _appCommand;
         private readonly SubclassProc _proc;
 
         public Hook(
@@ -208,13 +222,15 @@ internal static class WindowInterop
             int minWidthDip,
             int minHeightDip,
             Func<bool> lockAspect,
-            Func<double> aspect)
+            Func<double> aspect,
+            Func<int, bool>? appCommand)
         {
             _hwnd = hwnd;
             _minWidthDip = minWidthDip;
             _minHeightDip = minHeightDip;
             _lockAspect = lockAspect;
             _aspect = aspect;
+            _appCommand = appCommand;
             _proc = WndProc;
         }
 
@@ -230,6 +246,16 @@ internal static class WindowInterop
             nuint uIdSubclass,
             nint dwRefData)
         {
+            if (msg == WM_APPCOMMAND && _appCommand is not null)
+            {
+                // GET_APPCOMMAND_LPARAM: HIWORD without the FAPPCOMMAND flag.
+                int command = (int)(((long)lParam >> 16) & 0x0FFF);
+                if (_appCommand(command))
+                {
+                    return 1;
+                }
+            }
+
             if (msg == WM_GETMINMAXINFO)
             {
                 MINMAXINFO info = Marshal.PtrToStructure<MINMAXINFO>(lParam);
