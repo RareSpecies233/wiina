@@ -43,6 +43,18 @@ public sealed partial class TitleBarView : UserControl
     public event EventHandler? IconsClicked;
     public event EventHandler? WindowClicked;
     public event EventHandler? MoreClicked;
+    public event EventHandler? MinimizeRequested;
+    public event EventHandler? MaximizeRequested;
+    public event EventHandler? CloseRequested;
+
+    private void OnMinimizeClick(object sender, RoutedEventArgs e) =>
+        MinimizeRequested?.Invoke(this, EventArgs.Empty);
+
+    private void OnMaximizeClick(object sender, RoutedEventArgs e) =>
+        MaximizeRequested?.Invoke(this, EventArgs.Empty);
+
+    private void OnCloseClick(object sender, RoutedEventArgs e) =>
+        CloseRequested?.Invoke(this, EventArgs.Empty);
 
     public string Title
     {

@@ -128,10 +128,16 @@ public partial class App : Application
     {
         try
         {
-            CreateWindow(StartupPaths);
+            // Welcome is a standalone launcher: do not create an empty player
+            // window behind it. A player window is created only when the user
+            // opens media (or when the welcome experience is disabled).
             if (StartupPaths.Count == 0 && Settings.ShowWelcomeWindow)
             {
                 ShowWelcomeWindow();
+            }
+            else
+            {
+                CreateWindow(StartupPaths);
             }
         }
         catch (Exception ex)
@@ -358,6 +364,13 @@ public partial class App : Application
             {
                 _welcomeWindow = null;
             }
+
+            // Closing the launcher without opening media exits the app; if a
+            // player/settings window exists, keep running normally.
+            if (CurrentApp._windows.Count == 0 && _settingsWindow is null)
+            {
+                window.DispatcherQueue.TryEnqueue(() => CurrentApp.Exit());
+            }
         };
         window.Activate();
     }
@@ -478,12 +491,23 @@ public partial class App : Application
         if (newWindow)
         {
             OpenInNewWindow(list);
+            HideWelcomeWindow();
             return;
         }
 
-        MainWindow window = ActiveWindow ?? CreateWindow();
-        window.Activate();
-        window.OpenExternalPaths(list);
+        if (ActiveWindow is { } active)
+        {
+            active.Activate();
+            HideWelcomeWindow();
+            active.OpenExternalPaths(list);
+            return;
+        }
+
+        // Create the player with the paths already attached. Opening them on a
+        // just-constructed empty window races the VideoHost/mpv initialization.
+        MainWindow created = CreateWindow(list);
+        created.Activate();
+        HideWelcomeWindow();
     }
 
     public static void OpenFolder(string path)

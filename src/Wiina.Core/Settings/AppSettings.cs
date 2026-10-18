@@ -8,7 +8,7 @@ namespace Wiina.Core.Settings;
 /// User settings persisted to %LOCALAPPDATA%\Wiina\settings.json.
 /// Stage 1 uses only the window/OSC/theme subset; later stages add more.
 /// </summary>
-public sealed class AppSettings
+public sealed partial class AppSettings
 {
     public ThemeMode Theme { get; set; } = ThemeMode.Dark;
 

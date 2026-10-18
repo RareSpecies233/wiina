@@ -7,7 +7,7 @@
     xmlns:local="using:Wiina.App.Controls">
 
     <Grid>
-        <Border x:Name="TranslucentBackground" Background="{ThemeResource TitleBarBrush}" />
+        <Border x:Name="TranslucentBackground" Background="{ThemeResource TitleBarAcrylicBrush}" />
         <Border x:Name="OpaqueBackground"
                 Background="{ThemeResource TitleBarOpaqueBrush}"
                 Visibility="Collapsed" />
@@ -96,6 +96,44 @@
                             Click="OnMoreClick"
                             loc:Loc.ToolTip="ui.moreActions"
                             loc:Loc.AutomationName="ui.more" />
+                </StackPanel>
+
+                <!-- Custom Fluent window controls over the acrylic titlebar.
+                     System caption buttons are collapsed because DWM paints an
+                     opaque backing behind them in an extended titlebar. -->
+                <StackPanel x:Name="WindowControlPanel"
+                            Grid.Column="2"
+                            Orientation="Horizontal"
+                            HorizontalAlignment="Right"
+                            VerticalAlignment="Top"
+                            Height="40">
+                    <Button Width="46"
+                            Height="40"
+                            Padding="0"
+                            Background="Transparent"
+                            Style="{StaticResource TitleBarButtonStyle}"
+                            Content="&#xE921;"
+                            Click="OnMinimizeClick"
+                            ToolTipService.ToolTip="最小化"
+                            AutomationProperties.Name="最小化" />
+                    <Button Width="46"
+                            Height="40"
+                            Padding="0"
+                            Background="Transparent"
+                            Style="{StaticResource TitleBarButtonStyle}"
+                            Content="&#xE922;"
+                            Click="OnMaximizeClick"
+                            ToolTipService.ToolTip="最大化"
+                            AutomationProperties.Name="最大化" />
+                    <Button Width="46"
+                            Height="40"
+                            Padding="0"
+                            Background="Transparent"
+                            Style="{StaticResource TitleBarButtonStyle}"
+                            Content="&#xE8BB;"
+                            Click="OnCloseClick"
+                            ToolTipService.ToolTip="关闭"
+                            AutomationProperties.Name="关闭" />
                 </StackPanel>
             </Grid>
 

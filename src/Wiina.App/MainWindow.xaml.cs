@@ -162,6 +162,10 @@ public sealed partial class MainWindow : Window
         OscBottom.DataContext = _oscVm;
         OscTop.DataContext = _oscVm;
         TitleBar.SetOscDataContext(_oscVm);
+        TitleBar.MinimizeRequested += (_, _) =>
+            (AppWindow.Presenter as OverlappedPresenter)?.Minimize();
+        TitleBar.MaximizeRequested += (_, _) => ToggleMaximize();
+        TitleBar.CloseRequested += (_, _) => Close();
         SubscribeOsc();
 
         TitleBar.Title = "Wiina";
@@ -986,14 +990,11 @@ public sealed partial class MainWindow : Window
         bar.ExtendsContentIntoTitleBar = true;
 
         bool dark = RootGrid.ActualTheme != ElementTheme.Light;
-        Color background = dark
-            ? Color.FromArgb(0xCC, 0x10, 0x11, 0x14)
-            : Color.FromArgb(0xCC, 0xF3, 0xF3, 0xF3);
 
-        bar.BackgroundColor = background;
-        bar.InactiveBackgroundColor = background;
-        bar.ButtonBackgroundColor = background;
-        bar.ButtonInactiveBackgroundColor = background;
+        bar.BackgroundColor = Colors.Transparent;
+        bar.InactiveBackgroundColor = Colors.Transparent;
+        bar.ButtonBackgroundColor = Colors.Transparent;
+        bar.ButtonInactiveBackgroundColor = Colors.Transparent;
         bar.ButtonForegroundColor = dark ? Colors.White : Colors.Black;
         bar.ButtonInactiveForegroundColor = dark ? Colors.Gray : Colors.DimGray;
         bar.ButtonHoverBackgroundColor = dark
@@ -1017,24 +1018,50 @@ public sealed partial class MainWindow : Window
         }
 
         _titleBarVisible = visible;
-        AppWindow.TitleBar.PreferredHeightOption = visible
-            ? TitleBarHeightOption.Standard
-            : TitleBarHeightOption.Collapsed;
+        // System caption buttons are always collapsed: DWM paints an opaque
+        // backing behind them in an extended titlebar. The custom WinUI
+        // controls in TitleBarView provide the native-looking window buttons.
+        AppWindow.TitleBar.PreferredHeightOption = TitleBarHeightOption.Collapsed;
         TitleBar.Visibility = Visibility.Visible;
         OscTop.Margin = new Thickness(0, visible ? 40 : 0, 0, 0);
         UpdateSidebarMargins();
+    }
+
+    private void ToggleMaximize()
+    {
+        if (AppWindow.Presenter is not OverlappedPresenter presenter)
+        {
+            return;
+        }
+
+        if (presenter.State == OverlappedPresenterState.Maximized)
+        {
+            presenter.Restore();
+        }
+        else
+        {
+            presenter.Maximize();
+        }
     }
 
     private void TrySetBackdrop()
     {
         try
         {
-            SystemBackdrop = new MicaBackdrop();
+            // Windows Terminal-style acrylic; Mica is the fallback on systems
+            // where DesktopAcrylicBackdrop is unavailable.
+            SystemBackdrop = new DesktopAcrylicBackdrop();
         }
         catch
         {
-            // Mica is unavailable on Windows 10 / some VMs; the solid
-            // background remains a valid fallback.
+            try
+            {
+                SystemBackdrop = new MicaBackdrop();
+            }
+            catch
+            {
+                // Solid background remains a valid fallback.
+            }
         }
     }
 

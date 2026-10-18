@@ -32,7 +32,7 @@ public sealed partial class MainWindow
     /// <summary>Rebuilds the per-window lookup from the persisted key bindings.</summary>
     public void RebuildKeyMap()
     {
-        _keyMap = KeyBindings.BuildKeyMap(_settings.KeyBindings);
+        _keyMap = KeyBindings.BuildKeyMap(_settings.KeyBindings, _settings.KeyBindingProfile);
     }
 
     public void ToggleTechnicalOsd() => TogglePersistentOsd();

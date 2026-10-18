@@ -6,7 +6,7 @@
     xmlns:loc="using:Wiina.App.Localization"
     xmlns:local="using:Wiina.App.Controls">
 
-    <Border Background="{ThemeResource PanelBrush}"
+    <Border Background="{ThemeResource OscAcrylicBrush}"
             BorderBrush="{ThemeResource PanelBorderBrush}"
             BorderThickness="0,1,0,0"
             Height="64">

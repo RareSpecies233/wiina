@@ -19,6 +19,17 @@
                           TintOpacity="0.45"
                           TintLuminosityOpacity="0.4"
                           FallbackColor="#CC15171B" />
+            <AcrylicBrush x:Key="TitleBarAcrylicBrush"
+                          TintColor="#FF101114"
+                          TintOpacity="0.3"
+                          TintLuminosityOpacity="0.25"
+                          FallbackColor="#B3101114" />
+            <AcrylicBrush x:Key="OscAcrylicBrush"
+                          TintColor="#FF101114"
+                          TintOpacity="0.38"
+                          TintLuminosityOpacity="0.3"
+                          FallbackColor="#CC101114" />
+            <SolidColorBrush x:Key="WindowTintBrush" Color="#B3101114" />
             <SolidColorBrush x:Key="CardBrush" Color="#14FFFFFF" />
             <SolidColorBrush x:Key="CardBorderBrush" Color="#1FFFFFFF" />
             <SolidColorBrush x:Key="PrimaryTextBrush" Color="#FFFFFFFF" />
@@ -55,6 +66,17 @@
                           TintOpacity="0.5"
                           TintLuminosityOpacity="0.45"
                           FallbackColor="#CCFFFFFF" />
+            <AcrylicBrush x:Key="TitleBarAcrylicBrush"
+                          TintColor="#FFF3F3F3"
+                          TintOpacity="0.35"
+                          TintLuminosityOpacity="0.3"
+                          FallbackColor="#B3F3F3F3" />
+            <AcrylicBrush x:Key="OscAcrylicBrush"
+                          TintColor="#FFF3F3F3"
+                          TintOpacity="0.42"
+                          TintLuminosityOpacity="0.35"
+                          FallbackColor="#CCF3F3F3" />
+            <SolidColorBrush x:Key="WindowTintBrush" Color="#B3F3F3F3" />
             <SolidColorBrush x:Key="CardBrush" Color="#CCFFFFFF" />
             <SolidColorBrush x:Key="CardBorderBrush" Color="#14000000" />
             <SolidColorBrush x:Key="PrimaryTextBrush" Color="#E4000000" />
@@ -89,6 +111,9 @@
             <SolidColorBrush x:Key="ThumbnailBorderBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
             <SolidColorBrush x:Key="StatusBackgroundBrush" Color="{ThemeResource SystemColorWindowColor}" />
             <SolidColorBrush x:Key="SidebarAcrylicBrush" Color="{ThemeResource SystemColorWindowColor}" />
+            <SolidColorBrush x:Key="TitleBarAcrylicBrush" Color="{ThemeResource SystemColorWindowColor}" />
+            <SolidColorBrush x:Key="OscAcrylicBrush" Color="{ThemeResource SystemColorWindowColor}" />
+            <SolidColorBrush x:Key="WindowTintBrush" Color="{ThemeResource SystemColorWindowColor}" />
             <SolidColorBrush x:Key="CardBrush" Color="{ThemeResource SystemColorWindowColor}" />
             <SolidColorBrush x:Key="CardBorderBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
             <SolidColorBrush x:Key="PrimaryTextBrush" Color="{ThemeResource SystemColorWindowTextColor}" />

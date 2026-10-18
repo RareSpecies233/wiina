@@ -16,11 +16,13 @@ using Wiina.App.Interop;
 using Wiina.App.Localization;
 using Wiina.App.Views;
 using Wiina.App.Services;
+using Wiina.Core.Audio;
 using Wiina.Core.Files;
 using Wiina.Core.History;
 using Wiina.Core.Input;
 using Wiina.Core.Models;
 using Wiina.Core.Osd;
+using Wiina.Core.Subtitles;
 using Wiina.Core.Text;
 using Wiina.Mpv;
 using DispatcherQueueTimer = Microsoft.UI.Dispatching.DispatcherQueueTimer;
@@ -62,6 +64,9 @@ public sealed partial class MainWindow
     private bool _suppressClick;
     private bool _chapterChangeOsc;
     private bool _wantSubtitleSelection;
+    private int _smartLoadGeneration;
+    private string? _autoLoadedSubtitlePath;
+    private string? _autoLoadedAudioPath;
     private Point _dragStartPoint;
     private int _dragStartCursorX;
     private int _dragStartCursorY;
@@ -1143,6 +1148,277 @@ public sealed partial class MainWindow
         _pendingSubtitles.Clear();
     }
 
+    // ------------------------------------------------------ smart sidecars
+
+    /// <summary>
+    /// Starts background sidecar discovery for the freshly loaded file. The
+    /// pure filesystem lookup runs off the UI thread; the (small) apply step is
+    /// marshalled back and re-validated so a fast next/previous cannot load a
+    /// stale subtitle or audio track.
+    /// </summary>
+    private void ScheduleSmartSidecarLoad(string? path, bool hadPendingSubtitles)
+    {
+        int generation = ++_smartLoadGeneration;
+        _autoLoadedSubtitlePath = null;
+        _autoLoadedAudioPath = null;
+        if (string.IsNullOrWhiteSpace(path) || IsUrlPath(path))
+        {
+            return;
+        }
+
+        bool findSubtitle = _settings.AutoLoadSmartSubtitles && !hadPendingSubtitles;
+        bool findAudio = _settings.AutoLoadExternalAudio;
+        if (!findSubtitle && !findAudio)
+        {
+            return;
+        }
+
+        string mediaPath = path;
+        string preferred = _settings.PreferredSubtitleLanguage;
+        _ = Task.Run(() =>
+        {
+            SubtitleCandidate? subtitle = null;
+            ExternalAudioCandidate? audio = null;
+            try
+            {
+                if (findSubtitle)
+                {
+                    subtitle = SmartSubtitleFinder.FindBest(mediaPath, preferred);
+                }
+
+                if (findAudio)
+                {
+                    audio = ExternalAudioFinder.FindBest(mediaPath);
+                }
+            }
+            catch (Exception ex)
+            {
+                Trace("sidecar discovery failed: " + ex.Message);
+            }
+
+            if (subtitle is null && audio is null)
+            {
+                Trace("smart sidecar discovery found nothing");
+                return;
+            }
+
+            Trace(
+                $"smart sidecar discovery: subtitle={subtitle?.Path ?? "<none>"} " +
+                $"audio={audio?.Path ?? "<none>"} preferred={preferred}");
+
+            DispatcherQueue.TryEnqueue(() =>
+            {
+                if (generation != _smartLoadGeneration || !IsCurrentMedia(mediaPath))
+                {
+                    return;
+                }
+
+                if (subtitle is not null)
+                {
+                    ApplyAutoSubtitle(subtitle.Path);
+                }
+
+                if (audio is not null)
+                {
+                    ApplyAutoAudio(audio.Path);
+                }
+            });
+        });
+    }
+
+    private void ApplyAutoSubtitle(string path)
+    {
+        if (!_settings.AutoLoadSmartSubtitles || _pendingSubtitles.Count > 0)
+        {
+            return;
+        }
+
+        string fullPath = SafeFullPath(path);
+        if (string.Equals(_autoLoadedSubtitlePath, fullPath, StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        // mpv's sub-auto may already have added this exact sidecar. Select the
+        // existing track instead of adding a duplicate, so the preferred
+        // language still wins when mpv picked a different sidecar first.
+        string fileName = Path.GetFileName(path);
+        string mediaBase = Path.GetFileNameWithoutExtension(_currentPath ?? string.Empty);
+        IReadOnlyList<TrackInfo> tracks = _player?.GetTracks() ?? _trackList;
+        Trace(
+            $"smart subtitle candidate {fileName}; " +
+            "external=" + string.Join(
+                " | ",
+                tracks.Where(track => track.Type == TrackType.Subtitle && track.IsExternal)
+                      .Select(track => $"#{track.Id} '{track.Title}' sel={track.IsSelected}")));
+        TrackInfo? existing = tracks.FirstOrDefault(track =>
+            track.Type == TrackType.Subtitle &&
+            track.IsExternal &&
+            !string.IsNullOrWhiteSpace(track.Title) &&
+            (string.Equals(track.Title, fileName, StringComparison.OrdinalIgnoreCase) ||
+             (mediaBase.Length > 0 &&
+              string.Equals(
+                  fileName,
+                  mediaBase + "." + track.Title,
+                  StringComparison.OrdinalIgnoreCase))));
+        if (existing is not null)
+        {
+            Trace($"smart subtitle use existing sid={existing.Id} selected={existing.IsSelected}");
+            _autoLoadedSubtitlePath = fullPath;
+            if (!existing.IsSelected)
+            {
+                if (_player?.TrySetPropertyString("sid", existing.Id.ToString()) == true)
+                {
+                    ShowOsd(Loc.F("osd.autoSubtitleLoaded", fileName));
+                }
+                else
+                {
+                    Trace($"smart sid switch failed for {path}");
+                }
+            }
+            else
+            {
+                ShowOsd(Loc.F("osd.autoSubtitleLoaded", fileName));
+            }
+
+            return;
+        }
+
+        if (HasSelectedExternalTrack(TrackType.Subtitle))
+        {
+            Trace("smart subtitle skipped: another external subtitle is active");
+            return;
+        }
+
+        _autoLoadedSubtitlePath = fullPath;
+        Trace($"smart sub-add {path}");
+        SendPlayerCommandAsync("sub-add", path, "select");
+        _wantSubtitleSelection = true;
+        ShowOsd(Loc.F("osd.autoSubtitleLoaded", Path.GetFileName(path)));
+    }
+
+    private void ApplyAutoAudio(string path)
+    {
+        if (!_settings.AutoLoadExternalAudio || HasSelectedExternalTrack(TrackType.Audio))
+        {
+            return;
+        }
+
+        string fullPath = SafeFullPath(path);
+        if (string.Equals(_autoLoadedAudioPath, fullPath, StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        _autoLoadedAudioPath = fullPath;
+        Trace($"smart audio-add {path}");
+        AddExternalAudioCore(path, automatic: true);
+    }
+
+    private async Task OpenExternalAudioPickerAsync()
+    {
+        try
+        {
+            var picker = new FileOpenPicker
+            {
+                SuggestedStartLocation = PickerLocationId.VideosLibrary,
+            };
+            foreach (string extension in ExternalAudioFinder.PickerExtensions)
+            {
+                picker.FileTypeFilter.Add(extension);
+            }
+
+            InitializePicker(picker);
+            StorageFile? file = await picker.PickSingleFileAsync();
+            if (file is not null)
+            {
+                AddExternalAudio(file.Path);
+            }
+        }
+        catch (Exception ex)
+        {
+            Trace("open external audio picker failed: " + ex);
+            ShowOsd(Loc.T("osd.loadAudioFailed"), ex.Message);
+        }
+    }
+
+    private void AddExternalAudio(string path)
+    {
+        if (string.IsNullOrWhiteSpace(path) || !File.Exists(path))
+        {
+            ShowOsd(Loc.T("osd.audioFileMissing"), path ?? string.Empty);
+            return;
+        }
+
+        if (!HasMedia())
+        {
+            ShowOsd(Loc.T("osd.noMediaForAudio"));
+            return;
+        }
+
+        _autoLoadedAudioPath = SafeFullPath(path);
+        AddExternalAudioCore(path, automatic: false);
+    }
+
+    private void AddExternalAudioCore(string path, bool automatic)
+    {
+        try
+        {
+            if (_player is not { IsRunning: true })
+            {
+                ShowOsd(Loc.T("osd.loadAudioFailed"));
+                return;
+            }
+
+            _player.Command("audio-add", path, "select");
+        }
+        catch (Exception ex) when (ex is MpvException or InvalidOperationException)
+        {
+            Trace($"audio-add failed, falling back to audio-file: {ex.Message}");
+            if (_player?.TrySetPropertyString("audio-file", path) != true)
+            {
+                ShowOsd(Loc.T("osd.loadAudioFailed"), ex.Message);
+                return;
+            }
+        }
+
+        _autoLoadedAudioPath = SafeFullPath(path);
+        ShowOsd(
+            automatic ? Loc.F("osd.autoAudioLoaded", Path.GetFileName(path))
+                      : Loc.F("osd.externalAudioLoaded", Path.GetFileName(path)));
+    }
+
+    private bool HasSelectedExternalTrack(TrackType type)
+    {
+        IReadOnlyList<TrackInfo> tracks = _player?.GetTracks() ?? _trackList;
+        return tracks.Any(track => track.Type == type && track.IsExternal && track.IsSelected);
+    }
+
+    private bool IsCurrentMedia(string path)
+    {
+        if (string.IsNullOrWhiteSpace(_currentPath))
+        {
+            return false;
+        }
+
+        return string.Equals(
+            SafeFullPath(path),
+            SafeFullPath(_currentPath),
+            StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string SafeFullPath(string path)
+    {
+        try
+        {
+            return Path.GetFullPath(path);
+        }
+        catch (Exception ex) when (ex is ArgumentException or NotSupportedException or PathTooLongException)
+        {
+            return path;
+        }
+    }
+
     // ------------------------------------------------------ event handlers
 
     private void OnTrackListChanged(IReadOnlyList<TrackInfo> tracks)
@@ -1290,6 +1566,9 @@ public sealed partial class MainWindow
         Trace($"file load failed: {error} {message}");
         DispatcherQueue.TryEnqueue(() =>
         {
+            _smartLoadGeneration++;
+            _autoLoadedSubtitlePath = null;
+            _autoLoadedAudioPath = null;
             _pendingSubtitles.Clear();
             TitleBar.Title = Loc.T("osd.openFailedTitle");
             Title = "Wiina";
@@ -1378,7 +1657,9 @@ public sealed partial class MainWindow
 
             _resumeApplied = false;
             TryResumePlayback();
+            bool hadPendingSubtitles = _pendingSubtitles.Count > 0;
             FlushPendingSubtitles();
+            ScheduleSmartSidecarLoad(_currentPath, hadPendingSubtitles);
             UpdateAlbumArtState();
             UpdateMiniPlayerState();
             UpdateMiniPlaylist();

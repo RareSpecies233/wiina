@@ -7,7 +7,7 @@
 >
 
     <Grid x:Name="RootGrid"
-          Background="{ThemeResource AppBackgroundBrush}"
+          Background="{ThemeResource WindowTintBrush}"
           AllowDrop="True"
           DragOver="OnDragOver"
           Drop="OnDropAsync">

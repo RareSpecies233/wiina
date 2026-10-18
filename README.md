@@ -23,6 +23,15 @@ Segoe Fluent Icons、Mica/Acrylic、圆角与系统主题。
   [5](docs/acceptance/stage-5.md) · [6](docs/acceptance/stage-6.md) · [7](docs/acceptance/stage-7.md) ·
   [8](docs/acceptance/stage-8.md)。
 
+### 后续修复：fix/v1-polish
+
+- 无媒体启动只显示**欢迎窗口**；打开媒体后创建播放器并关闭欢迎。
+- 设置窗口默认 **760×600 DIP**，记住大小/位置。
+- 标题栏/OSC/设置使用**亚克力**；主播放器使用 WinUI 自定义窗口按钮，去掉 DWM 的纯色 caption 块。
+- **IINA 智能字幕**：同名字幕自动发现 + 语言优先；**外挂音频**：同名 `.mka` 自动加载 + 手动选择器。
+- **IINA 快捷键方案**：Default / IINA / Custom，可在 Window 菜单切换并持久化。
+- 详细记录：[docs/acceptance/v1-polish.md](docs/acceptance/v1-polish.md)。
+
 ## 关键事实
 
 | 项目 | 决定 |

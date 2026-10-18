@@ -9,6 +9,7 @@
 
     <Border x:Name="DragArea"
             Style="{StaticResource PanelBorderStyle}"
+            Background="{ThemeResource OscAcrylicBrush}"
             Height="64"
             Padding="12,6">
         <Grid>

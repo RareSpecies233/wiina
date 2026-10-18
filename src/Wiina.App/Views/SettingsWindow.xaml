@@ -9,7 +9,7 @@
     <Grid x:Name="RootGrid"
           MinWidth="560"
           MinHeight="420"
-          Background="{ThemeResource AppBackgroundBrush}">
+          Background="{ThemeResource WindowTintBrush}">
         <Grid.Resources>
             <Style x:Key="SettingsNavButtonStyle" TargetType="Button">
                 <Setter Property="Height" Value="34" />

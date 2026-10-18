@@ -119,6 +119,10 @@ public static class SettingsLocalization
         ["utilities.inspector"] = new("Inspector", "Show file/video/audio/subtitle technical properties for the current media.", null),
         ["utilities.about"] = new("About Wiina", "Version, license, mpv, and WinUI information.", null),
         ["utilities.technical-osd"] = new("Technical info OSD", "Toggle the persistent technical info panel in the current playback window.", null),
+        ["subtitles.smart-autoload"] = new("Smart subtitles", "Automatically find sidecar subtitles next to the video and pick the preferred language.", null),
+        ["subtitles.preferred-language"] = new("Preferred subtitle language", "Auto prefers Simplified Chinese, then Traditional Chinese, English, and Japanese.", new[] { "Auto", "Simplified Chinese", "Traditional Chinese", "English", "Japanese" }),
+        ["audio.auto-external"] = new("Auto-load external audio", "Automatically load a same-name .mka next to the video; unrelated audio files are never loaded.", null),
+        ["control.key-profile"] = new("Keyboard profile", "Choose Default, IINA, or Custom. The IINA profile uses common IINA/mpv shortcuts.", new[] { "Default", "IINA", "Custom" }),
     };
 
     private static readonly Dictionary<string, (string Title, string Summary)> EnglishPages = new(StringComparer.Ordinal)
@@ -156,6 +160,7 @@ public static class SettingsLocalization
         ["外观"] = "Appearance",
         ["时间与位置"] = "Position & Timing",
         ["ASS 字幕"] = "ASS Subtitles",
+        ["智能加载"] = "Smart loading",
         ["缓存"] = "Cache",
         ["网络"] = "Network",
         ["鼠标与滚轮"] = "Mouse & Wheel",

@@ -115,6 +115,59 @@ public static class PlayerActionCatalog
             : null;
 }
 
+/// <summary>Picker/editor profiles for the key map.</summary>
+public static class KeyBindingProfiles
+{
+    public const string Default = "Default";
+    public const string Iina = "IINA";
+    public const string Custom = "Custom";
+
+    public static IReadOnlyList<string> All { get; } = new[] { Default, Iina, Custom };
+
+    /// <summary>Normalizes persisted/user values; unknown values fall back to Default.</summary>
+    public static string Normalize(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return Default;
+        }
+
+        if (string.Equals(value.Trim(), Iina, StringComparison.OrdinalIgnoreCase))
+        {
+            return Iina;
+        }
+
+        if (string.Equals(value.Trim(), Custom, StringComparison.OrdinalIgnoreCase))
+        {
+            return Custom;
+        }
+
+        return Default;
+    }
+
+    public static bool IsKnown(string? value) =>
+        value is not null &&
+        (string.Equals(value.Trim(), Default, StringComparison.OrdinalIgnoreCase) ||
+         string.Equals(value.Trim(), Iina, StringComparison.OrdinalIgnoreCase) ||
+         string.Equals(value.Trim(), Custom, StringComparison.OrdinalIgnoreCase));
+
+    public static string Label(string? value) =>
+        Normalize(value) switch
+        {
+            Iina => "IINA",
+            Custom => "自定义",
+            _ => "默认",
+        };
+
+    public static string LabelEnglish(string? value) =>
+        Normalize(value) switch
+        {
+            Iina => "IINA",
+            Custom => "Custom",
+            _ => "Default",
+        };
+}
+
 /// <summary>
 /// Pure key-binding model: defaults, conflict detection, JSON import/export and
 /// conversion to the runtime <see cref="KeyMap"/>. The editor and tests use
@@ -193,9 +246,63 @@ public static class KeyBindings
             new(PlayerActions.SubtitlePositionDown, "T"),
         };
 
+    /// <summary>
+    /// IINA/mpv style profile. It is intentionally a complete replacement map
+    /// (single-key, media-player conventions) rather than a delta on top of the
+    /// default bindings.
+    /// </summary>
+    public static IReadOnlyList<KeyBindingSetting> CreateIinaDefaults() =>
+        new List<KeyBindingSetting>
+        {
+            new(PlayerActions.PlayPause, "Space"),
+            new(PlayerActions.SeekBack5, "Left"),
+            new(PlayerActions.SeekForward5, "Right"),
+            new(PlayerActions.SeekBack1, "Shift+Left"),
+            new(PlayerActions.SeekForward1, "Shift+Right"),
+            new(PlayerActions.VolumeUp5, "Up"),
+            new(PlayerActions.VolumeDown5, "Down"),
+            new(PlayerActions.ToggleFullscreen, "F"),
+            new(PlayerActions.ExitFullscreen, "Esc"),
+            new(PlayerActions.Mute, "M"),
+            // PlayerActions has no audio-track-cycle action; A is the audio
+            // mute key in IINA and mirrors M rather than inventing a new action.
+            new(PlayerActions.Mute, "A"),
+            new(PlayerActions.Screenshot, "S"),
+            new(PlayerActions.Open, "O"),
+            new(PlayerActions.PlaylistNext, "P"),
+            new(PlayerActions.ChapterNext, "C"),
+            new(PlayerActions.SubtitleVisibility, "V"),
+            new(PlayerActions.SpeedHalf, "["),
+            new(PlayerActions.SpeedDouble, "]"),
+            new(PlayerActions.SpeedReset, "Backspace"),
+            new(PlayerActions.SubtitleDelayDecrease, "J"),
+            new(PlayerActions.SubtitleDelayIncrease, "K"),
+            new(PlayerActions.PlaylistPrevious, "Ctrl+Left"),
+            new(PlayerActions.PlaylistNext, "Ctrl+Right"),
+            new(PlayerActions.ChapterPrevious, "Ctrl+PageUp"),
+            new(PlayerActions.ChapterNext, "Ctrl+PageDown"),
+            new(PlayerActions.Settings, "Ctrl+,"),
+            new(PlayerActions.PictureInPicture, "Ctrl+Shift+P"),
+            new(PlayerActions.CloseWindow, "Ctrl+W"),
+            new(PlayerActions.Quit, "Q"),
+        };
+
+    /// <summary>Defaults for a profile (IINA gets its own preset).</summary>
+    public static IReadOnlyList<KeyBindingSetting> CreateProfileDefaults(string? profile) =>
+        KeyBindingProfiles.Normalize(profile) == KeyBindingProfiles.Iina
+            ? CreateIinaDefaults()
+            : CreateDefaults();
+
     /// <summary>Defaults per action (used by the per-action reset button).</summary>
     public static IReadOnlyList<string> DefaultChords(string action) =>
         CreateDefaults()
+            .Where(binding => string.Equals(binding.Action, action, StringComparison.OrdinalIgnoreCase))
+            .Select(binding => binding.Chord)
+            .ToArray();
+
+    /// <summary>Defaults per action within the selected profile.</summary>
+    public static IReadOnlyList<string> DefaultChords(string action, string? profile) =>
+        CreateProfileDefaults(profile)
             .Where(binding => string.Equals(binding.Action, action, StringComparison.OrdinalIgnoreCase))
             .Select(binding => binding.Chord)
             .ToArray();
@@ -206,8 +313,23 @@ public static class KeyBindings
     /// dropped so a hand-edited settings.json cannot break input.
     /// </summary>
     public static IReadOnlyList<KeyBindingSetting> Resolve(
-        IEnumerable<KeyBindingSetting>? stored)
+        IEnumerable<KeyBindingSetting>? stored) =>
+        Resolve(stored, KeyBindingProfiles.Default);
+
+    /// <summary>
+    /// Resolves the active map for a profile. The IINA profile is a fixed,
+    /// complete preset; Default/Custom use the stored bindings (or the built-in
+    /// defaults when nothing valid is stored).
+    /// </summary>
+    public static IReadOnlyList<KeyBindingSetting> Resolve(
+        IEnumerable<KeyBindingSetting>? stored,
+        string? profile)
     {
+        if (KeyBindingProfiles.Normalize(profile) == KeyBindingProfiles.Iina)
+        {
+            return CreateIinaDefaults();
+        }
+
         var resolved = new List<KeyBindingSetting>();
         bool any = false;
         if (stored is not null)
@@ -229,10 +351,14 @@ public static class KeyBindings
     }
 
     /// <summary>Builds a lookup map; later entries win for duplicate chords.</summary>
-    public static KeyMap BuildKeyMap(IEnumerable<KeyBindingSetting>? stored)
+    public static KeyMap BuildKeyMap(IEnumerable<KeyBindingSetting>? stored) =>
+        BuildKeyMap(stored, KeyBindingProfiles.Default);
+
+    /// <summary>Builds a lookup map for the selected profile.</summary>
+    public static KeyMap BuildKeyMap(IEnumerable<KeyBindingSetting>? stored, string? profile)
     {
         var map = new KeyMap();
-        foreach (KeyBindingSetting binding in Resolve(stored))
+        foreach (KeyBindingSetting binding in Resolve(stored, profile))
         {
             if (KeyChord.TryParse(binding.Chord, out KeyChord chord))
             {

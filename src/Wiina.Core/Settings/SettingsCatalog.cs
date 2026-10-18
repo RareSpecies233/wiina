@@ -1,4 +1,5 @@
 using Wiina.Core.Filters;
+using Wiina.Core.Input;
 using Wiina.Core.Localization;
 using Wiina.Core.Models;
 
@@ -469,6 +470,12 @@ public static class SettingsCatalog
             (settings, value) => settings.AudioDevice = string.IsNullOrWhiteSpace(value) ? "auto" : value.Trim(),
             "audio device output 输出 设备"));
         rows.Add(BoolRow(
+            "audio.auto-external", SettingsPageId.Audio, "音量与输出",
+            "自动加载外挂音轨", "自动加载与视频同名的 .mka 音轨；不会加载无关音频文件。",
+            settings => settings.AutoLoadExternalAudio,
+            (settings, value) => settings.AutoLoadExternalAudio = value,
+            "external audio mka 外挂音轨 自动"));
+        rows.Add(BoolRow(
             "audio.equalizer", SettingsPageId.Audio, "均衡器",
             "启用 10 段均衡器", "31 Hz–16 kHz，每段 −12…+12 dB；实时写入 mpv af。",
             settings => settings.EqualizerEnabled,
@@ -588,6 +595,23 @@ public static class SettingsCatalog
             "图像字幕提示", "PGS/VobSub 等位图字幕无法调整字体、颜色与边框；检测到图像字幕时快速设置会显示警告。",
             "image subtitle pgs vobsub warning 图像字幕 警告",
             settings => "PGS/VobSub：样式不可调；ASS/SSA：部分样式由字幕决定"));
+        rows.Add(BoolRow(
+            "subtitles.smart-autoload", SettingsPageId.Subtitles, "智能加载",
+            "智能字幕", "自动查找视频旁边的字幕文件，并按首选语言选择。",
+            settings => settings.AutoLoadSmartSubtitles,
+            (settings, value) => settings.AutoLoadSmartSubtitles = value,
+            "smart subtitle sidecar 自动 字幕 外挂"));
+        string[] subtitleLanguages = { "auto", "zh-Hans", "zh-Hant", "en", "ja" };
+        rows.Add(ChoiceRow(
+            "subtitles.preferred-language", SettingsPageId.Subtitles, "智能加载",
+            "首选字幕语言", "自动时优先简体中文，其次繁体、英语、日语。",
+            new[] { "自动", "简体中文", "繁体中文", "English", "日本語" },
+            settings => IndexOf(settings.PreferredSubtitleLanguage,
+                subtitleLanguages,
+                0),
+            (settings, value) => settings.PreferredSubtitleLanguage =
+                subtitleLanguages[Math.Clamp(value, 0, subtitleLanguages.Length - 1)],
+            "subtitle language preference 字幕 语言 简繁"));
         rows.Add(ActionRow(
             "subtitles.reset", SettingsPageId.Subtitles, "重置",
             "还原字幕设置", "延迟、位置、缩放、字号、字体、颜色与边框恢复默认。",
@@ -675,6 +699,15 @@ public static class SettingsCatalog
             "系统媒体键", "已启用：播放/暂停、停止、上一首、下一首与进度拖动。",
             "media keys smtc 媒体键",
             settings => "已启用（SystemMediaTransportControls）"));
+        string[] keyProfiles = KeyBindingProfiles.All.ToArray();
+        rows.Add(ChoiceRow(
+            "control.key-profile", SettingsPageId.Control, "键盘",
+            "键盘方案", "默认、IINA 或自定义；IINA 使用常见 IINA/mpv 快捷键。",
+            keyProfiles,
+            settings => IndexOf(settings.KeyBindingProfile, keyProfiles, 0),
+            (settings, value) => settings.KeyBindingProfile =
+                keyProfiles[Math.Clamp(value, 0, keyProfiles.Length - 1)],
+            "keyboard profile iina 键盘方案 快捷键"));
         rows.Add(ActionRow(
             "control.reset", SettingsPageId.Control, "重置",
             "还原控制设置", "鼠标动作、滚轮步长与方向恢复默认。",

@@ -62,13 +62,10 @@ internal static class WindowShell
     public static void ConfigureCaptionButtons(Window window, bool dark)
     {
         AppWindowTitleBar bar = window.AppWindow.TitleBar;
-        Color background = dark
-            ? Color.FromArgb(0xCC, 0x10, 0x11, 0x14)
-            : Color.FromArgb(0xCC, 0xF3, 0xF3, 0xF3);
-        bar.BackgroundColor = background;
-        bar.InactiveBackgroundColor = background;
-        bar.ButtonBackgroundColor = background;
-        bar.ButtonInactiveBackgroundColor = background;
+        bar.BackgroundColor = Colors.Transparent;
+        bar.InactiveBackgroundColor = Colors.Transparent;
+        bar.ButtonBackgroundColor = Colors.Transparent;
+        bar.ButtonInactiveBackgroundColor = Colors.Transparent;
         bar.ButtonForegroundColor = dark ? Colors.White : Colors.Black;
         bar.ButtonInactiveForegroundColor = dark ? Colors.Gray : Colors.DimGray;
         bar.ButtonHoverBackgroundColor = dark
@@ -116,11 +113,18 @@ internal static class WindowShell
     {
         try
         {
-            window.SystemBackdrop = new MicaBackdrop();
+            window.SystemBackdrop = new DesktopAcrylicBackdrop();
         }
         catch
         {
-            // Windows 10 / VM fallback: the solid page background remains.
+            try
+            {
+                window.SystemBackdrop = new MicaBackdrop();
+            }
+            catch
+            {
+                // Windows 10 / VM fallback: the solid page background remains.
+            }
         }
     }
 }

@@ -36,10 +36,78 @@ public sealed partial class MainWindow
                 AddMenuDefinition(top.Items, item);
             }
 
+            AppendExtraMenuItems(top, group.Id, state);
             flyout.Items.Add(top);
         }
 
         flyout.ShowAt(anchor);
+    }
+
+    /// <summary>
+    /// Adds post-v1 entries that are window-local instead of living in the
+    /// shared MenuCatalog: external audio and the keyboard profile picker.
+    /// </summary>
+    private void AppendExtraMenuItems(
+        MenuFlyoutSubItem top,
+        string groupId,
+        MenuState state)
+    {
+        if (string.Equals(groupId, "audio", StringComparison.Ordinal))
+        {
+            top.Items.Add(new MenuFlyoutSeparator());
+            var load = new MenuFlyoutItem
+            {
+                Text = Loc.T("menu.loadExternalAudio"),
+                IsEnabled = state.HasMedia,
+            };
+            load.Click += async (_, _) => await OpenExternalAudioPickerAsync();
+            top.Items.Add(load);
+            return;
+        }
+
+        if (!string.Equals(groupId, "window", StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        top.Items.Add(new MenuFlyoutSeparator());
+        var profiles = new MenuFlyoutSubItem
+        {
+            Text = Loc.T("menu.keyboardProfile"),
+        };
+        string current = KeyBindingProfiles.Normalize(_settings.KeyBindingProfile);
+        foreach (string profile in KeyBindingProfiles.All)
+        {
+            string captured = profile;
+            string label = ProfileMenuLabel(profile);
+            var item = new MenuFlyoutItem
+            {
+                Text = string.Equals(current, profile, StringComparison.Ordinal)
+                    ? "✓ " + label
+                    : label,
+            };
+            item.Click += (_, _) => SwitchKeyBindingProfile(captured);
+            profiles.Items.Add(item);
+        }
+
+        top.Items.Add(profiles);
+    }
+
+    private static string ProfileMenuLabel(string profile) =>
+        Loc.T(KeyBindingProfiles.Normalize(profile) switch
+        {
+            KeyBindingProfiles.Iina => "menu.profileIina",
+            KeyBindingProfiles.Custom => "menu.profileCustom",
+            _ => "menu.profileDefault",
+        });
+
+    private void SwitchKeyBindingProfile(string profile)
+    {
+        string normalized = KeyBindingProfiles.Normalize(profile);
+        _settings.KeyBindingProfile = normalized;
+        SaveSettings();
+        RebuildKeyMap();
+        ShowOsd(Loc.F("osd.keyProfile", ProfileMenuLabel(normalized)));
     }
 
     private void AddMenuDefinition(

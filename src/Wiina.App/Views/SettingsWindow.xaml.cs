@@ -1,12 +1,14 @@
 using System.Collections.Generic;
 using System.IO;
 using Microsoft.UI.Text;
+using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Controls.Primitives;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Shapes;
+using Windows.Graphics;
 using Windows.Storage;
 using Windows.Storage.Pickers;
 using Windows.System;
@@ -71,14 +73,15 @@ public sealed partial class SettingsWindow : Window
 
         WindowShell.Prepare(
             this,
-            600,
-            480,
+            (int)Math.Clamp(App.Settings.SettingsWindowWidth, 600, 2400),
+            (int)Math.Clamp(App.Settings.SettingsWindowHeight, 440, 1800),
             resizable: true,
             extendTitleBar: true,
             titleBar: DragRegion,
             dark: dark,
             minWidth: 600,
             minHeight: 440);
+        RestoreWindowBounds();
 
         _saveTimer = DispatcherQueue.CreateTimer();
         _saveTimer.Interval = TimeSpan.FromMilliseconds(350);
@@ -1051,7 +1054,10 @@ public sealed partial class SettingsWindow : Window
 
     private void BuildKeyBindingsPage()
     {
-        _bindings = KeyBindings.Resolve(App.Settings.KeyBindings).ToList();
+        _bindings = KeyBindings.Resolve(
+                App.Settings.KeyBindings,
+                App.Settings.KeyBindingProfile)
+            .ToList();
 
         var toolbar = new StackPanel
         {
@@ -1422,6 +1428,7 @@ public sealed partial class SettingsWindow : Window
         App.Settings.KeyBindings = _bindings
             .Select(binding => new KeyBindingSetting(binding.Action, binding.Chord))
             .ToList();
+        App.Settings.KeyBindingProfile = KeyBindingProfiles.Custom;
         App.SaveSettings();
         App.ActiveWindow?.RebuildKeyMap();
     }
@@ -1498,9 +1505,55 @@ public sealed partial class SettingsWindow : Window
 
     private void OnClosed(object sender, WindowEventArgs args)
     {
+        try
+        {
+            double scale = RootGrid.XamlRoot?.RasterizationScale ?? 1;
+            App.Settings.SettingsWindowWidth = Math.Max(600, AppWindow.Size.Width / scale);
+            App.Settings.SettingsWindowHeight = Math.Max(440, AppWindow.Size.Height / scale);
+            App.Settings.SettingsWindowX = AppWindow.Position.X;
+            App.Settings.SettingsWindowY = AppWindow.Position.Y;
+            App.SaveSettings();
+        }
+        catch
+        {
+            // Bounds persistence must never block closing.
+        }
+
         App.SettingsChanged -= OnSettingsChanged;
         Loc.LanguageChanged -= OnLanguageChanged;
         _saveTimer?.Stop();
         WindowShell.Detach(this);
+    }
+
+    private void RestoreWindowBounds()
+    {
+        try
+        {
+            if (App.Settings.SettingsWindowX == int.MinValue ||
+                App.Settings.SettingsWindowY == int.MinValue)
+            {
+                return;
+            }
+
+            DisplayArea area = DisplayArea.GetFromWindowId(
+                AppWindow.Id,
+                DisplayAreaFallback.Primary);
+            RectInt32 work = area.WorkArea;
+            int width = AppWindow.Size.Width;
+            int height = AppWindow.Size.Height;
+            int x = Math.Clamp(
+                App.Settings.SettingsWindowX,
+                work.X - width + 120,
+                work.X + work.Width - 120);
+            int y = Math.Clamp(
+                App.Settings.SettingsWindowY,
+                work.Y,
+                work.Y + work.Height - 80);
+            AppWindow.MoveAndResize(new RectInt32(x, y, width, height));
+        }
+        catch
+        {
+            // Fall back to the default placement.
+        }
     }
 }
