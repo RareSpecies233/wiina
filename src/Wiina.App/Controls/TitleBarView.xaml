@@ -45,6 +45,7 @@
                             Orientation="Horizontal"
                             Spacing="2"
                             Margin="0,0,140,0"
+                            Visibility="Collapsed"
                             VerticalAlignment="Center">
                     <Button x:Name="PinButton"
                             Style="{StaticResource TitleBarButtonStyle}"

@@ -8,16 +8,16 @@ public sealed partial class TitleBarView : UserControl
     public TitleBarView()
     {
         InitializeComponent();
+        // App actions live in the OSC More menu; the titlebar keeps only the
+        // document icon/title so it can fade with the rest of the chrome.
+        ButtonPanel.Visibility = Visibility.Collapsed;
         SizeChanged += OnSizeChanged;
     }
 
     private void OnSizeChanged(object sender, SizeChangedEventArgs e)
     {
-        // At narrow widths the title + caption buttons need the space; the
-        // toolbar is available again as soon as the window is wide enough.
-        ButtonPanel.Visibility = e.NewSize.Width < 620
-            ? Visibility.Collapsed
-            : Visibility.Visible;
+        // App actions live in the OSC; never show this toolbar.
+        ButtonPanel.Visibility = Visibility.Collapsed;
 
         // Top OSC compression: toolbar, volume, then time labels. The
         // transport and timeline always stay usable.

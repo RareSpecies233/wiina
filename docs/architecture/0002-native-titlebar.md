@@ -1,34 +1,41 @@
-# ADR-0002：原生标题栏 + OSC 工具栏
+# ADR-0002：WinUI 3 扩展标题栏 + 随 OSC 自动隐藏
 
-- 状态：**Accepted**（2026-10-18，Stage 3 之后）
+- 状态：**Accepted**（2026-10-18，Stage 3 之后；替代上一版“Windows 原生标题栏”方案）
 - 相关：Stage 1 自绘标题栏、Stage 2 自动隐藏、Stage 3 用户反馈
 
 ## 背景
 
-Stage 1 用 `ExtendsContentIntoTitleBar` 做了一个自绘标题栏，右侧保留系统 caption 按钮。
-在 Stage 2 的自动隐藏/全屏组合下，系统按钮由 DWM 绘制在 XAML 之上，无法随自绘标题栏一起淡出，
-表现为“最小化/最大化/关闭始终显示”，并出现 caption 区域灰底。这是系统性限制，不是可接受的开发态。
+Stage 1/2 的 WinUI 3 扩展标题栏（`ExtendsContentIntoTitleBar` + 自绘标题栏）保留了系统 caption
+按钮。DWM 把系统按钮画在 XAML 之上，自动隐藏/全屏时自绘标题栏淡出了，按钮却仍然显示，
+表现为“最小化/最大化/关闭始终显示”（灰底或浮在视频上）。这是平台限制，不是可接受的开发态。
 
-维护者要求：
+维护者的要求逐步明确为：
 
-1. 标题栏使用 **Windows 原生标题栏**；
-2. 应用自己的按钮不要放在标题栏上，统一放到 **底部控制栏（OSC）**，接近 macOS IINA 的组织方式。
+1. 用 **WinUI 3 的原生扩展标题栏**（不是切回普通 Windows 标题栏）；
+2. 标题栏在**非全屏**时也要随 chrome 一起消失；
+3. 应用自己的按钮不要放在标题栏，统一进底部控制栏（OSC），接近 macOS IINA 的组织方式。
 
 ## 决策
 
-- `Window.ExtendsContentIntoTitleBar = false`，不再调用 `SetTitleBar`；由 Windows 绘制标题、
-  最小化/最大化/关闭和窗口菜单。
-- 自绘 `TitleBarView` 设为 `Collapsed`（保留代码作为后续“沉浸式自定义标题栏”的参考，不参与布局）。
-- 应用功能按钮（布局、OSC 位置、侧栏、主题、置顶、图标映射、窗口尺寸、设置）收进 **OSC 工具栏
-  最右侧的 `⋯`（更多）菜单**；播放/列表/设置/全屏仍在 OSC 工具栏上。
-- 顶部 OSC 不再占用标题栏，而是作为视频区顶部的 overlay（`OscTop`，复用 `OscBottomView`）。
-- 原生标题栏跟随主题：通过 `DwmSetWindowAttribute(DWMWA_USE_IMMERSIVE_DARK_MODE)` 请求深色标题栏。
+- `Window.ExtendsContentIntoTitleBar = true` + `SetTitleBar(TitleBar)`，保留 WinUI 3 扩展标题栏。
+- 自绘 `TitleBarView` 只保留文档图标/标题；`ButtonPanel`（pin/layout/OSC/sidebar/theme/icons/window）
+  永久折叠。应用操作统一进入 OSC 工具栏最右侧的 `⋯` More 菜单。
+- 标题栏显隐复用 OSC 的 chrome 状态机：
+  - `FadeChrome` 把 `TitleBar` 与 OSC 一起做 0.25 s 透明度动画。
+  - 为避免系统 caption 按钮在 XAML 之上“残留”，`SetTitleBarVisible(false)` 同时把
+    `AppWindow.TitleBar.PreferredHeightOption` 设为 `Collapsed`；显示时恢复 `Standard`。
+    `Collapsed` 会把系统标题栏/按钮高度收为 0，配合自绘标题栏 opacity=0，实现真正消失。
+- 顶部 OSC 不再占用标题栏，而是视频区顶部的 overlay（`OscTop`）。
+- 全屏时强制隐藏标题栏（`ToggleFullscreen` + `FadeChrome` 双重保护），退出全屏后按当前
+  chrome 状态恢复。
+- 标题栏/按钮颜色按主题设置；扩展标题栏下不再使用 `DwmSetWindowAttribute` 的
+  “原生窗口标题栏”方案。
 
 ## 后果
 
-- 修复“caption 按钮常驻/灰底”；系统按钮行为与普通 Windows 窗口一致。
-- 自动隐藏只作用于 OSC（以及顶部 overlay），不再尝试隐藏原生标题栏；这是平台预期。
-- 失去“视频延伸到标题栏下方”的 edge-to-edge 标题栏效果；视频从原生标题栏下方开始。
-  如果将来需要沉浸式标题栏，应重新评估 custom titlebar + DWM caption color，而不是继续在
-  原生 caption 上叠加自绘按钮。
-- 所有窗口级功能仍可通过 OSC More、快捷键和菜单访问，不依赖标题栏按钮。
+- 非全屏时标题栏与系统按钮会在 2.5 s 后随 OSC 消失；鼠标进入/移动时一起恢复。
+- 完全隐藏系统 caption 按钮依赖 `TitleBarHeightOption.Collapsed`，不再需要 WM_NCHITTEST 屏蔽。
+- 应用按钮集中在 OSC More，标题栏只承担拖动/标题显示；窗口按钮（系统 caption）属于平台 chrome，
+  在标题栏可见时出现、隐藏时消失。
+- 失去“标题栏始终可见”的普通 Windows 观感；这是维护者明确选择的 IINA 风格。
+- 如果将来 Windows App SDK 改变 `PreferredHeightOption` 行为，需要重新验证 caption 隐藏。

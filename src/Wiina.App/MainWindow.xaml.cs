@@ -115,8 +115,8 @@ public sealed partial class MainWindow : Window
         _settings = _settingsStore.Load();
 
         Title = "Wiina";
-        ExtendsContentIntoTitleBar = false;
-        TitleBar.Visibility = Visibility.Collapsed;
+        ExtendsContentIntoTitleBar = true;
+        SetTitleBar(TitleBar);
         AppWindow.Resize(new SizeInt32(
             Math.Max(640, _settings.WindowWidth),
             Math.Max(360, _settings.WindowHeight)));
@@ -419,16 +419,26 @@ public sealed partial class MainWindow : Window
             hitTest = true;
         }
 
+        bool fullscreen = AppWindow.Presenter.Kind == AppWindowPresenterKind.FullScreen;
+        bool titleBarVisible = opacity > 0.01 && !fullscreen;
+        SetTitleBarVisible(titleBarVisible);
+        if (fullscreen)
+        {
+            TitleBar.Opacity = 0;
+            TitleBar.IsHitTestVisible = false;
+        }
+        else
+        {
+            TitleBar.IsHitTestVisible = hitTest;
+        }
+
         OscBottom.IsHitTestVisible = hitTest;
         OscFloating.IsHitTestVisible = hitTest;
         OscTop.IsHitTestVisible = hitTest;
 
-        FrameworkElement[] elements =
-        {
-            OscBottom,
-            OscFloating,
-            OscTop,
-        };
+        FrameworkElement[] elements = fullscreen
+            ? new FrameworkElement[] { OscBottom, OscFloating, OscTop }
+            : new FrameworkElement[] { TitleBar, OscBottom, OscFloating, OscTop };
 
         if (!AnimationsEnabled)
         {
@@ -767,6 +777,15 @@ public sealed partial class MainWindow : Window
         }
 
         SyncFullscreenState();
+        if (AppWindow.Presenter.Kind == AppWindowPresenterKind.FullScreen)
+        {
+            SetTitleBarVisible(false);
+        }
+        else
+        {
+            SetTitleBarVisible(_chromeShown);
+        }
+
         DispatcherQueue.TryEnqueue(ApplyVideoLayout);
     }
 
@@ -897,10 +916,45 @@ public sealed partial class MainWindow : Window
 
     private void ConfigureCaptionButtons()
     {
-        // Native titlebar: let Windows draw the caption buttons, and only
-        // request an immersive dark titlebar to match the app theme.
+        AppWindowTitleBar bar = AppWindow.TitleBar;
+        bar.ExtendsContentIntoTitleBar = true;
+
         bool dark = RootGrid.ActualTheme != ElementTheme.Light;
-        WindowInterop.SetImmersiveDarkMode(this, dark);
+        Color background = dark
+            ? Color.FromArgb(0xCC, 0x10, 0x11, 0x14)
+            : Color.FromArgb(0xCC, 0xF3, 0xF3, 0xF3);
+
+        bar.BackgroundColor = background;
+        bar.InactiveBackgroundColor = background;
+        bar.ButtonBackgroundColor = background;
+        bar.ButtonInactiveBackgroundColor = background;
+        bar.ButtonForegroundColor = dark ? Colors.White : Colors.Black;
+        bar.ButtonInactiveForegroundColor = dark ? Colors.Gray : Colors.DimGray;
+        bar.ButtonHoverBackgroundColor = dark
+            ? Color.FromArgb(0x33, 0xFF, 0xFF, 0xFF)
+            : Color.FromArgb(0x1F, 0, 0, 0);
+        bar.ButtonPressedBackgroundColor = dark
+            ? Color.FromArgb(0x55, 0xFF, 0xFF, 0xFF)
+            : Color.FromArgb(0x33, 0, 0, 0);
+    }
+
+    /// <summary>
+    /// WinUI 3 extended titlebar visibility. Collapsing the native titlebar
+    /// height also removes the system caption buttons (they are drawn by DWM
+    /// above XAML, so fading the custom titlebar alone is not enough).
+    /// </summary>
+    private void SetTitleBarVisible(bool visible)
+    {
+        if (AppWindow.Presenter.Kind == AppWindowPresenterKind.FullScreen)
+        {
+            visible = false;
+        }
+
+        AppWindow.TitleBar.PreferredHeightOption = visible
+            ? TitleBarHeightOption.Standard
+            : TitleBarHeightOption.Collapsed;
+        TitleBar.Visibility = Visibility.Visible;
+        OscTop.Margin = new Thickness(0, visible ? 40 : 0, 0, 0);
     }
 
     private void TrySetBackdrop()
