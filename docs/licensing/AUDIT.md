@@ -21,9 +21,9 @@
 | Segoe UI Variable / Segoe Fluent Icons | Windows 系统字体 | Microsoft 系统字体许可 | 运行时使用 | **不重分发** | 不打包字体文件 |
 | SF Symbols | Apple | Apple 专有，仅限 Apple 平台 | **不使用** | 否 | — |
 | IINA 图标/`.xcassets` | IINA | GPL-3.0 + 商标 | **不使用** | 否 | — |
-| WebView2 | Microsoft（v2 插件） | Microsoft 可再分发运行时 | 插件 UI（v2） | 运行时依赖 | 附 Microsoft 条款 |
-| yt-dlp（v2） | Unlicense（公共领域） | Unlicense | URL 解析（v2） | 可选下载，不提交 | 保留 Unlicense 文本 |
-| OpenSubtitles API（v2） | 服务 | 服务条款 + API 许可 | 在线字幕（v2） | 否 | 用户自备 API key；遵守 ToS |
+| WebView2 | Microsoft Edge WebView2 Runtime | Microsoft 可再分发（专有） | 插件 UI（v1） | 不提交；依赖系统 Evergreen 运行时 | 附 Microsoft 条款/链接；不修改运行时 |
+| yt-dlp | Unlicense（公共领域） | URL 解析（v1） | 首次使用下载，不提交 | 保留 Unlicense 文本；用户可替换 |
+| OpenSubtitles API | 服务条款 + API 许可 | 在线字幕（v1） | 否 | 用户自备 API key；遵守 ToS；不内置共享 key |
 
 ---
 
@@ -124,10 +124,14 @@
 
 1. **shinchiro 构建的确切许可证文本**：发布前下载对应 7z，确认包内 `LICENSE.GPL`/`Copyright` 与构建选项；按其文本原样附带。
 2. **名称商标**：见 §3；若计划商业化，建议先做商标检索或改名。
-3. **插件系统（v2）**：插件 API 的许可证、沙箱、第三方插件分发需单独审计；不要让插件绕过 GPL 义务。
-4. **在线服务（v2）**：OpenSubtitles/yt-dlp 的 ToS、API key、速率限制；不要内置共享 key。
-5. **HDR/杜比视界**：杜比视界元数据/专利另有限制；v1 不做。
-6. **CI 构建产物**：不要把 `libmpv-2.dll` 作为 artifact 公开发布，除非同时满足 §4 的源码/许可义务。
+3. **插件系统（v1）**：插件 API 的许可证、沙箱、第三方插件分发需单独审计；插件是独立作品，宿主不为其授权；
+   插件不得绕过 GPL 义务（例如把 GPL 代码包装成专有插件分发）。插件安装页需显示权限与来源，默认不自动执行网络/文件权限。
+4. **在线服务（v1）**：OpenSubtitles/yt-dlp 的 ToS、API key、速率限制；不要内置共享 key；yt-dlp 只从官方 release 下载并校验哈希；
+   用户可关闭自动更新。OpenSubtitles 用户 key 存本地设置，不写日志。
+5. **WebView2（v1）**：依赖系统 Evergreen 运行时，不随包分发；安装包检测缺失并提示安装；插件页面启用 WebView2 的安全默认值
+   （禁用文件 URL 任意访问、限制下载、独立用户数据目录）。
+6. **HDR/杜比视界**：杜比视界元数据/专利另有限制；v1 不做杜比视界，HDR 输出精调放 v2。
+7. **CI 构建产物**：不要把 `libmpv-2.dll` 作为 artifact 公开发布，除非同时满足 §4 的源码/许可义务。
 
 ---
 

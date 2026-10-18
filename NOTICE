@@ -43,20 +43,43 @@ corresponding source is available as described below.
 7. .NET Runtime / SDK (https://github.com/dotnet/runtime)
    License: MIT
 
-8. xUnit.net (https://github.com/xunit/xunit) — Apache-2.0 (tests only)
-   Microsoft.NET.Test.Sdk — MIT (tests only)
-   coverlet.collector — MIT (tests only)
+8. Microsoft Edge WebView2 Runtime
+   License: Microsoft proprietary redistributable terms.
+   Use: Plugin UI (overlay / sidebar / standalone window, v1). The Evergreen
+   runtime is preinstalled on Windows 11 and updated by Microsoft; this project
+   does not bundle or redistribute the runtime.
 
-9. Fonts and icons
-   Segoe UI Variable and Segoe Fluent Icons are Microsoft system fonts. They
-   are used at runtime on Windows and are not redistributed by this project.
-   SF Symbols are Apple proprietary assets and are NOT used or redistributed.
-   Any custom icons in this repository are original SVG work licensed GPL-3.0.
+9. yt-dlp (https://github.com/yt-dlp/yt-dlp)
+   License: The Unlicense (public domain).
+   Use: Resolving URLs for mpv (v1). Downloaded at runtime with the user's
+   consent and stored under %LOCALAPPDATA%\Wiina\bin\; the binary is not
+   committed to this repository and is not bundled in the source archive.
 
-10. Test media
+10. OpenSubtitles.com API (https://www.opensubtitles.com/)
+    License/terms: OpenSubtitles API terms of service.
+    Use: Online subtitle search/download (v1). The user supplies their own API
+    key in Settings; no shared or embedded key is distributed with Wiina.
+
+11. xUnit.net (https://github.com/xunit/xunit) — Apache-2.0 (tests only)
+    Microsoft.NET.Test.Sdk — MIT (tests only)
+    coverlet.collector — MIT (tests only)
+
+12. Fonts and icons
+    Segoe UI Variable and Segoe Fluent Icons are Microsoft system fonts. They
+    are used at runtime on Windows and are not redistributed by this project.
+    SF Symbols are Apple proprietary assets and are NOT used or redistributed.
+    Any custom icons in this repository are original SVG work licensed GPL-3.0.
+
+13. Test media
     No copyrighted media is committed to this repository. Development uses
     generated test patterns (mpv `testsrc`) and, when needed, CC-licensed
     samples such as "Big Buck Bunny" (Blender Foundation, CC-BY 3.0).
+
+Plugins
+-------
+Third-party Wiina plugins are separate works with their own licenses. The
+plugin host and JS API are part of Wiina (GPL-3.0-only). Installing a plugin
+does not change Wiina's license, and Wiina does not relicense plugin code.
 
 Trademarks
 ----------

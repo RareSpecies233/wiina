@@ -1,8 +1,22 @@
-# Wiina 实施计划（待确认 · v0.1）
+# Wiina 实施计划（v0.2 · 第一轮已确认，第二轮待确认）
 
-> 状态：**草稿，等待维护者确认**。确认前不开始写产品代码。
+> 状态：**计划对齐中**。第一轮已确认：**首版全量规格**、`Wiina` + GPL-3.0-only、
+> IINA 结构 + Fluent 皮肤 + Apple Music 式侧栏、fetch 脚本 + 发布包附带 libmpv、PR 由我推分支并给描述。
+> 第二轮需要确认“全量”的边界与阶段拆分（见 §9）。
 > 输入规格：[IINA-macOS-UI-复刻规格.md](reference/IINA-macOS-UI-复刻规格.md)（1230 行，基于 IINA `develop` @ `5c15f81`）。
 > 许可证审计：[AUDIT.md](licensing/AUDIT.md)。视频管线决策：[ADR-0001](architecture/0001-video-pipeline.md)。
+
+### 第一轮确认记录（2026-10-18）
+
+| 议题 | 决定 |
+|---|---|
+| v1 范围 | **全量规格**：插件、在线字幕、yt-dlp、均衡器/滤镜、全部设置页都进 v1 |
+| 名称/许可证 | `Wiina` + GPL-3.0-only + not-affiliated 声明 |
+| 视觉 | IINA 结构 + Windows 11 Fluent 皮肤 + Apple Music 式半透明侧栏 |
+| libmpv | 仓库不提交；`tools/fetch-libmpv.ps1` + 发布包附带 |
+| PR | 我推阶段分支并给 PR 描述；你在 GitHub 上手动开/合并 |
+| 窗口尺寸 | 默认采用设置 900×640 / 欢迎 720×520（待你确认是否严格按规格 600×480 / 560×440） |
+
 
 ---
 
@@ -46,7 +60,7 @@
 
 - **主目标**：Windows 11 22H2+（Mica、圆角、Segoe Fluent Icons、WinAppSDK 2.x 完整体验）。
 - **尽力支持**：Windows 10 2004+（无 Mica，退化为 Acrylic/纯色；Segoe MDL2 fallback）。
-- 架构：x64 优先；ARM64 在 Stage 8 评估（libmpv 有 aarch64 构建）。
+- 架构：x64 优先；ARM64 在 Stage 11 评估（libmpv 有 aarch64 构建）。
 
 ### 2.3 视觉语言
 
@@ -57,9 +71,13 @@
 
 ### 2.4 范围
 
-- **v1（Stage 0–8）**：可日常使用的本地/URL 播放器 + IINA 级 UI（OSC、侧栏、OSD、缩略图、全屏、迷你、PiP、设置、欢迎、检查器、快捷键）。
-- **v2（后续）**：插件（WebView2）、在线字幕（OpenSubtitles）、yt-dlp、10 段均衡器/滤镜、多窗口、HDR/杜比视界、安装器/winget。
+- **v1 = 规格全量**：本地/URL/拖放播放、轨道/字幕/章节、OSC 三种位置、侧栏四页 + 播放列表/章节、
+  OSD/时间预览/缩略图、全屏/迷你/PiP、多窗口、设置 11 页（含按键编辑、插件管理、网络、高级）、欢迎、
+  检查器、菜单树、**插件系统（WebView2）**、**在线字幕（OpenSubtitles）**、**yt-dlp**、**10 段均衡器/滤镜 UI**。
+- **v2（后续）**：杜比视界、系统级 PiP、插件中心/在线商店、更多语言、winget 自动发布。
 - **明确不做**：Touch Bar、Force Touch、macOS Services、SF Symbols、iina-cli 兼容层、浏览器扩展。
+- **“全量”的边界**（第二轮确认）：插件是否要求 **IINA 插件 API 兼容**，还是“同等 UI 能力 + Wiina 自有 JS API”；
+  在线字幕是否必须 **不填 API key 即可用**；多窗口是否要跨窗口共享播放列表/设置。见 §9。
 
 ### 2.5 mpv 分发
 
@@ -95,6 +113,9 @@ Wiina.sln
 │      ├─ Controls/               Osc, Timeline, VolumeSlider, Osd, Sidebar, TitleBar
 │      ├─ ViewModels/             MainViewModel, PlayerViewModel, SettingsViewModel
 │      ├─ Interop/                SwapChainPanel host, WM_SIZING, min-max info, cursor
+│      ├─ Plugins/                WebView2 host, Info.json, JS bridge, permissions
+│      ├─ Services/Online/        OpenSubtitles, yt-dlp resolver
+│      ├─ Filters/                10-band EQ, vf/af presets, filter editor
 │      ├─ Services/               dialogs, file pickers, dispatcher, logging, theme
 │      └─ Assets/                 own icons, fonts metadata, strings (zh-Hans/en)
 └─ tests/
@@ -134,7 +155,7 @@ XAML 内容（标题栏/OSC/侧栏/OSD/预览）绘制在 SwapChainPanel 之上
   `time-pos, duration, pause, volume, mute, speed, track-list, chapter-list, playlist, playlist-pos, media-title, metadata, cache, demuxer-cache-time, eof-reached, idle-active, video-params, width, height, display-swapchain, d3d11-composition-size, keepaspect`。
 - 命令：同步命令只允许在事件线程执行；UI 线程用 `mpv_command_async` 或投递到事件线程；复杂参数用 node API。
 - 大列表（track-list/chapter-list/playlist）解析在后台，结果以不可变模型回 UI。
-- 时间标签 10 Hz 更新；进度条用 60 fps 合成动画可选（Stage 8）。
+- 时间标签 10 Hz 更新；进度条用 60 fps 合成动画可选（Stage 11）。
 
 ### 3.4 显式状态机（放在 Core，可单测）
 
@@ -217,7 +238,7 @@ XAML 内容（标题栏/OSC/侧栏/OSD/预览）绘制在 SwapChainPanel 之上
 | 缩略图 | 宽 160，圆角 4，1px `#99FFFFFF` 边框 | |
 | 设置窗口 | 900×640（建议；规格 600×480 太挤） | 左栏 220，内容最小 560 |
 | 欢迎窗口 | 720×520（建议；规格 560×440） | |
-| 插件窗口 | 600×400 | v2 |
+| 插件窗口 | 600×400 | v1（Stage 9） |
 | OSC 自动隐藏 | 2.5s | 可设置 |
 | OSD 自动隐藏 | 1s / 0.5s 淡出 | |
 | 侧栏动画 | 0.24s ease-in；减少动画时淡入 | |
@@ -233,7 +254,7 @@ XAML 内容（标题栏/OSC/侧栏/OSD/预览）绘制在 SwapChainPanel 之上
 ```xml
 <Grid x:Name="Root">
   <SwapChainPanel x:Name="VideoHost" />                 <!-- 视频 -->
-  <WebView2 x:Name="PluginOverlay" Visibility="Collapsed" /> <!-- v2 -->
+  <WebView2 x:Name="PluginOverlay" Visibility="Collapsed" /> <!-- v1: Stage 9 -->
   <Grid x:Name="PipOverlay" Visibility="Collapsed" />
   <Grid x:Name="SidebarLeading" />
   <Grid x:Name="SidebarTrailing" />
@@ -269,7 +290,7 @@ XAML 内容（标题栏/OSC/侧栏/OSD/预览）绘制在 SwapChainPanel 之上
 - 显隐状态机见 §3.4；鼠标在 OSC/标题栏内不隐藏；拖动中不隐藏；PiP/交互模式/实时文字不隐藏。
 - 进度条：`Slider` 自定义模板（可访问性/键盘免费）+ 底层 `Canvas` 画章节线、缓冲段、A-B 旋钮；拖动时暂停并记录原状态，松开恢复；悬停显示时间预览/缩略图。
 - 音量：静音按钮 + 70px 滑块；>100% 画 2px 缺口。
-- 工具栏：settings / playlist / PiP / fullscreen / music / subtitle / screenshot / plugins（v2）/ live text（v2）；顺序可配置。
+- 工具栏：settings / playlist / PiP / fullscreen / music / subtitle / screenshot / plugins（Stage 9）/ live text（可选，Windows OCR，v2）；顺序可配置。
 - 窄窗口优先级：先隐藏工具，再音量，最后压缩进度条。
 - RTL：进度条/音量条/控制簇固定 LTR。
 
@@ -312,35 +333,39 @@ XAML 内容（标题栏/OSC/侧栏/OSD/预览）绘制在 SwapChainPanel 之上
 - 滚轮：垂直音量、水平跳转（可配置）；进度条/音量条上强制对应动作；自然滚动反向。
 - 键盘：Space、←/→ ±5s、↑/↓ 音量、F11 全屏、Esc 退出全屏、Ctrl+O 打开、Ctrl+, 设置、Ctrl+S 截图、Ctrl+L A-B、`[`/`]` 速度、`.`/`,` 逐帧、Q 退出（文本框聚焦时禁用）。
 - 媒体键：`SystemMediaTransportControls`（播放/暂停/停止/上一首/下一首）。
-- 所有键位可在设置中查看/修改（v2 编辑器；v1 只读 + `input.conf` 高级覆盖）。
+- 所有键位可在设置中查看/修改（v1 编辑器 + `input.conf` 高级覆盖）。
 
 ---
 
-## 5. 功能范围矩阵
+## 5. 功能范围矩阵（v1 = 全量规格）
 
-| 模块 | v1（Stage 0–8） | v2 | 不做 |
-|---|---|---|---|
-| 本地文件 / 文件夹 / 拖放 | ✅ | | |
-| URL / 网络流 | ✅ 基础（mpv 原生） | yt-dlp 解析 | |
-| 硬件解码 / HDR 色调映射 | ✅ hwdec；HDR 基础 | HDR 输出精调 | 杜比视界 |
-| 轨道切换（视频/音频/字幕） | ✅ | | |
-| 外挂字幕 / 延迟 / 位置 / 缩放 | ✅ | 在线字幕 | |
-| 章节 / 播放列表 / 历史 / 续播 | ✅ | 多窗口 | |
-| 截图 / A-B 循环 / 逐帧 | ✅ | | |
-| OSC 三种位置 / 自动隐藏 / 拖动 | ✅ | | |
-| 侧栏四页 + 播放列表/章节 | ✅ | 插件侧栏 | |
-| OSD / 时间预览 / 缩略图 | ✅ | 持久 OSD 高级附件 | |
-| 全屏 / 置顶 / 迷你 / PiP | ✅ 自绘 PiP | 系统 PiP | |
-| 设置 11 页 / 搜索 | ✅ 11 页，插件/网络页先占位 | 全部行 | |
-| 欢迎 / 最近文件 | ✅ | | |
-| 检查器 / 按键查看 / 关于 / 日志 | ✅ | 按键编辑 | |
-| 插件系统（WebView2） | | ✅ | |
-| 在线字幕（OpenSubtitles） | | ✅ | |
-| 均衡器 / 视频滤镜 UI | | ✅ | |
-| 多窗口 / 多播放器实例 | | ✅ | |
-| 安装器 / winget / 文件关联 | Stage 8 基础 | 完善 | |
-| Touch Bar / Force Touch / SF Symbols | | | ❌ |
-| macOS Services / AppleScript / iina-cli | | | ❌ |
+| 模块 | v1 | 说明 / 边界 |
+|---|---|---|
+| 本地文件 / 文件夹 / 拖放 / 命令行 | ✅ | |
+| URL / 网络流 | ✅ | mpv 原生协议 |
+| yt-dlp 解析 | ✅ | 首次使用征得同意后下载/更新；也可用系统 PATH 中的 yt-dlp |
+| 硬件解码 / HDR 色调映射 | ✅ | hwdec 自动；HDR→SDR 默认；HDR 输出精调放 v2 |
+| 轨道切换（视频/音频/字幕/次字幕） | ✅ | |
+| 外挂字幕 / 延迟 / 位置 / 缩放 / 编码 | ✅ | |
+| 在线字幕 | ✅ | OpenSubtitles.com；API key 策略见 §9 |
+| 章节 / 播放列表 / 历史 / 续播 | ✅ | |
+| 多窗口 / 多播放器实例 | ✅ | 共享设置，独立播放状态 |
+| 截图 / A-B 循环 / 逐帧 | ✅ | |
+| OSC 三种位置 / 自动隐藏 / 拖动吸附 | ✅ | |
+| 侧栏：四页快速设置 + 播放列表/章节 | ✅ | |
+| 侧栏：插件页 | ✅ | WebView2 宿主 |
+| OSD / 持久 OSD / 时间预览 / 缩略图 | ✅ | |
+| 全屏 / 置顶 / 迷你 / 音乐模式 / PiP | ✅ | 自绘 PiP；系统 PiP 放 v2 |
+| 设置 11 页 + 搜索 + 分区指示 | ✅ | 含按键编辑、插件管理、网络、工具、高级 |
+| 欢迎 / 最近文件 / 继续播放 | ✅ | |
+| 检查器 / 按键编辑 / 关于 / 日志 / 打开 URL | ✅ | |
+| 菜单树（含动态子菜单） | ✅ | 规格 §14 |
+| 插件系统（WebView2） | ✅ | overlay / sidebar / standalone / 权限 / 简单模式；API 兼容性见 §9 |
+| 10 段均衡器 / 视频·音频滤镜 UI | ✅ | mpv `af`/`vf` + 预设；滤镜编辑窗口 |
+| 安装器 / 文件关联 / winget | ✅ 基础 | zip + Inno Setup；winget 可后补 |
+| 杜比视界 / 系统 PiP / 插件商店 | v2 | |
+| Touch Bar / Force Touch / SF Symbols / Services | ❌ | 平台不存在或授权不允许 |
+| iina-cli / 浏览器扩展 | ❌ | 可另立项目 |
 
 ---
 
@@ -421,35 +446,72 @@ XAML 内容（标题栏/OSC/侧栏/OSD/预览）绘制在 SwapChainPanel 之上
 
 验收：规格 §19.2 第 10–11 条；消息目录抽样 15 条；缩略图 1080p/4K 性能可接受。
 
-### Stage 6 — 模式（L）
+### Stage 6 — 模式与多窗口（L）
 
 交付：
 - 全屏状态机（进入/退出/失败回滚/标题栏切换/菜单栏/置顶恢复）；多显示器。
 - 置顶；迷你播放器/音乐模式（72+封面、播放列表 300、音量气泡 148、0.2s 控件互斥）；音频自动进入。
 - 自绘 PiP 置顶小窗（swapchain 转移/恢复、暂停重绘）；全屏与 PiP 互斥。
+- 多窗口：新建窗口、在新窗口打开、独立播放状态、共享设置、Window 菜单、关闭最后窗口退出。
 - 媒体键与系统传输控件。
 
-验收：规格 §19.2 第 12–13 条；全屏进出 20 次无布局错乱；PiP 进出不黑屏。
+验收：规格 §19.2 第 12–13 条；全屏进出 20 次无布局错乱；PiP 进出不黑屏；两个窗口同时播放互不干扰。
 
-### Stage 7 — 二级窗口与菜单（L）
+### Stage 7 — 设置、菜单、欢迎与辅助窗口（L）
 
 交付：
-- 设置窗口 11 页 + 搜索 + 分区指示 + 高亮；行样式；不可用项置灰。
-- 欢迎窗口 + 最近文件 + 继续播放 + 拖放；检查器；按键查看/编辑；关于；日志；打开 URL。
-- 菜单树（File/Playback/Video/Audio/Subtitles/Window/Help + 动态子菜单）；启用规则；标题随状态切换。
+- 设置窗口 11 页完整内容：General / UI / Video / Audio / Subtitles / Network / Control / Key Bindings / Advanced / Plugin / Utilities。
+- 搜索（标题/说明/页面）+ 跳转高亮；分区小圆点；行样式；不可用项置灰。
+- 按键编辑：列表、录制、冲突检测、导入/导出、恢复默认。
+- 插件管理页：已安装列表、启用/禁用、从文件夹/URL 安装、权限查看（运行时 Stage 9）。
+- 欢迎窗口 + 最近文件 + 继续播放 + 拖放；检查器；关于；日志查看器；打开 URL；字体选择。
+- 菜单树（File/Playback/Video/Audio/Subtitles/Plugin/Window/Help + 动态子菜单）；启用规则；标题随状态切换。
 - 首次启动体验（默认设置、文件关联询问）。
 
-验收：规格 §19.2 第 14–16 条；设置搜索跳转正确；菜单项无死项。
+验收：规格 §19.2 第 14–16 条；设置搜索跳转正确；菜单项无死项；按键冲突能提示。
 
-### Stage 8 — 打磨与发布（M/L）
+### Stage 8 — 滤镜、均衡器与高级音画（L）
+
+交付：
+- 视频滤镜窗口：添加/删除/排序/编辑/保存预设；音频滤镜窗口；10 段均衡器（启用/预设/重置/实时生效）。
+- 画面：宽高比、裁剪、旋转、翻转、去隔行、去 Logo、HDR/硬件解码开关。
+- 音频：输出设备、延迟、音量上限、均衡器；字幕：字体/大小/颜色/边框/位置/延迟、ASS 与图像字幕警告。
+- 检查器详细属性（文件/视频/音频/字幕）。
+- 所有项即时生效 + 持久化 + 与侧栏快速设置同步。
+
+验收：滤镜/EQ 重启后保留；ASS 字幕样式开关正确；检查器字段与 mpv 属性一致。
+
+### Stage 9 — 插件系统（L）
+
+交付：
+- WebView2 宿主：全屏 overlay（点击穿透 hit-test）、侧栏页、独立窗口（600×400 起）。
+- 插件清单 `Info.json`：id/name/version/entry/permissions；权限模型（overlay/sidebar/standaloneWindow/network-request/file-system）。
+- 安装/卸载/启用/禁用；从文件夹或 URL 安装；插件菜单项；错误隔离（插件崩溃不影响播放）。
+- JS API（Wiina 自有，见 §9 的兼容性选项）：core/mpv/event/overlay/sidebar/standaloneWindow/menu/utils/preferences。
+- 简单模式（HTML/CSS）；插件数据目录；权限拒绝时的明确报错。
+- 插件中心/在线商店放 v2。
+
+验收：三个示例插件（overlay 时钟、侧栏字幕搜索、独立窗口歌词）可安装运行；权限拒绝路径正确；插件崩溃可恢复。
+
+### Stage 10 — 在线服务与网络（L）
+
+交付：
+- 在线字幕：OpenSubtitles.com 搜索/下载/保存、hash 匹配、语言过滤、API key 设置、失败重试与错误提示。
+- yt-dlp：检测系统 PATH、首次使用征得同意后下载/更新、URL 解析、清晰度/格式选择（基础）、失败回退给 mpv 原生。
+- 网络设置：代理、请求头、缓存、user-agent、yt-dlp 路径、OpenSubtitles key；打开 URL 对话框（历史/请求头）。
+- 网络流 OSD（打开中/缓冲/跳转）。
+
+验收：YouTube/Bilibili 等 2–3 个站点可播；字幕搜索/下载/加载闭环；断网/限流有可读错误。
+
+### Stage 11 — 打磨与发布（M/L）
 
 交付：
 - 动画曲线统一、减少动态、RTL、高对比度、键盘导航、AutomationProperties、屏幕阅读器抽查。
 - DPI 100/125/150/200、多显示器、休眠唤醒、HDR 基础、性能（启动/4K/内存）。
-- i18n zh-Hans/en 完整；日志/崩溃；安装包（zip + 可选 Inno Setup/MSIX）与 GPL 合规包（LICENSE/NOTICE/mpv 源码链接）。
-- 发布文档、已知问题、贡献指南。
+- i18n zh-Hans/en 完整；日志/崩溃；安装包（zip + 可选 Inno Setup/MSIX）与 GPL 合规包（LICENSE/NOTICE/mpv/yt-dlp/WebView2 条款、源码链接）。
+- 发布文档、已知问题、贡献指南、插件开发文档。
 
-验收：规格 §19.2 全部（标注 v2 项）；性能目标；许可证合规检查清单全绿。
+验收：规格 §19.2 全部；性能目标；许可证合规检查清单全绿；插件/在线服务合规复核。
 
 ---
 
@@ -481,16 +543,34 @@ XAML 内容（标题栏/OSC/侧栏/OSD/预览）绘制在 SwapChainPanel 之上
 
 ---
 
-## 9. 需要你确认的开放问题
+## 9. 第二轮需要你确认（“全量”的边界）
 
-> 建议值已标 ★；可以直接回复“按建议”，或逐条改。
+> 建议已标 ★；可以回复“按建议”，或逐条改。
 
-1. **名称与许可证**：`Wiina` + GPL-3.0-only + 免责声明？还是换一个与 IINA 距离更远的名字？
-2. **v1 范围**：先做“核心可用”（Stage 0–8，不含插件/在线字幕/yt-dlp/均衡器），还是首版就追求规格全量？
-3. **平台与视觉**：Win11 22H2+ 主目标 + Win10 尽力支持；IINA 结构 + Fluent 皮肤（Mica/Acrylic/Segoe/8dp）？还是更贴近 IINA 原版（12dp、类 SF 图标）？
-4. **窗口尺寸**：设置 900×640、欢迎 720×520（更 Fluent），还是严格按规格 600×480 / 560×440？
-5. **mpv 分发**：仓库只放 fetch 脚本，发布包再带 libmpv（GPL 合规）？还是要求用户自备 mpv？
-6. **PR 工作流**：你建好空仓库后把 URL 给我，我加 remote 并（若 `gh` 已登录）直接开 PR？还是我只产出分支 + PR 描述，由你手动 push？
+1. **插件 API**：
+   - ★ A. **Wiina 自有 JS API**：实现 §15 的全部 UI 能力（overlay/sidebar/standalone/权限），但**不兼容** IINA 插件。
+   - B. **兼容 IINA 插件 API 子集**：能跑一部分现成 IINA 插件，工作量和兼容性风险显著增加。
+   - C. **只做简单模式**：HTML/CSS overlay + 侧栏/独立窗口宿主，不做完整 JS API。
+2. **在线字幕**：
+   - ★ A. **用户自备 OpenSubtitles.com API key**（免费注册）；我们不内置/共享 key。
+   - B. 内置共享 key（不推荐：配额、ToS、泄露风险）。
+   - C. 先接其他免费源（需逐个评估许可/稳定性）。
+3. **yt-dlp**：
+   - ★ A. **首次使用征得同意后自动下载/更新**到 `%LOCALAPPDATA%\Wiina\bin\`；也可用系统 PATH。
+   - B. 只用系统 PATH 中的 yt-dlp，缺失时提示用户自行安装。
+   - C. 随安装包附带（体积、更新、许可都要处理）。
+4. **多窗口**：
+   - ★ A. **支持**：共享设置、独立播放状态、Window 菜单。
+   - B. 单窗口，后续再加（会偏离 §14 菜单项）。
+5. **窗口尺寸**：
+   - ★ A. 设置 **900×640**、欢迎 **720×520**（更符合 Windows 11 习惯）。
+   - B. 严格按规格：600×480 / 560×440。
+   - C. 设置窗口可缩放、默认 900×640；欢迎 720×520。
+6. **阶段拆分**：
+   - ★ A. 当前 **Stage 0–11**（每阶段一个 PR）。
+   - B. 合并 Stage 8/9/10 为两个阶段（PR 更少，但单个 PR 更大、验收更难）。
+   - C. 再拆细（每个子功能一个阶段，PR 更多但更容易回滚）。
+7. **GitHub remote**：请把仓库 URL 给我（或先允许我本地做 Stage 0，稍后接远程）。
 
 ---
 
@@ -499,13 +579,16 @@ XAML 内容（标题栏/OSC/侧栏/OSD/预览）绘制在 SwapChainPanel 之上
 | 规格章节 | 阶段 |
 |---|---|
 | §1 界面总览 / §3 主窗口 / §4 标题栏 | 1 |
-| §5 OSC / §9 时间预览 | 2（缩略图 5） |
+| §5 OSC / §9.1 时间预览 | 2（缩略图 5） |
 | §6 播放控制与输入 | 3 |
-| §7 侧边栏 | 4 |
-| §8 OSD | 5 |
-| §10 迷你播放器 / §11 全屏与 PiP | 6 |
-| §12 设置 / §13 欢迎 / §14 菜单 / §15 插件 / §16 辅助窗口 | 7（插件 v2） |
-| §17 文案 / §18 跨平台 / §19 验收 / §20 附录 | 8 与全程 |
+| §7.1–7.4 / 7.6–7.8 侧栏容器与播放列表 | 4 |
+| §8 OSD / §9 预览与缩略图 | 5 |
+| §10 迷你播放器 / §11 全屏与 PiP | 6（多窗口同阶段） |
+| §12 设置 / §13 欢迎 / §14 菜单 / §16 辅助窗口 | 7 |
+| §7.5 四个快速设置页的高级项 / 滤镜 / 均衡器 | 8 |
+| §15 插件 UI 与权限 | 9 |
+| 在线字幕 / yt-dlp / 网络设置（规格未详述） | 10 |
+| §17 文案 / §18 跨平台 / §19 验收 / §20 附录 / 打包 | 11 与全程 |
 | §2 设计令牌 | 1 起，持续 |
 
 ## 附录 B：默认键位（Windows 草案）
