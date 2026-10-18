@@ -68,7 +68,7 @@ public sealed partial class MainWindow : Window
     private bool? _animationsEnabled;
     private Point _oscDragStart;
     private Point _oscOrigin;
-    private IReadOnlyList<MpvChapter> _chapters = Array.Empty<MpvChapter>();
+    private IReadOnlyList<ChapterInfo> _chapters = Array.Empty<ChapterInfo>();
     private double _videoAspect = 16.0 / 9.0;
 
     private bool AnimationsEnabled
@@ -161,6 +161,7 @@ public sealed partial class MainWindow : Window
         Closed += OnClosed;
 
         ApplySettings();
+        InitializeStage3();
     }
 
     private void ApplySettings()
@@ -176,17 +177,12 @@ public sealed partial class MainWindow : Window
 
     private void SubscribeOsc()
     {
-        _oscVm.SeekRequested += seconds => SendPlayerCommand(
-            "seek",
-            seconds.ToString("0.###", CultureInfo.InvariantCulture),
-            "absolute");
-        _oscVm.VolumeRequested += value => _player?.TrySetPropertyString(
-            "volume",
-            value.ToString("0.##", CultureInfo.InvariantCulture));
-        _oscVm.PlayPauseRequested += () => SendPlayerCommand("cycle", "pause");
-        _oscVm.MuteRequested += () => SendPlayerCommand("cycle", "mute");
-        _oscVm.PreviousRequested += () => SendPlayerCommand("playlist-prev");
-        _oscVm.NextRequested += () => SendPlayerCommand("playlist-next");
+        _oscVm.SeekRequested += seconds => SeekAbsolute(seconds, showOsd: false);
+        _oscVm.VolumeRequested += SetVolume;
+        _oscVm.PlayPauseRequested += TogglePlayPause;
+        _oscVm.MuteRequested += ToggleMute;
+        _oscVm.PreviousRequested += PlaylistPrevious;
+        _oscVm.NextRequested += PlaylistNext;
         _oscVm.FullscreenRequested += ToggleFullscreen;
         _oscVm.SettingsRequested += ShowSettingsSidebar;
         _oscVm.PlaylistRequested += ShowPlaylistSidebar;
@@ -210,7 +206,7 @@ public sealed partial class MainWindow : Window
         {
             if (_player is { IsRunning: true })
             {
-                _player.Command(args);
+                _player.CommandAsync(args);
             }
         }
         catch (MpvException ex)
@@ -271,6 +267,9 @@ public sealed partial class MainWindow : Window
         }
 
         _wasPlayingBeforeSeek = false;
+        ShowOsd(
+            TimeFormatter.Format(_oscVm.Position),
+            TimeFormatter.Format(_oscVm.Duration));
         ResetAutoHideTimer();
     }
 
@@ -511,7 +510,7 @@ public sealed partial class MainWindow : Window
     private string? FindChapterTitle(double seconds)
     {
         string? title = null;
-        foreach (MpvChapter chapter in _chapters)
+        foreach (ChapterInfo chapter in _chapters)
         {
             if (chapter.Time > seconds)
             {
@@ -700,9 +699,11 @@ public sealed partial class MainWindow : Window
             {
                 case "time-pos":
                     _oscVm.SetPositionFromPlayer(value);
+                    MaintainAbLoop(value);
                     break;
                 case "duration":
                     _oscVm.SetDurationFromPlayer(value);
+                    UpdateSmtc();
                     break;
                 case "volume":
                     _oscVm.SetVolumeFromPlayer(value);
@@ -712,6 +713,9 @@ public sealed partial class MainWindow : Window
                     break;
                 case "speed":
                     _oscVm.SetSpeedFromPlayer(value);
+                    break;
+                default:
+                    OnStage3NumberProperty(name, value);
                     break;
             }
         });
@@ -725,9 +729,13 @@ public sealed partial class MainWindow : Window
             {
                 case "pause":
                     _oscVm.SetPlayingFromPlayer(!value);
+                    UpdateSmtc();
                     break;
                 case "mute":
                     _oscVm.SetMutedFromPlayer(value);
+                    break;
+                default:
+                    OnStage3FlagProperty(name, value);
                     break;
             }
         });
@@ -735,12 +743,17 @@ public sealed partial class MainWindow : Window
 
     private void OnStringPropertyChanged(string name, string? value)
     {
-        if (name != "media-title" || string.IsNullOrWhiteSpace(value))
+        if (name == "media-title" && !string.IsNullOrWhiteSpace(value))
         {
-            return;
+            DispatcherQueue.TryEnqueue(() =>
+            {
+                _currentTitle = value;
+                SetWindowTitle(value);
+                UpdateSmtc();
+            });
         }
 
-        DispatcherQueue.TryEnqueue(() => TitleBar.Title = value);
+        DispatcherQueue.TryEnqueue(() => OnStage3StringProperty(name, value));
     }
 
     private void OnFileLoaded()
@@ -762,19 +775,30 @@ public sealed partial class MainWindow : Window
         _oscVm.SetPlayingFromPlayer(!_player.GetPropertyFlag("pause"));
         _oscVm.SetMutedFromPlayer(_player.GetPropertyFlag("mute"));
 
-        _chapters = _player.GetChapters();
-        _oscVm.Chapters = _chapters.Select(chapter => chapter.Time).ToArray();
+        _chapters = _chapterList;
+        _oscVm.Chapters = _chapterList.Select(chapter => chapter.Time).ToArray();
         _oscVm.AbLoopA = null;
         _oscVm.AbLoopB = null;
         UpdateTimelines();
 
+        string? path = _player.GetPropertyString("path");
         string? title = _player.GetPropertyString("media-title");
+        if (string.IsNullOrWhiteSpace(title) ||
+            (!string.IsNullOrEmpty(path) && string.Equals(title, path, StringComparison.Ordinal)))
+        {
+            title = string.IsNullOrEmpty(path)
+                ? null
+                : System.IO.Path.GetFileName(path);
+        }
+
         if (!string.IsNullOrWhiteSpace(title))
         {
-            TitleBar.Title = title;
+            _currentTitle = title;
+            SetWindowTitle(title);
         }
 
         ShowChrome();
+        OnMediaLoadedStage3();
     }
 
     private void ApplyTheme()
@@ -903,6 +927,9 @@ public sealed partial class MainWindow : Window
         {
             xamlRoot.Changed += OnXamlRootChanged;
         }
+
+        RootGrid.Focus(FocusState.Programmatic);
+        InitializeSmtc();
     }
 
     private void OnVideoFrameSizeChanged(object sender, SizeChangedEventArgs e)
@@ -968,6 +995,7 @@ public sealed partial class MainWindow : Window
             _player.FileLoaded += OnFileLoaded;
             _player.Start(width, height);
             _player.ObserveProperty("display-swapchain", MpvFormat.Int64);
+            InitializePlayerStage3(_player);
 
             _oscVm.SetDurationFromPlayer(_player.GetPropertyDouble("duration"));
             _oscVm.SetPositionFromPlayer(_player.GetPropertyDouble("time-pos"));
@@ -985,13 +1013,13 @@ public sealed partial class MainWindow : Window
                 OnDisplaySwapChainChanged(existing);
             }
 
-            _player.Command("loadfile", "av://lavfi:testsrc=size=1280x720:rate=30");
-            Trace("loadfile issued");
+            OpenStartupMedia();
         }
         catch (Exception ex)
         {
             Trace("mpv start failed: " + ex);
             TitleBar.Title = "Wiina — mpv failed";
+            ShowOsd("播放引擎启动失败", ex.Message);
         }
     }
 
@@ -1267,6 +1295,7 @@ public sealed partial class MainWindow : Window
         _resizeTimer.Stop();
         _autoHideTimer.Stop();
         WindowInterop.SetCursorVisible(true);
+        OnClosedStage3();
         SaveSettings();
         WindowInterop.Detach(this);
 

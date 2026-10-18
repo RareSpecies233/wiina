@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<UserControl
+    x:Class="Wiina.App.Controls.OsdText"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    IsHitTestVisible="False">
+
+    <Border x:Name="OsdRoot"
+            Opacity="0"
+            Visibility="Collapsed"
+            HorizontalAlignment="Right"
+            VerticalAlignment="Bottom"
+            MinWidth="120"
+            MaxWidth="460"
+            Padding="16,8"
+            CornerRadius="12"
+            Background="{ThemeResource PanelBrush}"
+            BorderBrush="{ThemeResource PanelBorderBrush}"
+            BorderThickness="1">
+        <StackPanel Spacing="2">
+            <TextBlock x:Name="OsdMessageText"
+                       FontSize="18"
+                       Foreground="{ThemeResource PrimaryTextBrush}"
+                       TextWrapping="Wrap" />
+            <TextBlock x:Name="OsdSecondaryText"
+                       FontSize="11"
+                       Foreground="{ThemeResource SecondaryTextBrush}"
+                       TextWrapping="Wrap"
+                       Visibility="Collapsed" />
+        </StackPanel>
+    </Border>
+</UserControl>

@@ -48,6 +48,7 @@
                 PointerReleased="OnSliderPointerReleased"
                 PointerMoved="OnSliderPointerMoved"
                 PointerExited="OnSliderPointerExited"
+                PointerWheelChanged="OnSliderPointerWheelChanged"
                 PointerCaptureLost="OnSliderPointerCaptureLost" />
         <Border x:Name="ChapterBrushSource"
                 Background="{ThemeResource SecondaryTextBrush}"

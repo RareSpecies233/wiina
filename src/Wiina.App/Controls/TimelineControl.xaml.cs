@@ -40,6 +40,9 @@ public sealed partial class TimelineControl : UserControl
     public event Action<double, double>? PreviewRequested;
     public event Action? PreviewHidden;
 
+    /// <summary>Wheel over the timeline always seeks (spec §6.2 override).</summary>
+    public event Action<double>? WheelSeekRequested;
+
     public bool IsScrubbing => _dragging;
 
     public double Position
@@ -205,6 +208,18 @@ public sealed partial class TimelineControl : UserControl
         {
             PreviewHidden?.Invoke();
         }
+    }
+
+    private void OnSliderPointerWheelChanged(object sender, PointerRoutedEventArgs e)
+    {
+        int delta = e.GetCurrentPoint(Slider).Properties.MouseWheelDelta;
+        if (delta == 0)
+        {
+            return;
+        }
+
+        WheelSeekRequested?.Invoke(Math.Sign(delta) * SeekStepSeconds);
+        e.Handled = true;
     }
 
     private void OnSizeChanged(object sender, SizeChangedEventArgs e) => UpdateVisuals();

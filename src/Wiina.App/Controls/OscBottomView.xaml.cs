@@ -13,6 +13,8 @@ public sealed partial class OscBottomView : UserControl
 
     public TimelineControl Timeline => InnerTimeline;
 
+    public VolumeSlider Volume => VolumeGroup;
+
     private void OnSizeChanged(object sender, SizeChangedEventArgs e)
     {
         // Hide toolbar first, then volume, then the duration label; the

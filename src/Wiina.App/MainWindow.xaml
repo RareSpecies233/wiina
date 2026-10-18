@@ -7,18 +7,10 @@
 
     <Grid x:Name="RootGrid"
           Background="{ThemeResource AppBackgroundBrush}"
+          IsTabStop="True"
           PointerEntered="OnRootPointerEntered"
           PointerMoved="OnRootPointerMoved"
           PointerExited="OnRootPointerExited">
-        <Grid.KeyboardAccelerators>
-            <KeyboardAccelerator Key="F11" Invoked="OnToggleFullscreen" />
-            <KeyboardAccelerator Key="Escape" Invoked="OnEscape" />
-            <KeyboardAccelerator Key="B" Modifiers="Control,Shift" Invoked="OnToggleSidebarAccel" />
-            <KeyboardAccelerator Key="L" Modifiers="Control,Shift" Invoked="OnToggleLayoutAccel" />
-            <KeyboardAccelerator Key="O" Modifiers="Control,Shift" Invoked="OnCycleOscAccel" />
-            <KeyboardAccelerator Key="T" Modifiers="Control,Shift" Invoked="OnCycleThemeAccel" />
-        </Grid.KeyboardAccelerators>
-
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
@@ -26,7 +18,7 @@
         </Grid.RowDefinitions>
 
         <!-- Video layer. In docked mode this becomes row 1 only. -->
-        <Grid x:Name="VideoFrame" Grid.RowSpan="3">
+        <Grid x:Name="VideoFrame" Grid.RowSpan="3" Background="Transparent">
             <SwapChainPanel x:Name="VideoHost"
                             HorizontalAlignment="Left"
                             VerticalAlignment="Top">
@@ -75,5 +67,11 @@
                 </StackPanel>
             </Border>
         </Grid>
+
+        <controls:OsdText x:Name="Osd"
+                          Grid.RowSpan="3"
+                          Margin="0,0,12,76"
+                          HorizontalAlignment="Right"
+                          VerticalAlignment="Bottom" />
     </Grid>
 </Window>

@@ -18,3 +18,21 @@ internal struct MpvEventProperty
     public MpvFormat Format;
     public nint Data;
 }
+
+[StructLayout(LayoutKind.Sequential)]
+internal struct MpvEventEndFile
+{
+    public int Reason;
+    public int Error;
+    public long PlaylistEntryId;
+    public long PlaylistInsertId;
+}
+
+[StructLayout(LayoutKind.Sequential)]
+internal struct MpvEventLogMessage
+{
+    public nint Prefix;
+    public nint Level;
+    public nint Text;
+    public int LogLevel;
+}

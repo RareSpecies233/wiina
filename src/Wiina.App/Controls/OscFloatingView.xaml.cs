@@ -13,6 +13,8 @@ public sealed partial class OscFloatingView : UserControl
 
     public TimelineControl Timeline => InnerTimeline;
 
+    public VolumeSlider Volume => VolumeGroup;
+
     public FrameworkElement DragHandle => DragArea;
 
     /// <summary>Clamp the floating shell to the window while keeping it usable.</summary>

@@ -22,6 +22,7 @@
                     Value="{Binding Volume, Mode=TwoWay}"
                     IsThumbToolTipEnabled="False"
                     VerticalAlignment="Center"
+                    PointerWheelChanged="OnSliderWheelChanged"
                     AutomationProperties.Name="音量" />
             <!-- 2 px notch at 100% so over-amplification is visible. -->
             <Border x:Name="UnityNotch"

@@ -32,3 +32,12 @@ public enum SidebarType
     Playlist,
     Plugins,
 }
+
+/// <summary>What a single left click on the video area does.</summary>
+public enum SingleClickAction
+{
+    HideOsc,
+    TogglePlayPause,
+    Fullscreen,
+    None,
+}

@@ -35,4 +35,23 @@ public sealed class AppSettings
     public int WindowX { get; set; } = int.MinValue;
 
     public int WindowY { get; set; } = int.MinValue;
+
+    /// <summary>Resume local files from the saved history position.</summary>
+    public bool ResumePlayback { get; set; } = true;
+
+    /// <summary>Single click on the video area (Stage 3 basic preference).</summary>
+    public SingleClickAction SingleClickAction { get; set; } =
+        SingleClickAction.HideOsc;
+
+    /// <summary>Recently opened URLs, newest first (max 10).</summary>
+    public List<string> RecentUrls { get; set; } = new();
+
+    /// <summary>Volume change per wheel notch over the video.</summary>
+    public double WheelVolumeStep { get; set; } = 5;
+
+    /// <summary>Seek seconds per horizontal wheel notch over the video.</summary>
+    public double WheelSeekSeconds { get; set; } = 5;
+
+    /// <summary>Folder used by Ctrl+S screenshots.</summary>
+    public string ScreenshotFolder { get; set; } = string.Empty;
 }

@@ -7,12 +7,39 @@ public partial class App : Application
 {
     private Window? _window;
 
+    /// <summary>File/folder/URL arguments passed on the command line.</summary>
+    public static IReadOnlyList<string> StartupPaths { get; private set; } =
+        Array.Empty<string>();
+
     public App()
     {
         InitializeComponent();
+        StartupPaths = ParseStartupPaths(Environment.GetCommandLineArgs().Skip(1));
         UnhandledException += OnUnhandledException;
         AppDomain.CurrentDomain.UnhandledException += (_, e) =>
             LogCrash(e.ExceptionObject as Exception);
+    }
+
+    private static IReadOnlyList<string> ParseStartupPaths(IEnumerable<string> args)
+    {
+        var paths = new List<string>();
+        foreach (string arg in args)
+        {
+            if (string.IsNullOrWhiteSpace(arg))
+            {
+                continue;
+            }
+
+            // Launchers may hand us flags; only take paths/URLs.
+            if (arg.StartsWith('-'))
+            {
+                continue;
+            }
+
+            paths.Add(arg);
+        }
+
+        return paths;
     }
 
     protected override void OnLaunched(LaunchActivatedEventArgs args)

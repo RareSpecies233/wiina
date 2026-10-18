@@ -81,6 +81,12 @@
                             Content="&#xE8A9;"
                             Click="OnWindowClick"
                             ToolTipService.ToolTip="窗口尺寸" />
+                    <Button x:Name="MoreButton"
+                            Style="{StaticResource TitleBarButtonStyle}"
+                            Content="&#xE712;"
+                            Click="OnMoreClick"
+                            ToolTipService.ToolTip="更多操作"
+                            AutomationProperties.Name="更多" />
                 </StackPanel>
             </Grid>
 

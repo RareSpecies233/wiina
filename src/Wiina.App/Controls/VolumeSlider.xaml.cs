@@ -1,5 +1,6 @@
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Input;
 
 namespace Wiina.App.Controls;
 
@@ -8,12 +9,28 @@ public sealed partial class VolumeSlider : UserControl
 {
     private const double Maximum = 130;
     private const double Nominal = 100;
+    private const double WheelStep = 5;
 
     public VolumeSlider()
     {
         InitializeComponent();
         Loaded += (_, _) => UpdateNotch();
         SizeChanged += (_, _) => UpdateNotch();
+    }
+
+    /// <summary>Wheel over the slider always changes volume (spec §6.2 override).</summary>
+    public event Action<double>? WheelVolumeRequested;
+
+    private void OnSliderWheelChanged(object sender, PointerRoutedEventArgs e)
+    {
+        int delta = e.GetCurrentPoint(VolumeInput).Properties.MouseWheelDelta;
+        if (delta == 0)
+        {
+            return;
+        }
+
+        WheelVolumeRequested?.Invoke(Math.Sign(delta) * WheelStep);
+        e.Handled = true;
     }
 
     private void UpdateNotch()

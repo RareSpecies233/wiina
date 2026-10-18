@@ -42,6 +42,7 @@ public sealed partial class TitleBarView : UserControl
     public event EventHandler? ThemeClicked;
     public event EventHandler? IconsClicked;
     public event EventHandler? WindowClicked;
+    public event EventHandler? MoreClicked;
 
     public string Title
     {
@@ -55,6 +56,8 @@ public sealed partial class TitleBarView : UserControl
     }
 
     public TimelineControl TopTimeline => TopTimelineControl;
+
+    public VolumeSlider TopVolumeControl => TopVolume;
 
     public void SetOscDataContext(object? dataContext) => TopOscRoot.DataContext = dataContext;
 
@@ -89,4 +92,7 @@ public sealed partial class TitleBarView : UserControl
 
     private void OnWindowClick(object sender, RoutedEventArgs e) =>
         WindowClicked?.Invoke(this, EventArgs.Empty);
+
+    private void OnMoreClick(object sender, RoutedEventArgs e) =>
+        MoreClicked?.Invoke(this, EventArgs.Empty);
 }

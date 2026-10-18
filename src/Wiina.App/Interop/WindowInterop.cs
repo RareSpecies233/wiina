@@ -53,6 +53,12 @@ internal static class WindowInterop
     [DllImport("user32.dll")]
     private static extern bool GetWindowRect(nint hWnd, out RECT rect);
 
+    [DllImport("user32.dll")]
+    private static extern short GetKeyState(int nVirtKey);
+
+    [DllImport("user32.dll")]
+    private static extern uint GetDoubleClickTime();
+
     private const int IDC_ARROW = 32512;
 
     private delegate nint SubclassProc(
@@ -127,6 +133,48 @@ internal static class WindowInterop
         {
             // Cursor feedback must never break playback.
         }
+    }
+
+    /// <summary>Global key state for shortcut modifier detection.</summary>
+    public static bool IsKeyDown(Windows.System.VirtualKey key)
+    {
+        try
+        {
+            return (GetKeyState((int)key) & 0x8000) != 0;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    /// <summary>System double-click interval, clamped to a usable range.</summary>
+    public static int GetDoubleClickMilliseconds()
+    {
+        try
+        {
+            uint milliseconds = GetDoubleClickTime();
+            return milliseconds is >= 100 and <= 1000 ? (int)milliseconds : 500;
+        }
+        catch
+        {
+            return 500;
+        }
+    }
+
+    /// <summary>Screen cursor position in physical pixels.</summary>
+    public static bool TryGetCursorPosition(out int x, out int y)
+    {
+        if (GetCursorPos(out POINT point))
+        {
+            x = point.X;
+            y = point.Y;
+            return true;
+        }
+
+        x = 0;
+        y = 0;
+        return false;
     }
 
     private sealed class Hook

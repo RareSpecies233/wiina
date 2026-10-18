@@ -43,6 +43,25 @@ internal static class MpvInterop
     [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
     internal static extern int mpv_command(nint ctx, nint args);
 
+    [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
+    internal static extern int mpv_command_async(
+        nint ctx,
+        ulong replyUserData,
+        nint args);
+
+    [DllImport(Lib, CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Ansi)]
+    internal static extern int mpv_get_property_node(
+        nint ctx,
+        string name,
+        MpvFormat format,
+        out MpvNode data);
+
+    [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
+    internal static extern void mpv_free_node_contents(ref MpvNode node);
+
+    [DllImport(Lib, CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Ansi)]
+    internal static extern int mpv_request_log_messages(nint ctx, string minLevel);
+
     [DllImport(Lib, CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Ansi)]
     internal static extern int mpv_observe_property(nint ctx, ulong replyUserData, string name, MpvFormat format);
 
