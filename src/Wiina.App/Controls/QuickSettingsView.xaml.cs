@@ -4,6 +4,7 @@ using Microsoft.UI.Xaml.Controls.Primitives;
 using Wiina.Core.Models;
 using Wiina.Core.Osd;
 using Wiina.Core.Settings;
+using Wiina.Core.Subtitles;
 using Wiina.Mpv;
 
 namespace Wiina.App.Controls;
@@ -54,6 +55,9 @@ public enum QuickSettingKey
     SubtitleFontSize,
     SubtitleColor,
     SubtitleBorder,
+    EqualizerEnabled,
+    EqualizerPreset,
+    EqualizerGain,
     LoadSubtitle,
     RefreshAudioDevices,
     ResetCard,
@@ -68,6 +72,8 @@ public sealed class QuickSettingChangedEventArgs : EventArgs
     public double Number { get; init; }
 
     public bool Flag { get; init; }
+
+    public IReadOnlyList<double>? Gains { get; init; }
 }
 
 /// <summary>
@@ -127,6 +133,10 @@ public sealed partial class QuickSettingsView : UserControl
         SubtitleColorBox.ItemsSource = QuickSettings.SubtitleColors;
         SubtitleColorBox.DisplayMemberPath = "Label";
         SubtitleColorBox.SelectedValuePath = "Value";
+
+        EqualizerPresetBox.ItemsSource = Wiina.Core.Filters.EqualizerBands.PresetNames
+            .Concat(new[] { Wiina.Core.Filters.EqualizerBands.CustomPreset })
+            .ToArray();
     }
 
     public void LoadFromSettings(AppSettings settings)
@@ -169,6 +179,12 @@ public sealed partial class QuickSettingsView : UserControl
             VolumeSlider.Value = QuickSettings.ClampVolume(settings.Volume, settings.MaxVolume);
             MuteSwitch.IsOn = settings.Muted;
             AudioDelaySlider.Value = QuickSettings.ClampAudioDelay(settings.AudioDelay);
+            EqualizerSwitch.IsOn = settings.EqualizerEnabled;
+            settings.EqualizerGains = Wiina.Core.Filters.EqualizerBands
+                .NormalizeGains(settings.EqualizerGains);
+            EqView.SetGains(settings.EqualizerGains);
+            EqView.SetEnabled(settings.EqualizerEnabled);
+            EqualizerPresetBox.SelectedIndex = EqualizerPresetIndex(settings.EqualizerPreset);
 
             SubtitleVisibleSwitch.IsOn = settings.SubtitleVisible;
             SubtitleDelaySlider.Value = QuickSettings.ClampSubtitleDelay(settings.SubtitleDelay);
@@ -344,6 +360,25 @@ public sealed partial class QuickSettingsView : UserControl
         }
     }
 
+    /// <summary>Mirrors filter-window/quick-setting EQ changes without echoing events.</summary>
+    public void SetEqualizerState(AppSettings settings)
+    {
+        _loading = true;
+        try
+        {
+            settings.EqualizerGains = Wiina.Core.Filters.EqualizerBands
+                .NormalizeGains(settings.EqualizerGains);
+            EqualizerSwitch.IsOn = settings.EqualizerEnabled;
+            EqView.SetGains(settings.EqualizerGains);
+            EqView.SetEnabled(settings.EqualizerEnabled);
+            EqualizerPresetBox.SelectedIndex = EqualizerPresetIndex(settings.EqualizerPreset);
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
     public void SetAudioDeviceName(string? name)
     {
         if (string.IsNullOrWhiteSpace(name))
@@ -450,19 +485,11 @@ public sealed partial class QuickSettingsView : UserControl
     {
         TrackInfo? selected = _tracks.FirstOrDefault(
             track => track.Type == TrackType.Subtitle && track.IsSelected);
-        string? codec = selected?.Codec?.ToLowerInvariant();
-        bool image = codec is "pgs" or "dvd_subtitle" or "dvdsub" or "dvb_subtitle" or
-            "dvbsub" or "xsub";
-        bool ass = codec is "ass" or "ssa";
+        SubtitleStyleAdvice advice = SubtitleStyleAdvisory.Analyze(selected?.Codec);
 
-        if (image)
+        if (advice.Issue != SubtitleStyleIssue.None)
         {
-            SubtitleStyleWarning.Text = "图像字幕（PGS/VobSub）由位图构成，无法调整字体、颜色和边框。";
-            SubtitleStyleWarning.Visibility = Visibility.Visible;
-        }
-        else if (ass)
-        {
-            SubtitleStyleWarning.Text = "ASS/SSA 字幕的部分样式由字幕文件决定；字号/颜色/边框仅作为默认样式。";
+            SubtitleStyleWarning.Text = advice.Message;
             SubtitleStyleWarning.Visibility = Visibility.Visible;
         }
         else
@@ -470,7 +497,7 @@ public sealed partial class QuickSettingsView : UserControl
             SubtitleStyleWarning.Visibility = Visibility.Collapsed;
         }
 
-        bool styleEnabled = _hasMedia && !image;
+        bool styleEnabled = _hasMedia && advice.AllowStyleOverride;
         SubtitleFontSizeBox.IsEnabled = styleEnabled;
         SubtitleColorBox.IsEnabled = styleEnabled;
         SubtitleBorderBox.IsEnabled = styleEnabled;
@@ -527,6 +554,28 @@ public sealed partial class QuickSettingsView : UserControl
                     QuickSettings.SubtitleColors[i].Value,
                     value,
                     StringComparison.OrdinalIgnoreCase))
+            {
+                return i;
+            }
+        }
+
+        return 0;
+    }
+
+    private static int EqualizerPresetIndex(string? name)
+    {
+        var names = Wiina.Core.Filters.EqualizerBands.PresetNames;
+        if (string.Equals(
+                name,
+                Wiina.Core.Filters.EqualizerBands.CustomPreset,
+                StringComparison.Ordinal))
+        {
+            return names.Count;
+        }
+
+        for (int i = 0; i < names.Count; i++)
+        {
+            if (string.Equals(names[i], name, StringComparison.OrdinalIgnoreCase))
             {
                 return i;
             }
@@ -601,6 +650,13 @@ public sealed partial class QuickSettingsView : UserControl
                     Raise(
                         QuickSettingKey.SubtitleColor,
                         text: QuickSettings.SubtitleColors[SubtitleColorBox.SelectedIndex].Value);
+                }
+
+                break;
+            case nameof(EqualizerPresetBox):
+                if (EqualizerPresetBox.SelectedItem is string preset)
+                {
+                    Raise(QuickSettingKey.EqualizerPreset, text: preset);
                 }
 
                 break;
@@ -691,7 +747,34 @@ public sealed partial class QuickSettingsView : UserControl
             case nameof(SubtitleVisibleSwitch):
                 Raise(QuickSettingKey.SubtitleVisible, flag: SubtitleVisibleSwitch.IsOn);
                 break;
+            case nameof(EqualizerSwitch):
+                EqView.SetEnabled(EqualizerSwitch.IsOn);
+                Raise(QuickSettingKey.EqualizerEnabled, flag: EqualizerSwitch.IsOn);
+                break;
         }
+    }
+
+    private void OnEqualizerGainsChanged(
+        object? sender,
+        EqualizerGainsChangedEventArgs e)
+    {
+        if (_loading)
+        {
+            return;
+        }
+
+        string detected = Wiina.Core.Filters.EqualizerBands.DetectPreset(e.Gains);
+        _loading = true;
+        try
+        {
+            EqualizerPresetBox.SelectedIndex = EqualizerPresetIndex(detected);
+        }
+        finally
+        {
+            _loading = false;
+        }
+
+        Raise(QuickSettingKey.EqualizerGain, gains: e.Gains);
     }
 
     private void OnSliderValueChanged(object sender, RangeBaseValueChangedEventArgs e)
@@ -784,7 +867,8 @@ public sealed partial class QuickSettingsView : UserControl
         QuickSettingKey key,
         string? text = null,
         double number = 0,
-        bool flag = false)
+        bool flag = false,
+        IReadOnlyList<double>? gains = null)
     {
         if (_loading)
         {
@@ -797,6 +881,7 @@ public sealed partial class QuickSettingsView : UserControl
             Text = text,
             Number = number,
             Flag = flag,
+            Gains = gains,
         });
     }
 

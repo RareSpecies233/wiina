@@ -126,12 +126,17 @@ public sealed class MpvPlayer : IDisposable
         Start(width, height, headless: false);
     }
 
+    public void Start(int width, int height, bool headless) =>
+        Start(width, height, headless, hwdec: null);
+
     /// <summary>
     /// Starts the client. <paramref name="headless"/> is used by the Stage 5
     /// thumbnail extractor: no window, no audio, paused and kept open so the
     /// background worker can seek and call <see cref="ScreenshotRaw"/>.
+    /// <paramref name="hwdec"/> overrides the initial hwdec option so video
+    /// filters can force software decoding before the first file is opened.
     /// </summary>
-    public void Start(int width, int height, bool headless)
+    public void Start(int width, int height, bool headless, string? hwdec)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
         if (_handle != 0)
@@ -163,7 +168,9 @@ public sealed class MpvPlayer : IDisposable
             SetOption("input-default-bindings", "no");
             SetOption("osc", "no");
             SetOption("osd-level", "0");
-            SetOption("hwdec", "auto-safe");
+            SetOption(
+                "hwdec",
+                string.IsNullOrWhiteSpace(hwdec) ? "auto-safe" : hwdec);
             SetOption("screenshot-format", "png");
             SetOption("screenshot-directory", DefaultScreenshotFolder());
             SetOption("sub-visibility", "yes");

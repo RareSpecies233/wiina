@@ -1,3 +1,4 @@
+using Wiina.Core.Filters;
 using Wiina.Core.Input;
 using Wiina.Core.Models;
 
@@ -207,4 +208,60 @@ public sealed class AppSettings
 
     /// <summary>User key bindings; empty means the documented defaults.</summary>
     public List<KeyBindingSetting> KeyBindings { get; set; } = new();
+
+    // ---- Stage 8: video filters, equalizer and advanced A/V ----
+
+    /// <summary>Ordered user video filters (the editor list).</summary>
+    public List<VideoFilterSetting> VideoFilters { get; set; } = new();
+
+    public List<VideoFilterPreset> VideoFilterPresets { get; set; } = new();
+
+    /// <summary>Extra audio filters after the equalizer, in chain order.</summary>
+    public List<AudioFilterSetting> AudioFilters { get; set; } = new();
+
+    public List<AudioFilterPreset> AudioFilterPresets { get; set; } = new();
+
+    public bool EqualizerEnabled { get; set; }
+
+    /// <summary>Exactly ten gains in dB (-12..+12), low to high frequency.</summary>
+    public List<double> EqualizerGains { get; set; } = new()
+    {
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    };
+
+    /// <summary>Last selected EQ preset name, or 自定义 after manual edits.</summary>
+    public string EqualizerPreset { get; set; } = "Flat";
+
+    /// <summary>mpv <c>tone-mapping</c> algorithm (auto/bt.2390/st2094-40/...).</summary>
+    public string VideoToneMapping { get; set; } = "auto";
+
+    /// <summary>mpv <c>hdr-compute-peak</c>; auto lets libmpv decide.</summary>
+    public string VideoHdrComputePeak { get; set; } = "auto";
+
+    /// <summary>mpv <c>target-peak</c>: 0 means auto, otherwise nits.</summary>
+    public double VideoTargetPeak { get; set; }
+
+    /// <summary>hwdec mode used when hardware decode is enabled.</summary>
+    public string VideoHwdecMode { get; set; } = "auto-safe";
+
+    /// <summary>mpv <c>video-output-levels</c>: auto/limited/full.</summary>
+    public string VideoOutputLevels { get; set; } = "auto";
+
+    // Legacy delogo controls, kept separate from the ordered filter list.
+    public bool VideoDelogoEnabled { get; set; }
+
+    public int VideoDelogoX { get; set; }
+
+    public int VideoDelogoY { get; set; }
+
+    public int VideoDelogoWidth { get; set; } = 320;
+
+    public int VideoDelogoHeight { get; set; } = 80;
+
+    /// <summary>mpv <c>sub-ass-override</c>: no/yes/scale/strip/force.</summary>
+    public string SubtitleAssOverride { get; set; } = "scale";
+
+    public bool SubtitleBold { get; set; }
+
+    public bool SubtitleItalic { get; set; }
 }

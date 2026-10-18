@@ -78,6 +78,9 @@ public sealed partial class MainWindow : Window
     private int _videoWidth;
     private int _videoHeight;
     private string? _currentAudioDevice;
+    private bool _filterSoftwareDecode;
+    private double? _pendingFilterResumeTime;
+    private bool _pendingFilterResumePaused;
 
     private bool AnimationsEnabled => _settings.AnimationsEnabled && SystemAnimationsEnabled;
 
@@ -947,6 +950,21 @@ public sealed partial class MainWindow : Window
         EndStreamOpen();
         RefreshSidebarContent();
         ApplyCropFromSettings();
+        ApplyStage8Settings();
+
+        if (_pendingFilterResumeTime is double resume)
+        {
+            _pendingFilterResumeTime = null;
+            if (resume > 0.25)
+            {
+                SeekAbsolute(resume, showOsd: false);
+            }
+
+            if (_pendingFilterResumePaused)
+            {
+                _player.CommandAsync("set", "pause", "yes");
+            }
+        }
     }
 
     private void ApplyTheme()
@@ -1186,11 +1204,16 @@ public sealed partial class MainWindow : Window
             _player.FlagPropertyChanged += OnFlagPropertyChanged;
             _player.StringPropertyChanged += OnStringPropertyChanged;
             _player.FileLoaded += OnFileLoaded;
-            _player.Start(width, height);
+            _player.Start(
+                width,
+                height,
+                headless: false,
+                hwdec: HasActiveVideoFilters() ? "no" : EffectiveHwdecValue());
             _player.ObserveProperty("display-swapchain", MpvFormat.Int64);
             InitializePlayerStage3(_player);
             ApplyPersistedQuickSettings();
             ApplyStage7Settings();
+            ApplyStage8Settings();
 
             _oscVm.SetDurationFromPlayer(_player.GetPropertyDouble("duration"));
             _oscVm.SetPositionFromPlayer(_player.GetPropertyDouble("time-pos"));

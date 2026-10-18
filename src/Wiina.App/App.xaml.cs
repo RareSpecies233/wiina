@@ -31,6 +31,7 @@ public partial class App : Application
     private static AboutWindow? _aboutWindow;
     private static LogViewerWindow? _logWindow;
     private static InspectorWindow? _inspectorWindow;
+    private static FiltersWindow? _filtersWindow;
     private readonly Dictionary<string, MainWindow> _windows = new();
 
     /// <summary>True when settings.json did not exist before this launch.</summary>
@@ -404,6 +405,29 @@ public partial class App : Application
             }
         };
         window.Activate();
+    }
+
+    /// <summary>Opens the single video/audio filter + equalizer window.</summary>
+    public static void ShowFiltersWindow(bool audioTab = false)
+    {
+        if (_filtersWindow is { } existing)
+        {
+            existing.SelectTab(audioTab);
+            existing.Activate();
+            return;
+        }
+
+        var window = new FiltersWindow();
+        _filtersWindow = window;
+        window.Closed += (_, _) =>
+        {
+            if (ReferenceEquals(_filtersWindow, window))
+            {
+                _filtersWindow = null;
+            }
+        };
+        window.Activate();
+        window.SelectTab(audioTab);
     }
 
     /// <summary>Opens media in the active window or a new one (welcome/menu).</summary>

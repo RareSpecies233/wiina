@@ -1,3 +1,4 @@
+using Wiina.Core.Filters;
 using Wiina.Core.Models;
 
 namespace Wiina.Core.Settings;
@@ -255,12 +256,119 @@ public static class SettingsCatalog
             settings => settings.VideoHardwareDecode,
             (settings, value) => settings.VideoHardwareDecode = value,
             "hardware decode hwdec 硬解 解码"));
+        rows.Add(ChoiceRow(
+            "video.hwdec-mode", SettingsPageId.Video, "解码",
+            "硬件解码模式", "开启硬件解码时使用的 mpv hwdec 模式；auto-safe 最稳妥。",
+            new[] { "auto-safe", "auto", "d3d11va", "dxva2", "no" },
+            settings => IndexOf(settings.VideoHwdecMode,
+                new[] { "auto-safe", "auto", "d3d11va", "dxva2", "no" }, 0),
+            (settings, value) => settings.VideoHwdecMode =
+                new[] { "auto-safe", "auto", "d3d11va", "dxva2", "no" }[
+                    Math.Clamp(value, 0, 4)],
+            "hwdec hardware decode d3d11va dxva2 硬解 模式"));
         rows.Add(BoolRow(
             "video.deinterlace", SettingsPageId.Video, "解码",
             "去隔行", "对隔行扫描素材启用 mpv 去隔行。",
             settings => settings.VideoDeinterlace,
             (settings, value) => settings.VideoDeinterlace = value,
             "deinterlace 去隔行"));
+        rows.Add(ChoiceRow(
+            "video.tone-mapping", SettingsPageId.Video, "HDR 与色彩",
+            "HDR 色调映射", "SDR 屏幕上显示 HDR 内容时使用的 mpv tone-mapping 算法。",
+            new[]
+            {
+                "自动", "BT.2390", "ST2094-40", "ST2094-10", "Spline",
+                "Hable", "Clip", "Gamma", "Reinhard", "Mobius",
+            },
+            settings => IndexOf(settings.VideoToneMapping,
+                new[]
+                {
+                    "auto", "bt.2390", "st2094-40", "st2094-10", "spline",
+                    "hable", "clip", "gamma", "reinhard", "mobius",
+                }, 0),
+            (settings, value) => settings.VideoToneMapping = new[]
+            {
+                "auto", "bt.2390", "st2094-40", "st2094-10", "spline",
+                "hable", "clip", "gamma", "reinhard", "mobius",
+            }[Math.Clamp(value, 0, 9)],
+            "hdr tone mapping tonemap 色调映射 HDR"));
+        rows.Add(ChoiceRow(
+            "video.hdr-compute-peak", SettingsPageId.Video, "HDR 与色彩",
+            "HDR 峰值计算", "自动让 libmpv 根据内容计算峰值亮度；关闭可省一点性能。",
+            new[] { "自动", "开启", "关闭" },
+            settings => settings.VideoHdrComputePeak switch
+            {
+                "yes" => 1,
+                "no" => 2,
+                _ => 0,
+            },
+            (settings, value) => settings.VideoHdrComputePeak = value switch
+            {
+                1 => "yes",
+                2 => "no",
+                _ => "auto",
+            },
+            "hdr compute peak 峰值 HDR"));
+        rows.Add(NumberRow(
+            "video.target-peak", SettingsPageId.Video, "HDR 与色彩",
+            "目标峰值亮度", "色调映射的目标亮度（nits）；0 表示自动。",
+            0, 4000, 50, " nit（0=自动）",
+            settings => settings.VideoTargetPeak,
+            (settings, value) => settings.VideoTargetPeak = Math.Round(
+                Math.Clamp(value, 0, 4000)),
+            "target peak nits brightness HDR 亮度"));
+        rows.Add(ChoiceRow(
+            "video.output-levels", SettingsPageId.Video, "HDR 与色彩",
+            "输出范围", "auto/limited/full；全范围灰阶发灰时可尝试 full。",
+            new[] { "自动", "Limited（16–235）", "Full（0–255）" },
+            settings => IndexOf(settings.VideoOutputLevels,
+                new[] { "auto", "limited", "full" }, 0),
+            (settings, value) => settings.VideoOutputLevels =
+                new[] { "auto", "limited", "full" }[Math.Clamp(value, 0, 2)],
+            "color range levels output 范围 灰阶"));
+        rows.Add(ActionRow(
+            "video.filters", SettingsPageId.Video, "滤镜",
+            "打开视频滤镜…", "添加/删除/排序/编辑滤镜，保存命名预设并即时应用到 mpv vf。",
+            "open-video-filters",
+            "video filter vf 滤镜"));
+        rows.Add(BoolRow(
+            "video.delogo-enabled", SettingsPageId.Video, "去 Logo",
+            "启用去 Logo", "用周围像素覆盖固定位置的台标；与滤镜列表里的 delogo 互斥。",
+            settings => settings.VideoDelogoEnabled,
+            (settings, value) => settings.VideoDelogoEnabled = value,
+            "delogo logo 台标 去logo"));
+        rows.Add(NumberRow(
+            "video.delogo-x", SettingsPageId.Video, "去 Logo",
+            "去 Logo X", "矩形左上角 X（像素）。",
+            0, 16384, 1, " px",
+            settings => settings.VideoDelogoX,
+            (settings, value) => settings.VideoDelogoX = (int)Math.Round(
+                Math.Clamp(value, 0, 16384)),
+            "delogo x logo 台标"));
+        rows.Add(NumberRow(
+            "video.delogo-y", SettingsPageId.Video, "去 Logo",
+            "去 Logo Y", "矩形左上角 Y（像素）。",
+            0, 16384, 1, " px",
+            settings => settings.VideoDelogoY,
+            (settings, value) => settings.VideoDelogoY = (int)Math.Round(
+                Math.Clamp(value, 0, 16384)),
+            "delogo y logo 台标"));
+        rows.Add(NumberRow(
+            "video.delogo-width", SettingsPageId.Video, "去 Logo",
+            "去 Logo 宽度", "矩形宽度（像素，至少 2）。",
+            2, 16384, 2, " px",
+            settings => settings.VideoDelogoWidth,
+            (settings, value) => settings.VideoDelogoWidth = (int)Math.Round(
+                Math.Clamp(value, 2, 16384)),
+            "delogo width 宽度 台标"));
+        rows.Add(NumberRow(
+            "video.delogo-height", SettingsPageId.Video, "去 Logo",
+            "去 Logo 高度", "矩形高度（像素，至少 2）。",
+            2, 16384, 2, " px",
+            settings => settings.VideoDelogoHeight,
+            (settings, value) => settings.VideoDelogoHeight = (int)Math.Round(
+                Math.Clamp(value, 2, 16384)),
+            "delogo height 高度 台标"));
         rows.Add(ChoiceRow(
             "video.aspect", SettingsPageId.Video, "画面",
             "宽高比", "覆盖视频显示比例；默认跟随容器。",
@@ -370,6 +478,31 @@ public static class SettingsCatalog
             settings => settings.AudioDevice,
             (settings, value) => settings.AudioDevice = string.IsNullOrWhiteSpace(value) ? "auto" : value.Trim(),
             "audio device output 输出 设备"));
+        rows.Add(BoolRow(
+            "audio.equalizer", SettingsPageId.Audio, "均衡器",
+            "启用 10 段均衡器", "31 Hz–16 kHz，每段 −12…+12 dB；实时写入 mpv af。",
+            settings => settings.EqualizerEnabled,
+            (settings, value) => settings.EqualizerEnabled = value,
+            "equalizer eq 均衡器 10段"));
+        rows.Add(ChoiceRow(
+            "audio.equalizer-preset", SettingsPageId.Audio, "均衡器",
+            "均衡器预设", "选择预设会立即覆盖十段增益；手动调整后变为“自定义”。",
+            EqualizerBands.PresetNames.Concat(new[] { EqualizerBands.CustomPreset }).ToArray(),
+            settings => IndexOf(settings.EqualizerPreset,
+                EqualizerBands.PresetNames.Concat(new[] { EqualizerBands.CustomPreset }).ToArray(),
+                EqualizerBands.PresetNames.Count),
+            (settings, value) => ApplyEqualizerPreset(settings, value),
+            "equalizer preset rock jazz classical pop bass treble vocal 均衡器 预设"));
+        rows.Add(ActionRow(
+            "audio.equalizer-reset", SettingsPageId.Audio, "均衡器",
+            "重置均衡器", "十段增益归零并选择 Flat；启用状态保持不变。",
+            "reset-equalizer",
+            "equalizer reset flat 均衡器 重置"));
+        rows.Add(ActionRow(
+            "audio.filters", SettingsPageId.Audio, "滤镜",
+            "打开音频滤镜…", "响度标准化、动态音量、均衡器与命名预设；不支持变调，原因见窗口。",
+            "open-audio-filters",
+            "audio filter af loudnorm dynaudnorm 音频 滤镜"));
         rows.Add(ActionRow(
             "audio.reset", SettingsPageId.Audio, "重置",
             "还原音频设置", "音量、静音、延迟与设备恢复默认。",
@@ -439,6 +572,32 @@ public static class SettingsCatalog
             settings => settings.SubtitleBorderSize,
             (settings, value) => settings.SubtitleBorderSize = QuickSettings.ClampSubtitleBorder(value),
             "subtitle border outline 字幕 边框"));
+        rows.Add(ChoiceRow(
+            "subtitles.ass-override", SettingsPageId.Subtitles, "ASS 字幕",
+            "ASS 样式覆盖", "no 使用字幕自带样式；yes/scale/strip/force 强制应用 Wiina 样式。",
+            new[] { "使用字幕样式（no）", "覆盖样式（yes）", "缩放（scale）", "剥离（strip）", "强制（force）" },
+            settings => IndexOf(settings.SubtitleAssOverride,
+                new[] { "no", "yes", "scale", "strip", "force" }, 2),
+            (settings, value) => settings.SubtitleAssOverride =
+                new[] { "no", "yes", "scale", "strip", "force" }[Math.Clamp(value, 0, 4)],
+            "ass ssa override subtitle style 字幕 样式 覆盖"));
+        rows.Add(BoolRow(
+            "subtitles.bold", SettingsPageId.Subtitles, "ASS 字幕",
+            "粗体", "纯文本与覆盖样式时使用粗体；ASS 内嵌样式仍可能覆盖。",
+            settings => settings.SubtitleBold,
+            (settings, value) => settings.SubtitleBold = value,
+            "subtitle bold 字幕 粗体"));
+        rows.Add(BoolRow(
+            "subtitles.italic", SettingsPageId.Subtitles, "ASS 字幕",
+            "斜体", "纯文本与覆盖样式时使用斜体；ASS 内嵌样式仍可能覆盖。",
+            settings => settings.SubtitleItalic,
+            (settings, value) => settings.SubtitleItalic = value,
+            "subtitle italic 字幕 斜体"));
+        rows.Add(InfoRow(
+            "subtitles.image-warning", SettingsPageId.Subtitles, "ASS 字幕",
+            "图像字幕提示", "PGS/VobSub 等位图字幕无法调整字体、颜色与边框；检测到图像字幕时快速设置会显示警告。",
+            "image subtitle pgs vobsub warning 图像字幕 警告",
+            settings => "PGS/VobSub：样式不可调；ASS/SSA：部分样式由字幕决定"));
         rows.Add(ActionRow(
             "subtitles.reset", SettingsPageId.Subtitles, "重置",
             "还原字幕设置", "延迟、位置、缩放、字号、字体、颜色与边框恢复默认。",
@@ -854,6 +1013,36 @@ public static class SettingsCatalog
         string text when int.TryParse(text, out int parsed) => parsed,
         _ => 0,
     };
+
+    private static int IndexOf(
+        string? value,
+        IReadOnlyList<string> choices,
+        int fallback)
+    {
+        for (int i = 0; i < choices.Count; i++)
+        {
+            if (string.Equals(choices[i], value, StringComparison.OrdinalIgnoreCase))
+            {
+                return i;
+            }
+        }
+
+        return Math.Clamp(fallback, 0, Math.Max(0, choices.Count - 1));
+    }
+
+    private static void ApplyEqualizerPreset(AppSettings settings, int value)
+    {
+        int presetCount = EqualizerBands.PresetNames.Count;
+        if (value < 0 || value >= presetCount)
+        {
+            settings.EqualizerPreset = EqualizerBands.CustomPreset;
+            return;
+        }
+
+        string name = EqualizerBands.PresetNames[value];
+        settings.EqualizerPreset = name;
+        settings.EqualizerGains = EqualizerBands.CreatePreset(name).ToList();
+    }
 
     private static double ToDouble(object? value) => value switch
     {

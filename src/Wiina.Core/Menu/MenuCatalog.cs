@@ -372,7 +372,7 @@ public static class MenuCatalog
                 Item("video.deinterlace", "去隔行", MenuCommands.Deinterlace,
                     enabled: state.HasMedia, isChecked: state.Deinterlace),
                 Item("video.filters", "视频滤镜…", MenuCommands.VideoFilters,
-                    enabled: false, disabledReason: "视频滤镜编辑器在 Stage 8 提供。"),
+                    enabled: true),
             });
 
     private static MenuGroupDefinition AudioMenu(MenuState state) =>
@@ -406,7 +406,7 @@ public static class MenuCatalog
                     enabled: state.HasAudioDevice && state.HasMedia),
                 Separator(),
                 Item("audio.filters", "音频滤镜…", MenuCommands.AudioFilters,
-                    enabled: false, disabledReason: "音频滤镜与均衡器在 Stage 8 提供。"),
+                    enabled: true),
             });
 
     private static MenuGroupDefinition SubtitlesMenu(MenuState state) =>

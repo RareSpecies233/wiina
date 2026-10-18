@@ -1,7 +1,8 @@
-﻿using System.Globalization;
+using System.Globalization;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Wiina.App.Controls;
+using Wiina.Core.Filters;
 using Wiina.Core.Models;
 using Wiina.Core.Osd;
 using Wiina.Core.Settings;
@@ -603,7 +604,8 @@ public sealed partial class MainWindow
                 break;
             case QuickSettingKey.HardwareDecode:
                 _settings.VideoHardwareDecode = e.Flag;
-                ApplyMpvString("hwdec", QuickSettings.HwdecValue(e.Flag));
+                ApplyMpvString("hwdec", EffectiveHwdecValue());
+                ApplyVideoFilters();
                 break;
             case QuickSettingKey.Zoom:
                 _settings.VideoZoom = QuickSettings.ClampZoom(e.Number);
@@ -634,6 +636,21 @@ public sealed partial class MainWindow
             case QuickSettingKey.AudioDevice:
                 _settings.AudioDevice = e.Text ?? "auto";
                 ApplyMpvString("audio-device", _settings.AudioDevice);
+                break;
+            case QuickSettingKey.EqualizerEnabled:
+                _settings.EqualizerEnabled = e.Flag;
+                ApplyAudioFilters();
+                SyncEqualizerViews();
+                break;
+            case QuickSettingKey.EqualizerPreset:
+                ApplyEqualizerPreset(e.Text);
+                ApplyAudioFilters();
+                SyncEqualizerViews();
+                break;
+            case QuickSettingKey.EqualizerGain:
+                _settings.EqualizerGains = EqualizerBands.NormalizeGains(e.Gains);
+                _settings.EqualizerPreset = EqualizerBands.DetectPreset(_settings.EqualizerGains);
+                ApplyAudioFilters();
                 break;
             case QuickSettingKey.Mute:
                 _settings.Muted = e.Flag;
@@ -789,6 +806,13 @@ public sealed partial class MainWindow
                 _settings.AudioDevice = "auto";
                 ApplyPersistedAudioSettings();
                 break;
+            case "audio-equalizer":
+                _settings.EqualizerEnabled = true;
+                _settings.EqualizerGains = EqualizerBands.CreatePreset("Flat").ToList();
+                _settings.EqualizerPreset = "Flat";
+                ApplyAudioFilters();
+                SyncEqualizerViews();
+                break;
             case "subtitle-track":
                 ApplyTrackSelection(TrackType.Subtitle, -2);
                 ApplySecondarySubtitle(-1);
@@ -872,30 +896,75 @@ public sealed partial class MainWindow
         }
     }
 
-    private void ApplyVideoFilters()
+    private void ApplyVideoFilters() => ApplyVideoFiltersCore(new List<string>());
+
+    private void ApplyVideoFiltersCore(List<string> errors)
     {
-        var filters = new List<string>();
-        if (_settings.VideoCropAspect > 0 && _videoWidth > 0 && _videoHeight > 0)
+        if (_player is null)
         {
-            string crop = QuickSettings.ComputeCrop(
-                _settings.VideoCropAspect,
-                _videoWidth,
-                _videoHeight);
-            if (crop != "no" && crop.Contains('x'))
+            return;
+        }
+
+        VideoFilterGraphResult result = VideoFilterGraph.Build(
+            _settings.VideoFilters,
+            _videoWidth,
+            _videoHeight,
+            CreateVideoFilterLegacy());
+        errors.AddRange(result.Errors);
+
+        if (!_player.TrySetPropertyString("vf", result.Graph))
+        {
+            string message = result.Graph.Length == 0
+                ? "mpv 拒绝清空视频滤镜"
+                : "mpv 拒绝了视频滤镜图：" + FirstGraphPart(result.Graph);
+            errors.Add(message);
+            Trace(message);
+        }
+
+        // CPU video filters cannot consume d3d11 hardware frames. Force software
+        // decoding while any vf entry is active, then restore hwdec when clear.
+        bool needsSoftwareDecode = result.Graph.Length > 0;
+        if (needsSoftwareDecode && _settings.VideoHardwareDecode)
+        {
+            ApplyMpvString("hwdec", "no");
+            if (!_filterSoftwareDecode)
             {
-                filters.Add("crop=" + crop.Replace('x', ':'));
+                _filterSoftwareDecode = true;
+                if (!string.IsNullOrEmpty(_player.GetPropertyString("path")))
+                {
+                    ReloadForVideoFilters();
+                }
+
+                ShowOsd("视频滤镜", "已切换为软件解码以应用滤镜");
             }
         }
-
-        string flips = QuickSettings.BuildVideoFilters(
-            _settings.VideoFlipHorizontal,
-            _settings.VideoFlipVertical);
-        if (flips.Length > 0)
+        else if (!needsSoftwareDecode && _filterSoftwareDecode)
         {
-            filters.Add(flips);
+            _filterSoftwareDecode = false;
+            ApplyMpvString("hwdec", EffectiveHwdecValue());
+            if (!string.IsNullOrEmpty(_player.GetPropertyString("path")))
+            {
+                ReloadForVideoFilters();
+            }
+        }
+    }
+
+    private void ReloadForVideoFilters()
+    {
+        if (_player is null)
+        {
+            return;
         }
 
-        ApplyMpvString("vf", string.Join(',', filters));
+        string? path = _player.GetPropertyString("path");
+        if (string.IsNullOrEmpty(path))
+        {
+            return;
+        }
+
+        _pendingFilterResumeTime = _player.GetPropertyDouble("time-pos");
+        _pendingFilterResumePaused = _player.GetPropertyFlag("pause");
+        _player.CommandAsync("loadfile", path, "replace");
     }
 
     private void ApplyCropFromSettings() => ApplyVideoFilters();
@@ -915,9 +984,7 @@ public sealed partial class MainWindow
         ApplyMpvString(
             "deinterlace",
             QuickSettings.DeinterlaceValue(_settings.VideoDeinterlace));
-        ApplyMpvString(
-            "hwdec",
-            QuickSettings.HwdecValue(_settings.VideoHardwareDecode));
+        ApplyMpvString("hwdec", EffectiveHwdecValue());
         ApplyVideoFilters();
         ApplyCropFromSettings();
     }
@@ -936,6 +1003,8 @@ public sealed partial class MainWindow
         {
             ApplyMpvString("audio-device", _settings.AudioDevice);
         }
+
+        ApplyAudioFilters();
     }
 
     private void ApplyPersistedSubtitleSettings()
@@ -959,6 +1028,9 @@ public sealed partial class MainWindow
         ApplyMpvString(
             "sub-border-size",
             FormatDouble(QuickSettings.ClampSubtitleBorder(_settings.SubtitleBorderSize)));
+        ApplyMpvString("sub-ass-override", NormalizeAssOverride(_settings.SubtitleAssOverride));
+        ApplyMpvString("sub-bold", QuickSettings.BooleanValue(_settings.SubtitleBold));
+        ApplyMpvString("sub-italic", QuickSettings.BooleanValue(_settings.SubtitleItalic));
         ApplySecondarySubtitle(_settings.SecondarySubtitleId ?? -1);
     }
 

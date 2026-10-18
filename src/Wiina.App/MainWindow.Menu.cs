@@ -552,6 +552,12 @@ public sealed partial class MainWindow
                 case MenuCommands.Inspector:
                     App.ShowInspectorWindow();
                     break;
+                case MenuCommands.VideoFilters:
+                    App.ShowFiltersWindow(audioTab: false);
+                    break;
+                case MenuCommands.AudioFilters:
+                    App.ShowFiltersWindow(audioTab: true);
+                    break;
                 case MenuCommands.LogViewer:
                     App.ShowLogViewerWindow();
                     break;

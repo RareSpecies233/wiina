@@ -639,8 +639,9 @@ public sealed partial class SettingsWindow : Window
             ? "导出"
             : "打开",
         "install-plugin" => "安装",
-        "open-url-dialog" or "open-log-viewer" or "open-inspector" or "open-about" =>
-            "打开",
+        "open-url-dialog" or "open-log-viewer" or "open-inspector" or "open-about" or
+            "open-video-filters" or "open-audio-filters" => "打开",
+        "reset-equalizer" => "重置",
         "toggle-technical-osd" => "切换",
         _ => "执行",
     };
@@ -903,6 +904,25 @@ public sealed partial class SettingsWindow : Window
                     App.ShowInspectorWindow();
                     break;
 
+                case "open-video-filters":
+                    App.ShowFiltersWindow(audioTab: false);
+                    break;
+
+                case "open-audio-filters":
+                    App.ShowFiltersWindow(audioTab: true);
+                    break;
+
+                case "reset-equalizer":
+                    App.Settings.EqualizerGains = Wiina.Core.Filters.EqualizerBands
+                        .CreatePreset("Flat")
+                        .ToList();
+                    App.Settings.EqualizerPreset = "Flat";
+                    App.ActiveWindow?.ApplyStage8Filters();
+                    App.ActiveWindow?.SyncStage8Views();
+                    SaveNow();
+                    RefreshRows();
+                    break;
+
                 case "open-about":
                     App.ShowAboutWindow();
                     break;
@@ -973,6 +993,17 @@ public sealed partial class SettingsWindow : Window
         App.Settings.VideoPanY = 0;
         App.Settings.VideoDeinterlace = false;
         App.Settings.VideoHardwareDecode = true;
+        App.Settings.VideoHwdecMode = "auto-safe";
+        App.Settings.VideoToneMapping = "auto";
+        App.Settings.VideoHdrComputePeak = "auto";
+        App.Settings.VideoTargetPeak = 0;
+        App.Settings.VideoOutputLevels = "auto";
+        App.Settings.VideoDelogoEnabled = false;
+        App.Settings.VideoDelogoX = 0;
+        App.Settings.VideoDelogoY = 0;
+        App.Settings.VideoDelogoWidth = 320;
+        App.Settings.VideoDelogoHeight = 80;
+        App.Settings.VideoFilters.Clear();
     }
 
     private void ResetAudioSettings()
@@ -982,6 +1013,12 @@ public sealed partial class SettingsWindow : Window
         App.Settings.Muted = false;
         App.Settings.AudioDelay = 0;
         App.Settings.AudioDevice = "auto";
+        App.Settings.EqualizerEnabled = false;
+        App.Settings.EqualizerGains = Wiina.Core.Filters.EqualizerBands
+            .CreatePreset("Flat")
+            .ToList();
+        App.Settings.EqualizerPreset = "Flat";
+        App.Settings.AudioFilters.Clear();
     }
 
     private void ResetSubtitleSettings()
@@ -994,6 +1031,9 @@ public sealed partial class SettingsWindow : Window
         App.Settings.SubtitleFont = "Segoe UI";
         App.Settings.SubtitleColor = "#FFFFFFFF";
         App.Settings.SubtitleBorderSize = 3;
+        App.Settings.SubtitleAssOverride = "scale";
+        App.Settings.SubtitleBold = false;
+        App.Settings.SubtitleItalic = false;
     }
 
     // ------------------------------------------------------- key bindings

@@ -590,6 +590,7 @@ public sealed partial class MainWindow
             UpdateMiniPlayerState();
             RebuildKeyMap();
             ApplyStage7Settings();
+            ApplyStage8Settings();
             SyncQuickSettingsValues();
         });
     }

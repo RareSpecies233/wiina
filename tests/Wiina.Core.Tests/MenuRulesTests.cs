@@ -112,18 +112,18 @@ public sealed class MenuRulesTests
     }
 
     [Fact]
-    public void StageEightAndTenItemsAreDisabledWithReasons()
+    public void StageEightFiltersAreEnabledAndStageTenItemsAreDisabled()
     {
         var state = new MenuState { HasMedia = true };
         MenuItemDefinition filters = Find(state, "video.filters");
-        Assert.False(filters.Enabled);
-        Assert.Contains("Stage 8", filters.DisabledReason);
+        Assert.True(filters.Enabled);
+        Assert.True(string.IsNullOrEmpty(filters.DisabledReason));
+
+        Assert.True(Find(state, "audio.filters").Enabled);
 
         MenuItemDefinition online = Find(state, "subtitles.online");
         Assert.False(online.Enabled);
         Assert.Contains("Stage 10", online.DisabledReason);
-
-        Assert.False(Find(state, "audio.filters").Enabled);
     }
 
     [Fact]

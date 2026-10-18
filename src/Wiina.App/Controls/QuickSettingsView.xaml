@@ -2,8 +2,8 @@
 <UserControl
     x:Class="Wiina.App.Controls.QuickSettingsView"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
-
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:controls="using:Wiina.App.Controls">
     <Grid>
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
@@ -651,6 +651,36 @@
                                     Maximum="10"
                                     StepFrequency="0.1"
                                     ValueChanged="OnSliderValueChanged" />
+                        </StackPanel>
+                    </Border>
+
+                    <Border Style="{StaticResource CardBorderStyle}" Padding="12">
+                        <StackPanel Spacing="8">
+                            <Grid>
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                    <FontIcon Glyph="&#xE9E9;" FontSize="14" Foreground="{ThemeResource SecondaryTextBrush}" />
+                                    <TextBlock Text="均衡器" Style="{StaticResource SectionTitleStyle}" />
+                                </StackPanel>
+                                <ToggleSwitch x:Name="EqualizerSwitch"
+                                              HorizontalAlignment="Right"
+                                              MinWidth="0"
+                                              Toggled="OnToggleChanged" />
+                            </Grid>
+                            <ComboBox x:Name="EqualizerPresetBox"
+                                      HorizontalAlignment="Stretch"
+                                      SelectionChanged="OnComboChanged" />
+                            <controls:EqualizerView x:Name="EqView"
+                                                    GainsChanged="OnEqualizerGainsChanged" />
+                            <Grid>
+                                <TextBlock Text="31 Hz – 16 kHz · −12…+12 dB"
+                                           Style="{StaticResource CaptionTextStyle}" />
+                                <Button Style="{StaticResource CardHeaderButtonStyle}"
+                                        Content="&#xE72C;"
+                                        HorizontalAlignment="Right"
+                                        Tag="audio-equalizer"
+                                        Click="OnResetClick"
+                                        ToolTipService.ToolTip="重置均衡器" />
+                            </Grid>
                         </StackPanel>
                     </Border>
 

@@ -48,13 +48,22 @@ public sealed partial class InspectorWindow : Window
         Refresh();
         Closed += (_, _) =>
         {
+            _closed = true;
             _timer.Stop();
             WindowShell.Detach(this);
         };
     }
 
-    private void Refresh()
+    private bool _refreshing;
+    private bool _closed;
+
+    private async void Refresh()
     {
+        if (_refreshing)
+        {
+            return;
+        }
+
         MainWindow? window = App.ActiveWindow;
         if (window is null)
         {
@@ -70,20 +79,38 @@ public sealed partial class InspectorWindow : Window
             return;
         }
 
-        IReadOnlyList<InspectorRow> rows = window.GetInspectorSnapshot();
-        TitleText.Text = "检查器 — " + (window.CurrentTitle ?? "未命名");
-        ContentPanel.Children.Clear();
-        if (rows.Count == 0)
+        _refreshing = true;
+        try
         {
-            ContentPanel.Children.Add(new TextBlock
+            IReadOnlyList<InspectorRow> rows = await window.GetInspectorSnapshotAsync();
+            if (_closed)
             {
-                Text = "当前没有媒体，或播放引擎尚未启动。",
-                FontSize = 12,
-                Opacity = 0.7,
-            });
-            return;
-        }
+                return;
+            }
 
+            TitleText.Text = "检查器 — " + (window.CurrentTitle ?? "未命名");
+            ContentPanel.Children.Clear();
+            if (rows.Count == 0)
+            {
+                ContentPanel.Children.Add(new TextBlock
+                {
+                    Text = "当前没有媒体，或播放引擎尚未启动。",
+                    FontSize = 12,
+                    Opacity = 0.7,
+                });
+                return;
+            }
+
+            RenderRows(rows);
+        }
+        finally
+        {
+            _refreshing = false;
+        }
+    }
+
+    private void RenderRows(IReadOnlyList<InspectorRow> rows)
+    {
         foreach (IGrouping<string, InspectorRow> group in rows.GroupBy(row => row.Section))
         {
             ContentPanel.Children.Add(new TextBlock
@@ -147,7 +174,7 @@ public sealed partial class InspectorWindow : Window
         }
     }
 
-    private void OnCopyClick(object sender, RoutedEventArgs e)
+    private async void OnCopyClick(object sender, RoutedEventArgs e)
     {
         MainWindow? window = App.ActiveWindow;
         if (window is null)
@@ -155,8 +182,14 @@ public sealed partial class InspectorWindow : Window
             return;
         }
 
+        IReadOnlyList<InspectorRow> rows = await window.GetInspectorSnapshotAsync();
+        if (_closed)
+        {
+            return;
+        }
+
         var builder = new StringBuilder();
-        foreach (InspectorRow row in window.GetInspectorSnapshot())
+        foreach (InspectorRow row in rows)
         {
             builder.AppendLine($"[{row.Section}] {row.Name}: {row.Value}");
         }
