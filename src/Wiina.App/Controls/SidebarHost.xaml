@@ -12,7 +12,7 @@
         </Grid.RenderTransform>
 
         <Border x:Name="PanelBorder"
-                Background="{ThemeResource PanelBrush}"
+                Background="{ThemeResource SidebarAcrylicBrush}"
                 BorderBrush="{ThemeResource PanelBorderBrush}"
                 BorderThickness="1,0,0,0">
             <Grid>

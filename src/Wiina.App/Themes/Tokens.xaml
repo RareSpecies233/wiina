@@ -10,6 +10,11 @@
             <SolidColorBrush x:Key="TitleBarBorderBrush" Color="#22FFFFFF" />
             <SolidColorBrush x:Key="PanelBrush" Color="#FF15171B" />
             <SolidColorBrush x:Key="PanelBorderBrush" Color="#26FFFFFF" />
+            <AcrylicBrush x:Key="SidebarAcrylicBrush"
+                          TintColor="#FF101114"
+                          TintOpacity="0.45"
+                          TintLuminosityOpacity="0.4"
+                          FallbackColor="#CC15171B" />
             <SolidColorBrush x:Key="CardBrush" Color="#14FFFFFF" />
             <SolidColorBrush x:Key="CardBorderBrush" Color="#1FFFFFFF" />
             <SolidColorBrush x:Key="PrimaryTextBrush" Color="#FFFFFFFF" />
@@ -37,6 +42,11 @@
             <SolidColorBrush x:Key="TitleBarBorderBrush" Color="#1A000000" />
             <SolidColorBrush x:Key="PanelBrush" Color="#FFFFFFFF" />
             <SolidColorBrush x:Key="PanelBorderBrush" Color="#1F000000" />
+            <AcrylicBrush x:Key="SidebarAcrylicBrush"
+                          TintColor="#FFF3F3F3"
+                          TintOpacity="0.5"
+                          TintLuminosityOpacity="0.45"
+                          FallbackColor="#CCFFFFFF" />
             <SolidColorBrush x:Key="CardBrush" Color="#CCFFFFFF" />
             <SolidColorBrush x:Key="CardBorderBrush" Color="#14000000" />
             <SolidColorBrush x:Key="PrimaryTextBrush" Color="#E4000000" />
@@ -79,4 +89,6 @@
     <CornerRadius x:Key="CardCornerRadius">8</CornerRadius>
     <CornerRadius x:Key="ThumbCornerRadius">4</CornerRadius>
 </ResourceDictionary>
+
+
 
