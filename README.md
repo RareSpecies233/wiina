@@ -7,10 +7,12 @@ Wiina 把 [IINA](https://iina.io/) 在 macOS 上的**界面逻辑**（窗口层�
 [mpv](https://mpv.io/) 作为播放内核。视觉上不照搬 AppKit，而是按 Windows 11 Fluent 规范重新设计：Segoe UI Variable、
 Segoe Fluent Icons、Mica/Acrylic、圆角与系统主题。
 
-> **状态：Stage 0 已实现，待验收。** 计划已冻结；当前仓库可构建并运行一个最小播放器：
-> WinUI 3 窗口 + mpv composition swapchain 视频层 + XAML 覆盖层 + F11 全屏。
-> Stage 0 验收包：[docs/acceptance/stage-0.md](docs/acceptance/stage-0.md)。
-> 后续按 [实施计划](docs/PLAN.md) 的 Stage 1–11 推进。
+> **状态：Stage 0 已验收；Stage 1 已实现，待验收。** 计划已冻结；当前仓库可构建并运行一个
+> WinUI 3 + mpv composition swapchain 的播放器骨架，包含自定义标题栏、edge-to-edge/docked、
+> 主题令牌、OSC/侧栏壳与设置持久化。
+> Stage 0 验收：[docs/acceptance/stage-0.md](docs/acceptance/stage-0.md)；
+> Stage 1 验收：[docs/acceptance/stage-1.md](docs/acceptance/stage-1.md)。
+> 后续按 [实施计划](docs/PLAN.md) 的 Stage 2–11 推进。
 
 ## 关键事实
 

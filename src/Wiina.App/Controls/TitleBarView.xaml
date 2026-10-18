@@ -1,0 +1,115 @@
+<?xml version="1.0" encoding="utf-8"?>
+<UserControl
+    x:Class="Wiina.App.Controls.TitleBarView"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <Grid>
+        <Border x:Name="TranslucentBackground" Background="{ThemeResource TitleBarBrush}" />
+        <Border x:Name="OpaqueBackground"
+                Background="{ThemeResource TitleBarOpaqueBrush}"
+                Visibility="Collapsed" />
+        <Border BorderBrush="{ThemeResource TitleBarBorderBrush}" BorderThickness="0,0,0,1" />
+
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="40" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+
+            <Grid Grid.Row="0">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+
+                <StackPanel Orientation="Horizontal"
+                            Spacing="2"
+                            Margin="12,0,0,0"
+                            VerticalAlignment="Center">
+                    <FontIcon Glyph="&#xE8B7;"
+                              FontFamily="{StaticResource IconFont}"
+                              FontSize="16"
+                              Foreground="{ThemeResource SecondaryTextBrush}" />
+                    <TextBlock x:Name="TitleText"
+                               Text="Wiina"
+                               Style="{StaticResource TitleTextStyle}"
+                               Margin="4,0,0,0"
+                               MaxWidth="460" />
+                </StackPanel>
+
+                <StackPanel x:Name="ButtonPanel"
+                            Grid.Column="2"
+                            Orientation="Horizontal"
+                            Spacing="2"
+                            Margin="0,0,140,0"
+                            VerticalAlignment="Center">
+                    <Button x:Name="PinButton"
+                            Style="{StaticResource TitleBarButtonStyle}"
+                            Content="&#xE718;"
+                            Click="OnPinClick"
+                            ToolTipService.ToolTip="置顶 / Pin" />
+                    <Button x:Name="LayoutButton"
+                            Style="{StaticResource TitleBarButtonStyle}"
+                            Content="&#xE7C4;"
+                            Click="OnLayoutClick"
+                            ToolTipService.ToolTip="Edge-to-edge / Docked" />
+                    <Button x:Name="OscButton"
+                            Style="{StaticResource TitleBarButtonStyle}"
+                            Content="&#xE7F4;"
+                            Click="OnOscClick"
+                            ToolTipService.ToolTip="OSC 位置" />
+                    <Button x:Name="SidebarButton"
+                            Style="{StaticResource TitleBarButtonStyle}"
+                            Content="&#xE700;"
+                            Click="OnSidebarClick"
+                            ToolTipService.ToolTip="侧边栏" />
+                    <Button x:Name="ThemeButton"
+                            Style="{StaticResource TitleBarButtonStyle}"
+                            Content="&#xE793;"
+                            Click="OnThemeClick"
+                            ToolTipService.ToolTip="主题" />
+                    <Button x:Name="IconsButton"
+                            Style="{StaticResource TitleBarButtonStyle}"
+                            Content="&#xE8FD;"
+                            Click="OnIconsClick"
+                            ToolTipService.ToolTip="图标映射" />
+                    <Button x:Name="WindowButton"
+                            Style="{StaticResource TitleBarButtonStyle}"
+                            Content="&#xE8A9;"
+                            Click="OnWindowClick"
+                            ToolTipService.ToolTip="窗口尺寸" />
+                </StackPanel>
+            </Grid>
+
+            <Border x:Name="TopOscShell"
+                    Grid.Row="1"
+                    Height="28"
+                    Visibility="Collapsed"
+                    Background="{ThemeResource SubtleBrush}">
+                <Grid Margin="12,0,12,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Text="Top OSC (Stage 1 shell)"
+                               Style="{StaticResource CaptionTextStyle}"
+                               VerticalAlignment="Center" />
+                    <ProgressBar Grid.Column="1"
+                                 Height="4"
+                                 Minimum="0"
+                                 Maximum="100"
+                                 Value="35"
+                                 VerticalAlignment="Center"
+                                 Margin="12,0" />
+                    <TextBlock Grid.Column="2"
+                               Text="00:00 / 00:00"
+                               Style="{StaticResource CaptionTextStyle}"
+                               VerticalAlignment="Center" />
+                </Grid>
+            </Border>
+        </Grid>
+    </Grid>
+</UserControl>

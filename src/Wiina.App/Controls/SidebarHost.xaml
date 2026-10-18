@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="utf-8"?>
+<UserControl
+    x:Class="Wiina.App.Controls.SidebarHost"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <Border Width="360"
+            Background="{ThemeResource PanelBrush}"
+            BorderBrush="{ThemeResource PanelBorderBrush}"
+            BorderThickness="1,0,1,0">
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="52" />
+                <RowDefinition Height="*" />
+            </Grid.RowDefinitions>
+
+            <Grid Grid.Row="0" Margin="12,0,8,0">
+                <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
+                    <Button Style="{StaticResource OscIconButtonStyle}" Content="&#xE713;" ToolTipService.ToolTip="快速设置" />
+                    <Button Style="{StaticResource OscIconButtonStyle}" Content="&#xE8FD;" ToolTipService.ToolTip="播放列表" />
+                    <Button Style="{StaticResource OscIconButtonStyle}" Content="&#xEA86;" ToolTipService.ToolTip="插件" />
+                </StackPanel>
+                <Button HorizontalAlignment="Right"
+                        Style="{StaticResource OscIconButtonStyle}"
+                        Content="&#xE76B;"
+                        Click="OnCloseClick"
+                        ToolTipService.ToolTip="关闭侧边栏" />
+            </Grid>
+
+            <ScrollViewer Grid.Row="1" Padding="16,8,16,16">
+                <StackPanel Spacing="12">
+                    <Border Style="{StaticResource CardBorderStyle}" Padding="12">
+                        <StackPanel Spacing="6">
+                            <TextBlock Text="Quick Settings" Style="{StaticResource SectionTitleStyle}" />
+                            <TextBlock Text="Stage 1 shell — 布局 / 视频 / 音频 / 字幕卡片将在 Stage 4 实装"
+                                       Style="{StaticResource CaptionTextStyle}"
+                                       TextWrapping="Wrap" />
+                        </StackPanel>
+                    </Border>
+                    <Border Style="{StaticResource CardBorderStyle}" Padding="12">
+                        <StackPanel Spacing="6">
+                            <TextBlock Text="Video" Style="{StaticResource SectionTitleStyle}" />
+                            <TextBlock Text="Track · aspect · crop · rotation" Style="{StaticResource CaptionTextStyle}" />
+                        </StackPanel>
+                    </Border>
+                    <Border Style="{StaticResource CardBorderStyle}" Padding="12">
+                        <StackPanel Spacing="6">
+                            <TextBlock Text="Audio" Style="{StaticResource SectionTitleStyle}" />
+                            <TextBlock Text="Track · delay · volume · equalizer" Style="{StaticResource CaptionTextStyle}" />
+                        </StackPanel>
+                    </Border>
+                    <Border Style="{StaticResource CardBorderStyle}" Padding="12">
+                        <StackPanel Spacing="6">
+                            <TextBlock Text="Subtitles" Style="{StaticResource SectionTitleStyle}" />
+                            <TextBlock Text="Track · load · position · style" Style="{StaticResource CaptionTextStyle}" />
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+            </ScrollViewer>
+        </Grid>
+    </Border>
+</UserControl>
