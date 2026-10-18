@@ -26,5 +26,11 @@
                 Command="{Binding FullscreenCommand}"
                 ToolTipService.ToolTip="全屏 (F11)"
                 AutomationProperties.Name="全屏" />
+        <Button x:Name="MoreButton"
+                Style="{StaticResource OscIconButtonStyle}"
+                Content="&#xE712;"
+                Click="OnMoreClick"
+                ToolTipService.ToolTip="更多"
+                AutomationProperties.Name="更多" />
     </StackPanel>
 </UserControl>

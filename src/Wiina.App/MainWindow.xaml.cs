@@ -115,8 +115,8 @@ public sealed partial class MainWindow : Window
         _settings = _settingsStore.Load();
 
         Title = "Wiina";
-        ExtendsContentIntoTitleBar = true;
-        SetTitleBar(TitleBar);
+        ExtendsContentIntoTitleBar = false;
+        TitleBar.Visibility = Visibility.Collapsed;
         AppWindow.Resize(new SizeInt32(
             Math.Max(640, _settings.WindowWidth),
             Math.Max(360, _settings.WindowHeight)));
@@ -140,6 +140,7 @@ public sealed partial class MainWindow : Window
 
         OscFloating.DataContext = _oscVm;
         OscBottom.DataContext = _oscVm;
+        OscTop.DataContext = _oscVm;
         TitleBar.SetOscDataContext(_oscVm);
         SubscribeOsc();
 
@@ -190,7 +191,10 @@ public sealed partial class MainWindow : Window
 
         SubscribeTimeline(OscFloating.Timeline);
         SubscribeTimeline(OscBottom.Timeline);
-        SubscribeTimeline(TitleBar.TopTimeline);
+        SubscribeTimeline(OscTop.Timeline);
+        OscFloating.Toolbar.MoreClicked += OnMoreClicked;
+        OscBottom.Toolbar.MoreClicked += OnMoreClicked;
+        OscTop.Toolbar.MoreClicked += OnMoreClicked;
 
         OscFloating.DragHandle.PointerPressed += OnOscDragStart;
         OscFloating.DragHandle.PointerMoved += OnOscDragMove;
@@ -230,7 +234,7 @@ public sealed partial class MainWindow : Window
                  {
                      OscFloating.Timeline,
                      OscBottom.Timeline,
-                     TitleBar.TopTimeline,
+                     OscTop.Timeline,
                  })
         {
             timeline.Position = _oscVm.Position;
@@ -329,6 +333,23 @@ public sealed partial class MainWindow : Window
         HideChrome();
     }
 
+    private void OnChromePointerEntered(object sender, PointerRoutedEventArgs e)
+    {
+        _autoHideTimer.Stop();
+        _oscState.Show();
+        FadeChrome(1, hitTest: true);
+        _autoHideTimer.Stop();
+    }
+
+    private void OnChromePointerExited(object sender, PointerRoutedEventArgs e)
+    {
+        _autoHideTimer.Stop();
+        if (_oscState.AutoHideEnabled)
+        {
+            _autoHideTimer.Start();
+        }
+    }
+
     private void ShowChrome()
     {
         if (!_chromeShown)
@@ -398,15 +419,15 @@ public sealed partial class MainWindow : Window
             hitTest = true;
         }
 
-        TitleBar.IsHitTestVisible = hitTest;
         OscBottom.IsHitTestVisible = hitTest;
         OscFloating.IsHitTestVisible = hitTest;
+        OscTop.IsHitTestVisible = hitTest;
 
         FrameworkElement[] elements =
         {
-            TitleBar,
             OscBottom,
             OscFloating,
+            OscTop,
         };
 
         if (!AnimationsEnabled)
@@ -440,6 +461,7 @@ public sealed partial class MainWindow : Window
     {
         return Contains(TitleBar, point) ||
             (OscBottom.Visibility == Visibility.Visible && Contains(OscBottom, point)) ||
+            (OscTop.Visibility == Visibility.Visible && Contains(OscTop, point)) ||
             (OscFloating.Visibility == Visibility.Visible && Contains(OscFloating, point)) ||
             (SidebarLeading.Visibility == Visibility.Visible && Contains(SidebarLeading, point)) ||
             (SidebarTrailing.Visibility == Visibility.Visible && Contains(SidebarTrailing, point));
@@ -673,6 +695,66 @@ public sealed partial class MainWindow : Window
         ApplyLayout();
     }
 
+    private void SetOscPosition(OscPosition position)
+    {
+        _settings.OscPosition = position;
+        ApplyLayout();
+        SaveSettings();
+    }
+
+    private void OnMoreClicked(object? sender, EventArgs e)
+    {
+        var flyout = new MenuFlyout();
+
+        void AddItem(string text, Action action)
+        {
+            var item = new MenuFlyoutItem { Text = text };
+            item.Click += (_, _) => action();
+            flyout.Items.Add(item);
+        }
+
+        void AddSubItem(MenuFlyoutSubItem parent, string text, Action action)
+        {
+            var item = new MenuFlyoutItem { Text = text };
+            item.Click += (_, _) => action();
+            parent.Items.Add(item);
+        }
+
+        AddItem("布局：Edge-to-edge / Docked", ToggleLayout);
+
+        var oscMenu = new MenuFlyoutSubItem { Text = "OSC 位置" };
+        AddSubItem(oscMenu, "浮动", () => SetOscPosition(OscPosition.Floating));
+        AddSubItem(oscMenu, "底部", () => SetOscPosition(OscPosition.Bottom));
+        AddSubItem(oscMenu, "顶部", () => SetOscPosition(OscPosition.Top));
+        flyout.Items.Add(oscMenu);
+
+        AddItem("侧边栏", ToggleSidebar);
+        AddItem("主题", CycleTheme);
+        AddItem("置顶", TogglePin);
+
+        var windowMenu = new MenuFlyoutSubItem { Text = "窗口尺寸" };
+        AddSubItem(windowMenu, "0.5×", () => ResizeToScale(0.5));
+        AddSubItem(windowMenu, "1×", () => ResizeToScale(1.0));
+        AddSubItem(windowMenu, "2×", () => ResizeToScale(2.0));
+        AddSubItem(windowMenu, "适合屏幕", FitToScreen);
+        flyout.Items.Add(windowMenu);
+
+        var icons = new MenuFlyoutItem { Text = "图标映射" };
+        icons.Click += async (_, _) => await ShowIconDialogAsync();
+        flyout.Items.Add(icons);
+
+        AddItem("设置", ShowSettingsSidebar);
+
+        if (sender is OscToolbar toolbar)
+        {
+            flyout.ShowAt(toolbar.MoreAnchor);
+        }
+        else
+        {
+            flyout.ShowAt(OscFloating);
+        }
+    }
+
     private void ToggleFullscreen()
     {
         if (AppWindow.Presenter.Kind == AppWindowPresenterKind.FullScreen)
@@ -815,25 +897,10 @@ public sealed partial class MainWindow : Window
 
     private void ConfigureCaptionButtons()
     {
-        AppWindowTitleBar bar = AppWindow.TitleBar;
+        // Native titlebar: let Windows draw the caption buttons, and only
+        // request an immersive dark titlebar to match the app theme.
         bool dark = RootGrid.ActualTheme != ElementTheme.Light;
-        Color background = dark
-            ? Color.FromArgb(0xCC, 0x10, 0x11, 0x14)
-            : Color.FromArgb(0xCC, 0xF3, 0xF3, 0xF3);
-
-        bar.ExtendsContentIntoTitleBar = true;
-        bar.BackgroundColor = background;
-        bar.InactiveBackgroundColor = background;
-        bar.ButtonBackgroundColor = background;
-        bar.ButtonInactiveBackgroundColor = background;
-        bar.ButtonForegroundColor = dark ? Colors.White : Colors.Black;
-        bar.ButtonInactiveForegroundColor = dark ? Colors.Gray : Colors.DimGray;
-        bar.ButtonHoverBackgroundColor = dark
-            ? Color.FromArgb(0x33, 0xFF, 0xFF, 0xFF)
-            : Color.FromArgb(0x1F, 0, 0, 0);
-        bar.ButtonPressedBackgroundColor = dark
-            ? Color.FromArgb(0x55, 0xFF, 0xFF, 0xFF)
-            : Color.FromArgb(0x33, 0, 0, 0);
+        WindowInterop.SetImmersiveDarkMode(this, dark);
     }
 
     private void TrySetBackdrop()
@@ -858,15 +925,17 @@ public sealed partial class MainWindow : Window
 
         TitleBar.SetDocked(docked);
         TitleBar.IsPinned = _settings.AlwaysOnTop;
-        TitleBar.SetTopOscVisible(_settings.OscPosition == OscPosition.Top);
 
-        bool useBottomOsc =
-            _settings.OscPosition == OscPosition.Bottom ||
-            (docked && _settings.OscPosition == OscPosition.Floating);
+        bool topOsc = !_compact && _settings.OscPosition == OscPosition.Top;
+        OscTop.Visibility = topOsc ? Visibility.Visible : Visibility.Collapsed;
+
+        bool useBottomOsc = !topOsc &&
+            (_settings.OscPosition == OscPosition.Bottom ||
+             (docked && _settings.OscPosition == OscPosition.Floating));
         OscBottom.Visibility = useBottomOsc ? Visibility.Visible : Visibility.Collapsed;
 
         bool sidebarVisible = !_compact && _sidebarVisible;
-        OscFloating.Visibility = !docked && !_compact && !sidebarVisible &&
+        OscFloating.Visibility = !docked && !_compact && !sidebarVisible && !topOsc &&
             _settings.OscPosition == OscPosition.Floating
             ? Visibility.Visible
             : Visibility.Collapsed;

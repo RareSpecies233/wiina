@@ -28,7 +28,9 @@
             </SwapChainPanel>
         </Grid>
 
-        <controls:TitleBarView x:Name="TitleBar" Grid.Row="0" />
+        <controls:TitleBarView x:Name="TitleBar"
+                               Grid.Row="0"
+                               Visibility="Collapsed" />
 
         <controls:OscBottomView x:Name="OscBottom"
                                 Grid.Row="2"
@@ -39,6 +41,11 @@
             <Canvas x:Name="OscCanvas" Grid.RowSpan="3">
                 <controls:OscFloatingView x:Name="OscFloating" />
             </Canvas>
+            <controls:OscBottomView x:Name="OscTop"
+                                    VerticalAlignment="Top"
+                                    Visibility="Collapsed"
+                                    PointerEntered="OnChromePointerEntered"
+                                    PointerExited="OnChromePointerExited" />
             <controls:SidebarHost x:Name="SidebarLeading"
                                   HorizontalAlignment="Left"
                                   Margin="0,40,0,0"

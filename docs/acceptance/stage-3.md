@@ -252,3 +252,9 @@ powershell -ExecutionPolicy Bypass -File tools/fetch-libmpv.ps1
 ```
 
 诊断：`%TEMP%\wiina-trace.log` 记录 mpv 事件、键盘/命令/历史/截图/续播。
+
+## 后续 UI 修正（2026-10-18）
+
+- 改用 **Windows 原生标题栏**；自绘标题栏隐藏，应用功能按钮移入 OSC 工具栏的 `⋯` 更多菜单。
+  原因与取舍见 [ADR-0002](../architecture/0002-native-titlebar.md)。此变更修复了“系统最小化/
+  最大化/关闭按钮始终显示”的 bug，并让自动隐藏只作用于 OSC。

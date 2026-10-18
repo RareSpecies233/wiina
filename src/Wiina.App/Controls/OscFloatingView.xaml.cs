@@ -13,6 +13,8 @@ public sealed partial class OscFloatingView : UserControl
 
     public TimelineControl Timeline => InnerTimeline;
 
+    public OscToolbar Toolbar => ToolbarGroup;
+
     public VolumeSlider Volume => VolumeGroup;
 
     public FrameworkElement DragHandle => DragArea;

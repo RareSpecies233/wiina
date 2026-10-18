@@ -14,6 +14,13 @@ public sealed partial class OscToolbar : UserControl
         DataContextChanged += OnDataContextChanged;
     }
 
+    public event EventHandler? MoreClicked;
+
+    public Microsoft.UI.Xaml.FrameworkElement MoreAnchor => MoreButton;
+
+    private void OnMoreClick(object sender, Microsoft.UI.Xaml.RoutedEventArgs e) =>
+        MoreClicked?.Invoke(this, EventArgs.Empty);
+
     private void OnDataContextChanged(object sender, Microsoft.UI.Xaml.DataContextChangedEventArgs e)
     {
         if (_viewModel is not null)

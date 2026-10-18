@@ -11,6 +11,8 @@ internal static class WindowInterop
 {
     private const uint WM_GETMINMAXINFO = 0x0024;
     private const uint WM_SIZING = 0x0214;
+    private const uint WM_NCHITTEST = 0x0084;
+    private const int HTCLIENT = 1;
     private const int LeftEdge = 1;
     private const int RightEdge = 2;
     private const int TopEdge = 3;
@@ -41,6 +43,19 @@ internal static class WindowInterop
     [DllImport("user32.dll")]
     private static extern uint GetDpiForWindow(nint hWnd);
 
+    [DllImport("dwmapi.dll")]
+    private static extern int DwmSetWindowAttribute(nint hWnd, int attribute, ref int value, int size);
+
+    public static void SetImmersiveDarkMode(Window window, bool dark)
+    {
+        nint hwnd = Microsoft.UI.Win32Interop.GetWindowFromWindowId(window.AppWindow.Id);
+        int value = dark ? 1 : 0;
+        _ = DwmSetWindowAttribute(hwnd, 20, ref value, sizeof(int));
+    }
+
+    [DllImport("user32.dll", SetLastError = true)]
+    private static extern bool GetWindowRect(nint hWnd, out RECT rect);
+
     [DllImport("user32.dll")]
     private static extern nint SetCursor(nint hCursor);
 
@@ -49,9 +64,6 @@ internal static class WindowInterop
 
     [DllImport("user32.dll")]
     private static extern bool GetCursorPos(out POINT point);
-
-    [DllImport("user32.dll")]
-    private static extern bool GetWindowRect(nint hWnd, out RECT rect);
 
     [DllImport("user32.dll")]
     private static extern short GetKeyState(int nVirtKey);
@@ -82,7 +94,12 @@ internal static class WindowInterop
             return;
         }
 
-        var hook = new Hook(hwnd, minWidthDip, minHeightDip, lockAspect, aspect);
+        var hook = new Hook(
+            hwnd,
+            minWidthDip,
+            minHeightDip,
+            lockAspect,
+            aspect);
         Hooks[hwnd] = hook;
         hook.Attach();
     }
