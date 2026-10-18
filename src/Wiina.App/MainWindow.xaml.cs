@@ -16,6 +16,7 @@ using Wiina.App.Controls;
 using Wiina.App.Interop;
 using Wiina.App.ViewModels;
 using Wiina.Core.Models;
+using Wiina.App.Localization;
 using Wiina.Core.Osd;
 using Wiina.Core.Settings;
 using Wiina.Core.State;
@@ -1237,7 +1238,7 @@ public sealed partial class MainWindow : Window
         {
             Trace("mpv start failed: " + ex);
             TitleBar.Title = "Wiina — mpv failed";
-            ShowOsd("播放引擎启动失败", ex.Message);
+            ShowOsd(Loc.T("osd.engineFailed"), ex.Message);
         }
     }
 
@@ -1325,11 +1326,11 @@ public sealed partial class MainWindow : Window
         if (InMiniMode)
         {
             SetTopmost(_settings.AlwaysOnTop);
-            ShowOsd(_settings.AlwaysOnTop ? "迷你播放器：置顶已开启" : "迷你播放器：置顶已关闭");
+            ShowOsd(_settings.AlwaysOnTop ? Loc.T("osd.miniOnTopOn") : Loc.T("osd.miniOnTopOff"));
         }
         else if (IsFullscreen)
         {
-            ShowOsd("全屏中，置顶设置将在退出全屏后生效");
+            ShowOsd(Loc.T("osd.fullscreenOnTop"));
         }
         else
         {
@@ -1399,9 +1400,9 @@ public sealed partial class MainWindow : Window
 
         var dialog = new ContentDialog
         {
-            Title = "Segoe Fluent Icons — Stage 1 映射",
+            Title = Loc.T("icons.title"),
             Content = new ScrollViewer { Content = panel, Height = 420 },
-            CloseButtonText = "关闭",
+            CloseButtonText = Loc.T("dialogs.close"),
             XamlRoot = RootGrid.XamlRoot,
         };
         await dialog.ShowAsync();
@@ -1410,22 +1411,22 @@ public sealed partial class MainWindow : Window
     private void ShowWindowMenu()
     {
         var flyout = new MenuFlyout();
-        AddItem("新建窗口 (Ctrl+N)", NewWindow);
-        AddItem("在新窗口打开… (Ctrl+Shift+N)", () => _ = OpenInNewWindowAsync());
-        AddItem("关闭当前窗口 (Ctrl+W)", CloseCurrentWindow);
+        AddItem(Loc.T("icons.newWindow"), NewWindow);
+        AddItem(Loc.T("icons.openInNew"), () => _ = OpenInNewWindowAsync());
+        AddItem(Loc.T("icons.closeWindow"), CloseCurrentWindow);
         flyout.Items.Add(new MenuFlyoutSeparator());
         AddItem("0.5×", () => ResizeToScale(0.5));
         AddItem("1×", () => ResizeToScale(1.0));
         AddItem("2×", () => ResizeToScale(2.0));
         flyout.Items.Add(new MenuFlyoutSeparator());
-        AddItem("适合屏幕", FitToScreen);
-        AddItem("全屏 / 退出全屏 (F11)", EnterFullscreenFromMenu);
-        AddItem("画中画 (Ctrl+Shift+P)", () => RequestMode(
+        AddItem(Loc.T("icons.fit"), FitToScreen);
+        AddItem(Loc.T("icons.fullscreen"), EnterFullscreenFromMenu);
+        AddItem(Loc.T("icons.pip"), () => RequestMode(
             _mode.Current == PlayerMode.PiP ? PlayerMode.Normal : PlayerMode.PiP));
-        AddItem("迷你播放器 (Ctrl+Shift+M)", () => RequestMode(
+        AddItem(Loc.T("icons.mini"), () => RequestMode(
             _mode.Current == PlayerMode.Mini ? PlayerMode.Normal : PlayerMode.Mini));
         flyout.Items.Add(new MenuFlyoutSeparator());
-        AddItem(_settings.AlwaysOnTop ? "取消置顶" : "置顶", TogglePin);
+        AddItem(_settings.AlwaysOnTop ? Loc.T("icons.unpin") : Loc.T("icons.pin"), TogglePin);
         flyout.ShowAt(TitleBar);
 
         void AddItem(string text, Action action)

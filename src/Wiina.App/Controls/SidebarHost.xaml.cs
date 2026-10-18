@@ -8,6 +8,7 @@ using Wiina.Core.Models;
 using Wiina.Core.Settings;
 using Wiina.Core.State;
 using Wiina.App.Interop;
+using Wiina.App.Localization;
 
 namespace Wiina.App.Controls;
 
@@ -115,7 +116,7 @@ public sealed partial class SidebarHost : UserControl
         TypeTabs.HorizontalAlignment = trailing
             ? HorizontalAlignment.Right
             : HorizontalAlignment.Left;
-        ToolTipService.SetToolTip(CloseButton, "关闭侧边栏");
+        ToolTipService.SetToolTip(CloseButton, Loc.T("sidebar.close"));
     }
 
     public void SetWidth(double width) => Width = Math.Max(0, width);

@@ -6,6 +6,7 @@ using Windows.Graphics;
 using Windows.Storage.Pickers;
 using Wiina.App.Interop;
 using Wiina.Core.Models;
+using Wiina.App.Localization;
 using Wiina.Core.State;
 using Wiina.Core.Text;
 
@@ -154,7 +155,7 @@ public sealed partial class MainWindow
             Trace($"mode rejected {result.From} -> {result.To}: {result.Reason}");
             if (result.Reason is ModeTransitionReason.ApplyFailed or ModeTransitionReason.RolledBack)
             {
-                ShowOsd("无法切换模式", ModeLabel(target));
+                ShowOsd(Loc.T("modes.switchFailed"), ModeLabel(target));
             }
 
             RefreshModeChrome();
@@ -215,10 +216,10 @@ public sealed partial class MainWindow
 
     private static string ModeLabel(PlayerMode mode) => mode switch
     {
-        PlayerMode.Fullscreen => "全屏",
-        PlayerMode.PiP => "画中画",
-        PlayerMode.Mini => "迷你播放器",
-        _ => "普通模式",
+        PlayerMode.Fullscreen => Loc.T("modes.fullscreen"),
+        PlayerMode.PiP => Loc.T("modes.pip"),
+        PlayerMode.Mini => Loc.T("modes.mini"),
+        _ => Loc.T("modes.normal"),
     };
 
     private void RefreshModeChrome()
@@ -244,8 +245,8 @@ public sealed partial class MainWindow
 
         if (pip)
         {
-            PipPlaceholderTitle.Text = _currentTitle ?? "正在画中画";
-            PipPlaceholderSubtitle.Text = "视频正在画中画窗口中播放 · 音频继续";
+            PipPlaceholderTitle.Text = _currentTitle ?? Loc.T("pip.placeholder");
+            PipPlaceholderSubtitle.Text = Loc.T("pip.placeholderSubtitle");
         }
     }
 
@@ -277,7 +278,7 @@ public sealed partial class MainWindow
 
         if (_swapChain == 0 || _player is not { IsRunning: true })
         {
-            ShowOsd("无法进入画中画", "当前没有可用的视频输出");
+            ShowOsd(Loc.T("modes.switchFailed"), Loc.T("pip.unavailable"));
             return false;
         }
 
@@ -315,7 +316,7 @@ public sealed partial class MainWindow
         pip.Activate();
 
         PipPlaceholder.Visibility = Visibility.Visible;
-        PipPlaceholderTitle.Text = _currentTitle ?? "正在画中画";
+        PipPlaceholderTitle.Text = _currentTitle ?? Loc.T("pip.placeholder");
         return true;
     }
 
@@ -693,7 +694,7 @@ public sealed partial class MainWindow
         catch (Exception ex)
         {
             Trace("open in new window failed: " + ex);
-            ShowOsd("新窗口打开失败", ex.Message);
+            ShowOsd(Loc.T("modes.newWindowFailed"), ex.Message);
         }
     }
 

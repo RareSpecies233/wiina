@@ -12,8 +12,10 @@ using Windows.Storage.Pickers;
 using Windows.System;
 using Windows.UI;
 using Wiina.App.Interop;
+using Wiina.App.Localization;
 using Wiina.App.Services;
 using Wiina.Core.Input;
+using Wiina.Core.Localization;
 using Wiina.Core.Models;
 using Wiina.Core.Settings;
 using Wiina.Core.Text;
@@ -56,7 +58,7 @@ public sealed partial class SettingsWindow : Window
     public SettingsWindow(SettingsPageId page, string? rowId)
     {
         InitializeComponent();
-        Title = "Wiina 设置";
+        Title = Loc.T("ui.wiinaSettings");
         _currentPage = page;
 
         bool dark = App.Settings.Theme != ThemeMode.Light;
@@ -90,6 +92,7 @@ public sealed partial class SettingsWindow : Window
         RootGrid.Loaded += (_, _) => RootGrid.Focus(FocusState.Programmatic);
 
         App.SettingsChanged += OnSettingsChanged;
+        Loc.LanguageChanged += OnLanguageChanged;
         Closed += OnClosed;
 
         BuildNavigation();
@@ -127,9 +130,10 @@ public sealed partial class SettingsWindow : Window
                 FontSize = 14,
                 FontFamily = new FontFamily("Segoe Fluent Icons"),
             });
+            string pageTitle = SettingsLocalization.PageTitle(page, Loc.CurrentLanguage);
             content.Children.Add(new TextBlock
             {
-                Text = page.Title,
+                Text = pageTitle,
                 FontSize = 13,
                 VerticalAlignment = VerticalAlignment.Center,
             });
@@ -141,6 +145,7 @@ public sealed partial class SettingsWindow : Window
                 Style = (Style)RootGrid.Resources["SettingsNavButtonStyle"],
             };
             SettingsPageId id = page.Id;
+            Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(button, pageTitle);
             button.Click += (_, _) => Navigate(id);
             NavPanel.Children.Add(button);
             _navButtons.Add((id, button));
@@ -160,8 +165,8 @@ public sealed partial class SettingsWindow : Window
         }
 
         SettingsPageInfo info = SettingsCatalog.Page(page);
-        PageTitle.Text = info.Title;
-        PageSummary.Text = info.Summary;
+        PageTitle.Text = SettingsLocalization.PageTitle(info, Loc.CurrentLanguage);
+        PageSummary.Text = SettingsLocalization.PageSummary(info, Loc.CurrentLanguage);
 
         PagePanel.Children.Clear();
         _rowWidgets.Clear();
@@ -219,7 +224,7 @@ public sealed partial class SettingsWindow : Window
         });
         var text = new TextBlock
         {
-            Text = section,
+            Text = SettingsLocalization.Section(section, Loc.CurrentLanguage),
             FontSize = 12,
             FontWeight = FontWeights.SemiBold,
             VerticalAlignment = VerticalAlignment.Center,
@@ -249,7 +254,7 @@ public sealed partial class SettingsWindow : Window
             });
             content.Children.Add(new TextBlock
             {
-                Text = section,
+                Text = SettingsLocalization.Section(section, Loc.CurrentLanguage),
                 FontSize = 11,
                 Opacity = 0.75,
                 TextTrimming = TextTrimming.CharacterEllipsis,
@@ -260,6 +265,9 @@ public sealed partial class SettingsWindow : Window
                 Style = (Style)RootGrid.Resources["SettingsSectionButtonStyle"],
             };
             string target = section;
+            Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(
+                button,
+                SettingsLocalization.Section(section, Loc.CurrentLanguage));
             button.Click += (_, _) => ScrollToSection(target);
             SectionPanel.Children.Add(button);
         }
@@ -340,16 +348,19 @@ public sealed partial class SettingsWindow : Window
         grid.Children.Add(icon);
 
         var textStack = new StackPanel { Spacing = 2, VerticalAlignment = VerticalAlignment.Center };
+        string rowTitle = SettingsLocalization.Title(row, Loc.CurrentLanguage);
         textStack.Children.Add(new TextBlock
         {
-            Text = row.Title,
+            Text = rowTitle,
             FontSize = 13,
             TextWrapping = TextWrapping.Wrap,
         });
-        string description = row.Description;
+        string description = SettingsLocalization.Description(row, Loc.CurrentLanguage);
         if (!row.IsAvailable)
         {
-            description += $"\n不可用：{row.UnavailableReason}";
+            description += "\n" + Loc.F(
+                "settings.unavailable",
+                SettingsLocalization.UnavailableReason(row.UnavailableReason ?? string.Empty, Loc.CurrentLanguage));
         }
 
         textStack.Children.Add(new TextBlock
@@ -423,7 +434,7 @@ public sealed partial class SettingsWindow : Window
             {
                 var combo = new ComboBox
                 {
-                    ItemsSource = row.Choices,
+                    ItemsSource = SettingsLocalization.Choices(row, Loc.CurrentLanguage),
                     SelectedIndex = Math.Clamp(
                         Convert.ToInt32(value ?? 0),
                         0,
@@ -597,7 +608,7 @@ public sealed partial class SettingsWindow : Window
             {
                 var button = new Button
                 {
-                    Content = "打开按键绑定",
+                    Content = Loc.T("settings.openKeyBindings"),
                     Style = (Style)RootGrid.Resources["SettingsActionButtonStyle"],
                 };
                 button.Click += (_, _) => Navigate(SettingsPageId.KeyBindings);
@@ -609,13 +620,13 @@ public sealed partial class SettingsWindow : Window
                 var panel = new StackPanel { Spacing = 4, MaxWidth = 240 };
                 panel.Children.Add(new TextBlock
                 {
-                    Text = "（未安装插件）",
+                    Text = Loc.T("settings.noPlugins"),
                     FontSize = 12,
                     Opacity = 0.7,
                 });
                 panel.Children.Add(new Button
                 {
-                    Content = "安装插件…（Stage 9）",
+                    Content = Loc.T("settings.installPlugin"),
                     IsEnabled = false,
                     Style = (Style)RootGrid.Resources["SettingsActionButtonStyle"],
                 });
@@ -629,26 +640,26 @@ public sealed partial class SettingsWindow : Window
 
     private static string ActionVerb(string? actionId) => actionId switch
     {
-        "choose-screenshot-folder" => "选择…",
+        "choose-screenshot-folder" => Loc.T("settings.choose"),
         "open-data-folder" or "open-config-folder" or "open-log-folder" or
-            "open-plugin-folder" => "打开",
+            "open-plugin-folder" => Loc.T("settings.open"),
         "reset-video" or "reset-audio" or "reset-subtitles" or "reset-control" or
-            "reset-all-settings" => "重置",
-        "clear-history" or "clear-thumbnails" => "清空",
+            "reset-all-settings" => Loc.T("settings.reset"),
+        "clear-history" or "clear-thumbnails" => Loc.T("settings.clear"),
         "export-diagnostics" or "open-keybindings" => actionId == "export-diagnostics"
-            ? "导出"
-            : "打开",
-        "install-plugin" => "安装",
+            ? Loc.T("settings.export")
+            : Loc.T("settings.open"),
+        "install-plugin" => Loc.T("settings.install"),
         "open-url-dialog" or "open-log-viewer" or "open-inspector" or "open-about" or
-            "open-video-filters" or "open-audio-filters" => "打开",
-        "reset-equalizer" => "重置",
-        "toggle-technical-osd" => "切换",
-        _ => "执行",
+            "open-video-filters" or "open-audio-filters" => Loc.T("settings.open"),
+        "reset-equalizer" => Loc.T("settings.reset"),
+        "toggle-technical-osd" => Loc.T("settings.toggle"),
+        _ => Loc.T("settings.run"),
     };
 
     private string InfoValue(SettingsRowDefinition row) => row.Id switch
     {
-        "advanced.renderer" => App.ActiveWindow?.GetRendererInfo() ?? "没有活动的播放窗口",
+        "advanced.renderer" => App.ActiveWindow?.GetRendererInfo() ?? Loc.T("settings.noActiveWindow"),
         "advanced.libmpv" => $"libmpv {MpvRuntime.ClientApiVersion}",
         _ => row.Value(App.Settings) as string ?? string.Empty,
     };
@@ -684,7 +695,7 @@ public sealed partial class SettingsWindow : Window
         }
         else
         {
-            StatusText.Text = "正在编辑…";
+            StatusText.Text = Loc.T("settings.editing");
             _saveTimer?.Stop();
             _saveTimer?.Start();
         }
@@ -734,15 +745,15 @@ public sealed partial class SettingsWindow : Window
         try
         {
             App.SaveSettings();
-            StatusText.Text = $"已保存 {DateTime.Now:HH:mm:ss}";
+            StatusText.Text = Loc.F("settings.saved", DateTime.Now.ToString("HH:mm:ss"));
             if (_bindingStatus is not null && _currentPage == SettingsPageId.KeyBindings)
             {
-                _bindingStatus.Text = "按键绑定已保存并立即生效。";
+                _bindingStatus.Text = Loc.T("keybindings.saved");
             }
         }
         catch (Exception ex)
         {
-            StatusText.Text = "保存失败：" + ex.Message;
+            StatusText.Text = Loc.F("settings.saveFailed", ex.Message);
         }
         finally
         {
@@ -771,7 +782,7 @@ public sealed partial class SettingsWindow : Window
         }
 
         IReadOnlyList<SettingsSearchHit> hits =
-            SettingsCatalog.SearchIndex.Search(query, 12);
+            SettingsCatalog.SearchIndex.Search(query, 12, Loc.CurrentLanguage);
         SearchList.ItemsSource = hits;
         SearchPanel.Visibility = hits.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
     }
@@ -934,38 +945,38 @@ public sealed partial class SettingsWindow : Window
                 case "export-diagnostics":
                 {
                     string path = App.ExportDiagnostics();
-                    StatusText.Text = "诊断信息已导出：" + path;
+                    StatusText.Text = Loc.F("settings.exported", path);
                     break;
                 }
 
                 case "clear-history":
                     if (await Dialogs.ConfirmAsync(
                             RootGrid.XamlRoot,
-                            "清空播放历史",
-                            "将删除最近文件列表与断点续播记录。此操作不可撤销。",
-                            "清空"))
+                            Loc.T("settings.clearHistoryTitle"),
+                            Loc.T("settings.clearHistoryBody"),
+                            Loc.T("settings.clear")))
                     {
                         App.ClearHistory();
-                        StatusText.Text = "播放历史已清空。";
+                        StatusText.Text = Loc.T("settings.historyCleared");
                     }
 
                     break;
 
                 case "clear-thumbnails":
                     App.ActiveWindow?.ClearThumbnailCache();
-                    StatusText.Text = "缩略图缓存已清空。";
+                    StatusText.Text = Loc.T("settings.thumbCacheCleared");
                     break;
 
                 case "reset-all-settings":
                     if (await Dialogs.ConfirmAsync(
                             RootGrid.XamlRoot,
-                            "重置所有设置",
-                            "所有页面恢复默认值（按键绑定、窗口位置与播放历史不受影响）。",
-                            "重置"))
+                            Loc.T("settings.resetAllTitle"),
+                            Loc.T("settings.resetAllBody"),
+                            Loc.T("settings.reset")))
                     {
                         App.ResetSettings();
                         Navigate(SettingsPageId.General);
-                        StatusText.Text = "设置已恢复默认值。";
+                        StatusText.Text = Loc.T("settings.defaultsRestored");
                     }
 
                     break;
@@ -977,7 +988,7 @@ public sealed partial class SettingsWindow : Window
         }
         catch (Exception ex)
         {
-            StatusText.Text = "操作失败：" + ex.Message;
+            StatusText.Text = Loc.F("settings.actionFailed", ex.Message);
         }
     }
 
@@ -1052,10 +1063,10 @@ public sealed partial class SettingsWindow : Window
             Orientation = Orientation.Horizontal,
             Spacing = 6,
         };
-        AddToolbarButton(recordRow, "录制", StartRecording);
-        AddToolbarButton(recordRow, "清除", ClearSelectedBinding);
-        AddToolbarButton(recordRow, "重置此项", ResetSelectedAction);
-        AddToolbarButton(recordRow, "重置全部", ResetAllBindings);
+        AddToolbarButton(recordRow, Loc.T("keybindings.record"), StartRecording);
+        AddToolbarButton(recordRow, Loc.T("keybindings.clear"), ClearSelectedBinding);
+        AddToolbarButton(recordRow, Loc.T("keybindings.resetOne"), ResetSelectedAction);
+        AddToolbarButton(recordRow, Loc.T("keybindings.resetAll"), ResetAllBindings);
         toolbar.Children.Add(recordRow);
 
         var ioRow = new StackPanel
@@ -1063,8 +1074,8 @@ public sealed partial class SettingsWindow : Window
             Orientation = Orientation.Horizontal,
             Spacing = 6,
         };
-        AddToolbarButton(ioRow, "导入…", () => _ = ImportBindingsAsync());
-        AddToolbarButton(ioRow, "导出…", () => _ = ExportBindingsAsync());
+        AddToolbarButton(ioRow, Loc.T("keybindings.import"), () => _ = ImportBindingsAsync());
+        AddToolbarButton(ioRow, Loc.T("keybindings.export"), () => _ = ExportBindingsAsync());
         toolbar.Children.Add(ioRow);
         PagePanel.Children.Add(toolbar);
 
@@ -1079,7 +1090,7 @@ public sealed partial class SettingsWindow : Window
         };
         _recorderText = new TextBlock
         {
-            Text = "选择一个动作，然后点击“录制”并按下组合键。Esc 取消，Backspace 清除。",
+            Text = Loc.T("keybindings.hint"),
             FontSize = 12,
             TextWrapping = TextWrapping.Wrap,
         };
@@ -1104,7 +1115,12 @@ public sealed partial class SettingsWindow : Window
             Fill = new SolidColorBrush(Color.FromArgb(0x66, 0xFF, 0xFF, 0xFF)),
             VerticalAlignment = VerticalAlignment.Center,
         });
-        sectionContent.Children.Add(new TextBlock { Text = "快捷键", FontSize = 11, Opacity = 0.75 });
+        sectionContent.Children.Add(new TextBlock
+        {
+            Text = Loc.T("keybindings.section"),
+            FontSize = 11,
+            Opacity = 0.75,
+        });
         SectionPanel.Children.Add(new Button
         {
             Content = sectionContent,
@@ -1126,7 +1142,7 @@ public sealed partial class SettingsWindow : Window
         {
             string chords = byAction.TryGetValue(info.Action, out string[]? values)
                 ? string.Join(" / ", values)
-                : "未绑定";
+                : Loc.T("keybindings.unbound");
 
             var content = new Grid { ColumnSpacing = 10 };
             content.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
@@ -1148,7 +1164,7 @@ public sealed partial class SettingsWindow : Window
                 FontFamily = new FontFamily("Cascadia Mono"),
                 FontSize = 12,
                 VerticalAlignment = VerticalAlignment.Center,
-                Opacity = chords == "未绑定" ? 0.5 : 0.95,
+                Opacity = chords == Loc.T("keybindings.unbound") ? 0.5 : 0.95,
             };
             Grid.SetColumn(chord, 1);
             content.Children.Add(chord);
@@ -1198,8 +1214,8 @@ public sealed partial class SettingsWindow : Window
         if (_recorderText is not null)
         {
             _recorderText.Text = action is null
-                ? "选择一个动作，然后点击“录制”并按下组合键。"
-                : $"已选择：{PlayerActionCatalog.Label(action)}。点击“录制”后按下新组合键；Esc 取消，Backspace 清除。";
+                ? Loc.T("keybindings.hint")
+                : Loc.F("keybindings.hintSelected", PlayerActionCatalog.Label(action));
         }
     }
 
@@ -1209,7 +1225,7 @@ public sealed partial class SettingsWindow : Window
         {
             if (_bindingStatus is not null)
             {
-                _bindingStatus.Text = "请先选择一个动作。";
+                _bindingStatus.Text = Loc.T("keybindings.pickFirst");
             }
 
             return;
@@ -1219,7 +1235,7 @@ public sealed partial class SettingsWindow : Window
         if (_recorderText is not null)
         {
             _recorderText.Text =
-                $"正在录制：{PlayerActionCatalog.Label(_selectedAction)} — 请按下组合键（Esc 取消，Backspace 清除）。";
+                Loc.F("keybindings.recording", PlayerActionCatalog.Label(_selectedAction));
         }
 
         RootGrid.Focus(FocusState.Programmatic);
@@ -1236,11 +1252,11 @@ public sealed partial class SettingsWindow : Window
         if (_recorderText is not null && _selectedAction is not null)
         {
             _recorderText.Text =
-                $"已选择：{PlayerActionCatalog.Label(_selectedAction)}。点击“录制”后按下新组合键。";
+                Loc.F("keybindings.selectedAfter", PlayerActionCatalog.Label(_selectedAction));
         }
         else if (_recorderText is not null && clearStatus)
         {
-            _recorderText.Text = "选择一个动作，然后点击“录制”并按下组合键。";
+            _recorderText.Text = Loc.T("keybindings.hint");
         }
     }
 
@@ -1315,9 +1331,13 @@ public sealed partial class SettingsWindow : Window
         {
             bool replace = await Dialogs.ConfirmAsync(
                 RootGrid.XamlRoot,
-                "快捷键冲突",
-                $"{chord} 已被“{PlayerActionCatalog.Label(conflict)}”使用。是否替换为“{PlayerActionCatalog.Label(action)}”？",
-                "替换");
+                Loc.T("keybindings.conflictTitle"),
+                Loc.F(
+                    "keybindings.conflictBody",
+                    chord,
+                    PlayerActionCatalog.Label(conflict),
+                    PlayerActionCatalog.Label(action)),
+                Loc.T("keybindings.replace"));
             if (!replace)
             {
                 StopRecording(clearStatus: false);
@@ -1332,7 +1352,7 @@ public sealed partial class SettingsWindow : Window
         if (_bindingStatus is not null)
         {
             _bindingStatus.Text =
-                $"“{PlayerActionCatalog.Label(action)}”已绑定到 {chord}。";
+                Loc.F("keybindings.bound", PlayerActionCatalog.Label(action), chord);
         }
     }
 
@@ -1350,7 +1370,9 @@ public sealed partial class SettingsWindow : Window
         BuildKeyBindingsPage();
         if (_bindingStatus is not null)
         {
-            _bindingStatus.Text = $"已清除“{PlayerActionCatalog.Label(action)}”的快捷键。";
+            _bindingStatus.Text = Loc.F(
+                "keybindings.clearedAction",
+                PlayerActionCatalog.Label(action));
         }
     }
 
@@ -1367,7 +1389,9 @@ public sealed partial class SettingsWindow : Window
         BuildKeyBindingsPage();
         if (_bindingStatus is not null)
         {
-            _bindingStatus.Text = $"“{PlayerActionCatalog.Label(action)}”已恢复默认快捷键。";
+            _bindingStatus.Text = Loc.F(
+                "keybindings.resetOneAction",
+                PlayerActionCatalog.Label(action));
         }
     }
 
@@ -1375,9 +1399,9 @@ public sealed partial class SettingsWindow : Window
     {
         if (!await Dialogs.ConfirmAsync(
                 RootGrid.XamlRoot,
-                "重置全部按键",
-                "所有动作恢复文档默认快捷键。",
-                "重置"))
+                Loc.T("keybindings.resetAllTitle"),
+                Loc.T("keybindings.resetAllBody"),
+                Loc.T("settings.reset")))
         {
             return;
         }
@@ -1389,7 +1413,7 @@ public sealed partial class SettingsWindow : Window
         BuildKeyBindingsPage();
         if (_bindingStatus is not null)
         {
-            _bindingStatus.Text = "已恢复全部默认快捷键。";
+            _bindingStatus.Text = Loc.T("keybindings.resetAllDone");
         }
     }
 
@@ -1422,7 +1446,10 @@ public sealed partial class SettingsWindow : Window
                 out IReadOnlyList<KeyBindingSetting> imported,
                 out string error))
         {
-            await Dialogs.ShowMessageAsync(RootGrid.XamlRoot, "导入失败", error);
+            await Dialogs.ShowMessageAsync(
+                RootGrid.XamlRoot,
+                Loc.T("keybindings.importFailed"),
+                error);
             return;
         }
 
@@ -1432,8 +1459,8 @@ public sealed partial class SettingsWindow : Window
         if (_bindingStatus is not null)
         {
             _bindingStatus.Text = string.IsNullOrWhiteSpace(error)
-                ? $"已导入 {imported.Count} 条绑定。"
-                : $"已导入 {imported.Count} 条绑定；{error}";
+                ? Loc.F("keybindings.imported", imported.Count)
+                : Loc.F("keybindings.importedPartial", imported.Count, error);
         }
     }
 
@@ -1455,13 +1482,24 @@ public sealed partial class SettingsWindow : Window
         await FileIO.WriteTextAsync(file, KeyBindings.ExportJson(_bindings));
         if (_bindingStatus is not null)
         {
-            _bindingStatus.Text = "已导出 " + file.Name;
+            _bindingStatus.Text = Loc.F("keybindings.exported", file.Name);
         }
+    }
+
+    private void OnLanguageChanged(object? sender, EventArgs e)
+    {
+        DispatcherQueue.TryEnqueue(() =>
+        {
+            Title = Loc.T("ui.wiinaSettings");
+            BuildNavigation();
+            Navigate(_currentPage);
+        });
     }
 
     private void OnClosed(object sender, WindowEventArgs args)
     {
         App.SettingsChanged -= OnSettingsChanged;
+        Loc.LanguageChanged -= OnLanguageChanged;
         _saveTimer?.Stop();
         WindowShell.Detach(this);
     }

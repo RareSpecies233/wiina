@@ -2,7 +2,9 @@
 <Window
     x:Class="Wiina.App.Views.AboutWindow"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:loc="using:Wiina.App.Localization"
+>
 
     <Grid x:Name="RootGrid"
           Background="{ThemeResource AppBackgroundBrush}"
@@ -45,15 +47,17 @@
                 <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
-            <TextBlock Text="GPL-3.0-only · 无担保"
+            <TextBlock loc:Loc.Text="ui.licenseShort"
                        Style="{StaticResource CaptionTextStyle}"
                        VerticalAlignment="Center" />
             <Button Grid.Column="1"
-                    Content="复制信息"
+                    loc:Loc.Content="ui.copyInfo"
                     Click="OnCopyClick" />
             <Button Grid.Column="2"
-                    Content="关闭"
+                    loc:Loc.Content="ui.close"
                     Click="OnCloseClick" />
         </Grid>
     </Grid>
 </Window>
+
+

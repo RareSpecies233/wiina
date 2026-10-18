@@ -2,7 +2,9 @@
 <Window
     x:Class="Wiina.App.Views.SettingsWindow"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:loc="using:Wiina.App.Localization"
+>
 
     <Grid x:Name="RootGrid"
           MinWidth="560"
@@ -68,7 +70,7 @@
                 <FontIcon Glyph="&#xE713;"
                           FontSize="14"
                           Foreground="{ThemeResource SecondaryTextBrush}" />
-                <TextBlock Text="Wiina 设置"
+                <TextBlock loc:Loc.Text="ui.wiinaSettings"
                            FontSize="12"
                            FontWeight="SemiBold"
                            Foreground="{ThemeResource SecondaryTextBrush}" />
@@ -95,7 +97,7 @@
                     <TextBox x:Name="SearchBox"
                              Grid.Row="0"
                              Margin="10,8,10,4"
-                             PlaceholderText="搜索设置"
+                             loc:Loc.Placeholder="ui.searchSettings"
                              FontSize="12"
                              TextChanged="OnSearchChanged"
                              KeyDown="OnSearchKeyDown" />
@@ -147,7 +149,7 @@
                     <Grid>
                         <TextBlock x:Name="StatusText"
                                    Style="{StaticResource CaptionTextStyle}" />
-                        <TextBlock Text="更改立即应用并保存"
+                        <TextBlock loc:Loc.Text="ui.applyHint"
                                    HorizontalAlignment="Right"
                                    Style="{StaticResource CaptionTextStyle}" />
                     </Grid>
@@ -193,3 +195,5 @@
         </Grid>
     </Grid>
 </Window>
+
+

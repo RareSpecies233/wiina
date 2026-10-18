@@ -11,6 +11,7 @@ using Windows.Graphics;
 using Wiina.App.Controls;
 using Wiina.App.Services;
 using Wiina.Core.Models;
+using Wiina.App.Localization;
 using Wiina.Core.Osd;
 using Wiina.Core.Settings;
 using Wiina.Core.Text;
@@ -328,7 +329,7 @@ public sealed partial class MainWindow
     {
         if (_openingStream)
         {
-            BufferStatus.Show("正在打开流…", _streamTarget, indeterminate: true);
+            BufferStatus.Show(Loc.T("osd.opening"), _streamTarget, indeterminate: true);
             return;
         }
 
@@ -336,15 +337,15 @@ public sealed partial class MainWindow
         {
             string detail = _cachePercent > 0
                 ? $"{Math.Round(_cachePercent)}%" + FormatCacheSpeed()
-                : "读取缓存…";
-            BufferStatus.Show("正在缓冲…", detail, indeterminate: false);
+                : Loc.T("osd.bufferReading");
+            BufferStatus.Show(Loc.T("osd.buffering"), detail, indeterminate: false);
             return;
         }
 
         if (_seekingProperty && !string.IsNullOrWhiteSpace(_currentPath) &&
             IsUrlPath(_currentPath))
         {
-            BufferStatus.Show("正在跳转…", _streamTarget, indeterminate: true);
+            BufferStatus.Show(Loc.T("osd.seeking"), _streamTarget, indeterminate: true);
             return;
         }
 
@@ -384,17 +385,17 @@ public sealed partial class MainWindow
 
         var details = new List<(string Label, string Value)>
         {
-            ("状态", _oscVm.IsPlaying ? "播放中" : _oscVm.Position > 0 ? "暂停" : "空闲"),
-            ("位置", $"{TimeFormatter.Format(_oscVm.Position)} / {TimeFormatter.Format(_oscVm.Duration)}"),
-            ("音量", $"{Math.Round(_oscVm.Volume)}%" + (_oscVm.IsMuted ? "（静音）" : string.Empty)),
-            ("速度", $"{_oscVm.Speed:0.##}x"),
-            ("视频", _videoWidth > 0 && _videoHeight > 0
+            (Loc.T("osd.status"), _oscVm.IsPlaying ? Loc.T("osd.play") : _oscVm.Position > 0 ? Loc.T("osd.pause") : Loc.T("osd.idle")),
+            (Loc.T("osd.position"), $"{TimeFormatter.Format(_oscVm.Position)} / {TimeFormatter.Format(_oscVm.Duration)}"),
+            (Loc.T("osd.labelVolume"), $"{Math.Round(_oscVm.Volume)}%" + (_oscVm.IsMuted ? Loc.T("osd.mutedSuffix") : string.Empty)),
+            (Loc.T("osd.labelSpeed"), $"{_oscVm.Speed:0.##}x"),
+            (Loc.T("osd.labelVideo"), _videoWidth > 0 && _videoHeight > 0
                 ? $"{_videoWidth}×{_videoHeight} · {_videoAspect:0.###}:1"
-                : "未加载视频"),
-            ("音频输出", string.IsNullOrWhiteSpace(_currentAudioDevice)
-                ? "自动"
+                : Loc.T("osd.videoNotLoaded")),
+            (Loc.T("osd.labelAudioOutput"), string.IsNullOrWhiteSpace(_currentAudioDevice)
+                ? Loc.T("osd.auto")
                 : _currentAudioDevice),
-            ("文件", _currentPath ?? "—"),
+            (Loc.T("osd.labelFile"), _currentPath ?? "—"),
         };
 
         TrackInfo? audio = _trackList.FirstOrDefault(
@@ -403,19 +404,14 @@ public sealed partial class MainWindow
             track => track.Type == TrackType.Subtitle && track.IsSelected);
         if (audio is not null)
         {
-            details.Add(("音频轨道", audio.DisplayName));
+            details.Add((Loc.T("osd.labelAudioTrack"), audio.DisplayName));
         }
 
-        details.Add(("字幕", subtitle?.DisplayName ?? "关闭"));
+        details.Add((Loc.T("osd.labelSubtitle"), subtitle?.DisplayName ?? Loc.T("menu.off")));
 
-        string body = string.Join(
-            Environment.NewLine,
-            "持久 OSD（Stage 5）",
-            "• 普通 OSD 在持久 OSD 打开期间被抑制。",
-            "• 自动隐藏已停用；点击 × 或按 Esc 关闭。",
-            "• 附件/插件视图与窗口增长后的多显示器适配留到后续阶段。");
+        string body = Loc.T("osd.persistentBody");
 
-        Osd.ShowPersistent(_currentTitle ?? "技术信息", _currentPath, details, body);
+        Osd.ShowPersistent(_currentTitle ?? Loc.T("osd.technicalInfo"), _currentPath, details, body);
         SyncQuickSettingsValues();
         SaveSettings();
     }

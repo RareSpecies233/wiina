@@ -13,6 +13,7 @@ using Windows.Storage.Pickers;
 using Windows.System;
 using Wiina.App.Controls;
 using Wiina.App.Interop;
+using Wiina.App.Localization;
 using Wiina.App.Views;
 using Wiina.App.Services;
 using Wiina.Core.Files;
@@ -157,7 +158,7 @@ public sealed partial class MainWindow
             return;
         }
 
-        ShowOsd("按 Ctrl+O 打开文件", "也可以拖放文件、文件夹或 URL");
+        ShowOsd(Loc.T("osd.controlsHint"), Loc.T("osd.controlsHintSecondary"));
     }
 
     private async Task OpenFilePickerAsync()
@@ -181,7 +182,7 @@ public sealed partial class MainWindow
         catch (Exception ex)
         {
             Trace("open file picker failed: " + ex);
-            ShowOsd("打开文件失败", ex.Message);
+            ShowOsd(Loc.T("osd.openFileFailed"), ex.Message);
         }
     }
 
@@ -205,7 +206,7 @@ public sealed partial class MainWindow
         catch (Exception ex)
         {
             Trace("open folder picker failed: " + ex);
-            ShowOsd("打开文件夹失败", ex.Message);
+            ShowOsd(Loc.T("osd.openFolderFailed"), ex.Message);
         }
     }
 
@@ -247,7 +248,7 @@ public sealed partial class MainWindow
         catch (Exception ex)
         {
             Trace("open subtitle picker failed: " + ex);
-            ShowOsd("加载字幕失败", ex.Message);
+            ShowOsd(Loc.T("osd.loadSubtitleFailed"), ex.Message);
         }
     }
 
@@ -272,7 +273,7 @@ public sealed partial class MainWindow
         catch (Exception ex)
         {
             Trace("open playlist failed: " + ex);
-            ShowOsd("打开播放列表失败", ex.Message);
+            ShowOsd(Loc.T("osd.openPlaylistFailed"), ex.Message);
         }
     }
 
@@ -286,7 +287,7 @@ public sealed partial class MainWindow
                 SuggestedStartLocation = PickerLocationId.VideosLibrary,
             };
             picker.FileTypeChoices.Add(
-                "M3U 播放列表",
+                Loc.T("playlist.m3uFilter"),
                 new List<string> { ".m3u" });
             InitializePicker(picker);
 
@@ -302,12 +303,12 @@ public sealed partial class MainWindow
                     .Where(path => !string.IsNullOrWhiteSpace(path))
                     .Select(path => path!));
             await FileIO.WriteTextAsync(file, playlist.ToM3u());
-            ShowOsd("已保存播放列表", file.Name);
+            ShowOsd(Loc.T("osd.playlistSaved"), file.Name);
         }
         catch (Exception ex)
         {
             Trace("save playlist failed: " + ex);
-            ShowOsd("保存播放列表失败", ex.Message);
+            ShowOsd(Loc.T("osd.playlistSaveFailed"), ex.Message);
         }
     }
 
@@ -331,12 +332,12 @@ public sealed partial class MainWindow
             string name = $"wiina-{DateTime.Now:yyyyMMdd-HHmmss}.png";
             string path = Path.Combine(folder.Path, name);
             SendPlayerCommandAsync("screenshot-to-file", path, "subtitles");
-            ShowOsd("截图已保存", path);
+            ShowOsd(Loc.T("osd.screenshotSaved"), path);
         }
         catch (Exception ex)
         {
             Trace("screenshot to folder failed: " + ex);
-            ShowOsd("截图失败", ex.Message);
+            ShowOsd(Loc.T("osd.screenshotFailed"), ex.Message);
         }
     }
 
@@ -385,7 +386,7 @@ public sealed partial class MainWindow
             }
 
             ShowOsd(
-                subtitles.Count > 0 ? "请先播放媒体" : "没有可播放的媒体",
+                subtitles.Count > 0 ? Loc.T("osd.pleasePlayMedia") : Loc.T("osd.noPlayableMedia"),
                 errors.FirstOrDefault());
             return;
         }
@@ -412,7 +413,7 @@ public sealed partial class MainWindow
             IReadOnlyList<string> files = MediaFileTypes.ExpandFolder(input);
             if (files.Count == 0)
             {
-                errors.Add($"文件夹中没有媒体: {input}");
+                errors.Add(Loc.F("osd.folderNoMedia", input));
                 return;
             }
 
@@ -446,7 +447,7 @@ public sealed partial class MainWindow
                 }
                 catch (Exception ex)
                 {
-                    errors.Add($"播放列表读取失败: {Path.GetFileName(input)}");
+                    errors.Add(Loc.F("osd.playlistReadFailed", Path.GetFileName(input)));
                     Trace("m3u parse failed: " + ex.Message);
                 }
 
@@ -465,20 +466,20 @@ public sealed partial class MainWindow
                 return;
             }
 
-            errors.Add($"不支持的格式: {Path.GetFileName(input)}");
+            errors.Add(Loc.F("osd.unsupportedFile", Path.GetFileName(input)));
             return;
         }
 
         if (Path.IsPathRooted(input) || input.Contains('\\'))
         {
-            errors.Add($"找不到文件: {input}");
+            errors.Add(Loc.F("osd.fileNotFound", input));
             return;
         }
 
         if (!input.Contains("://", StringComparison.Ordinal) &&
             MediaFileTypes.Classify(input) != MediaKind.Unknown)
         {
-            errors.Add($"找不到文件: {input}");
+            errors.Add(Loc.F("osd.fileNotFound", input));
             return;
         }
 
@@ -488,7 +489,7 @@ public sealed partial class MainWindow
             return;
         }
 
-        errors.Add($"找不到文件或 URL: {input}");
+        errors.Add(Loc.F("osd.urlNotFound", input));
     }
 
     private void PlayEntries(IReadOnlyList<string> entries)
@@ -505,7 +506,7 @@ public sealed partial class MainWindow
         _abLoopB = 0;
         _oscVm.AbLoopA = null;
         _oscVm.AbLoopB = null;
-        TitleBar.Title = "加载中…";
+        TitleBar.Title = Loc.T("osd.loading");
         Title = "Wiina";
         UpdateSmtc();
         Trace($"play entries ({entries.Count}): {string.Join(" | ", entries)}");
@@ -519,12 +520,12 @@ public sealed partial class MainWindow
         BeginStreamOpen(entries[0]);
         if (IsUrlPath(entries[0]))
         {
-            ShowOsd(OsdMessages.NetworkOpening(ShortStreamName(entries[0])));
+            ShowOsd(OsdMessages.NetworkOpening(ShortStreamName(entries[0]), Loc.CurrentLanguage));
         }
         else
         {
             ShowOsd(
-                entries.Count > 1 ? $"正在打开 {entries.Count} 个文件" : "正在打开…",
+                entries.Count > 1 ? Loc.F("osd.openingCount", entries.Count) : Loc.T("osd.opening"),
                 entries.Count > 1 ? Path.GetFileName(entries[0]) : null);
         }
     }
@@ -537,7 +538,7 @@ public sealed partial class MainWindow
         }
 
         e.AcceptedOperation = DataPackageOperation.Copy;
-        e.DragUIOverride.Caption = "在 Wiina 中打开";
+        e.DragUIOverride.Caption = Loc.T("dialogs.dropCaption");
         e.DragUIOverride.IsCaptionVisible = true;
         e.Handled = true;
     }
@@ -574,7 +575,7 @@ public sealed partial class MainWindow
         catch (Exception ex)
         {
             Trace("drop failed: " + ex);
-            ShowOsd("拖放打开失败", ex.Message);
+            ShowOsd(Loc.T("osd.dropOpenFailed"), ex.Message);
         }
     }
 
@@ -596,7 +597,7 @@ public sealed partial class MainWindow
         catch (Exception ex) when (ex is MpvException or InvalidOperationException)
         {
             Trace($"mpv command failed ({string.Join(' ', args)}): {ex.Message}");
-            ShowOsd("播放命令失败", ex.Message);
+            ShowOsd(Loc.T("osd.playbackCommandFailed"), ex.Message);
         }
     }
 
@@ -608,14 +609,14 @@ public sealed partial class MainWindow
     {
         if (!HasMedia())
         {
-            ShowOsd("没有正在播放的媒体", "按 Ctrl+O 打开文件");
+            ShowOsd(Loc.T("osd.noMediaPlaying"), Loc.T("osd.controlsHint"));
             return;
         }
 
         bool paused = _player!.GetPropertyFlag("pause");
         Trace($"toggle pause, was paused={paused}");
         SendPlayerCommandAsync("set", "pause", paused ? "no" : "yes");
-        ShowOsd(OsdMessages.Pause(!paused));
+        ShowOsd(OsdMessages.Pause(!paused, Loc.CurrentLanguage));
     }
 
     private void PlayOrPause(bool play)
@@ -626,7 +627,7 @@ public sealed partial class MainWindow
         }
 
         SendPlayerCommandAsync("set", "pause", play ? "no" : "yes");
-        ShowOsd(OsdMessages.Pause(!play));
+        ShowOsd(OsdMessages.Pause(!play, Loc.CurrentLanguage));
     }
 
     private void StopPlayback()
@@ -638,7 +639,7 @@ public sealed partial class MainWindow
         TitleBar.Title = "Wiina";
         Title = "Wiina";
         EndStreamOpen();
-        ShowOsd("已停止");
+        ShowOsd(Loc.T("osd.stopped"));
         UpdateSmtc();
     }
 
@@ -693,7 +694,7 @@ public sealed partial class MainWindow
                 clamped.ToString("0.##", CultureInfo.InvariantCulture));
         }
 
-        ShowOsd(OsdMessages.Volume(clamped));
+        ShowOsd(OsdMessages.Volume(clamped, Loc.CurrentLanguage));
     }
 
     private void AdjustVolume(double delta)
@@ -716,7 +717,7 @@ public sealed partial class MainWindow
         bool muted = !_oscVm.IsMuted;
         Trace($"set mute {muted}");
         _player.TrySetPropertyString("mute", muted ? "yes" : "no");
-        ShowOsd(OsdMessages.Mute(muted));
+        ShowOsd(OsdMessages.Mute(muted, Loc.CurrentLanguage));
     }
 
     private void SetSpeed(double speed)
@@ -730,7 +731,7 @@ public sealed partial class MainWindow
                 clamped.ToString("0.###", CultureInfo.InvariantCulture));
         }
 
-        ShowOsd(OsdMessages.Speed(clamped));
+        ShowOsd(OsdMessages.Speed(clamped, Loc.CurrentLanguage));
     }
 
     private void MultiplySpeed(double factor)
@@ -755,7 +756,7 @@ public sealed partial class MainWindow
         SendPlayerCommandAsync("set", "pause", "yes");
         SendPlayerCommandAsync(forward ? "frame-step" : "frame-back-step");
         Trace($"frame step {forward}");
-        ShowOsd(forward ? "下一帧" : "上一帧");
+        ShowOsd(forward ? Loc.T("osd.nextFrame") : Loc.T("osd.prevFrame"));
     }
 
     private void PreviousChapter() => ChangeChapter(-1);
@@ -766,7 +767,7 @@ public sealed partial class MainWindow
     {
         if (!HasMedia() || _chapterList.Count == 0)
         {
-            ShowOsd("没有章节");
+            ShowOsd(Loc.T("osd.noChapters"));
             return;
         }
 
@@ -794,7 +795,7 @@ public sealed partial class MainWindow
     {
         if (_playlistItems.Count == 0)
         {
-            ShowOsd("播放列表为空");
+            ShowOsd(Loc.T("osd.playlistEmpty"));
             return;
         }
 
@@ -805,7 +806,7 @@ public sealed partial class MainWindow
     {
         if (_playlistItems.Count == 0)
         {
-            ShowOsd("播放列表为空");
+            ShowOsd(Loc.T("osd.playlistEmpty"));
             return;
         }
 
@@ -827,7 +828,7 @@ public sealed partial class MainWindow
                 _abLoopA = position;
                 _abLoopStage = 1;
                 _oscVm.AbLoopA = position;
-                ShowOsd($"A 点 {TimeFormatter.Format(position)}", "再按一次设置 B 点");
+                ShowOsd(Loc.F("osd.abPoint", TimeFormatter.Format(position)), Loc.T("osd.abSetB"));
                 break;
             case 1:
                 _abLoopB = position;
@@ -835,8 +836,11 @@ public sealed partial class MainWindow
                 _abLoopSeeking = false;
                 _oscVm.AbLoopB = position;
                 ShowOsd(
-                    $"B 点 {TimeFormatter.Format(position)}",
-                    $"A-B 循环 {TimeFormatter.Format(_abLoopA)} – {TimeFormatter.Format(position)}");
+                    Loc.F("osd.pointB", TimeFormatter.Format(position)),
+                    Loc.F(
+                        "osd.abLoopRange",
+                        TimeFormatter.Format(_abLoopA),
+                        TimeFormatter.Format(position)));
                 break;
             default:
                 ClearAbLoop();
@@ -852,7 +856,7 @@ public sealed partial class MainWindow
         _abLoopSeeking = false;
         _oscVm.AbLoopA = null;
         _oscVm.AbLoopB = null;
-        ShowOsd("A-B 循环已关闭");
+        ShowOsd(Loc.T("osd.abOff"));
     }
 
     /// <summary>
@@ -902,17 +906,17 @@ public sealed partial class MainWindow
             case 0:
                 _player?.TrySetPropertyString("loop-playlist", "no");
                 _player?.TrySetPropertyString("loop-file", "no");
-                ShowOsd("循环：关闭");
+                ShowOsd(Loc.T("osd.loopOff"));
                 break;
             case 1:
                 _player?.TrySetPropertyString("loop-playlist", "inf");
                 _player?.TrySetPropertyString("loop-file", "no");
-                ShowOsd("循环：列表循环");
+                ShowOsd(Loc.T("osd.loopList"));
                 break;
             default:
                 _player?.TrySetPropertyString("loop-playlist", "no");
                 _player?.TrySetPropertyString("loop-file", "inf");
-                ShowOsd("循环：单曲循环");
+                ShowOsd(Loc.T("osd.loopOne"));
                 break;
         }
     }
@@ -926,14 +930,14 @@ public sealed partial class MainWindow
 
         bool shuffle = !_player.GetPropertyFlag("shuffle");
         _player.TrySetPropertyString("shuffle", shuffle ? "yes" : "no");
-        ShowOsd(shuffle ? "随机播放：开启" : "随机播放：关闭");
+        ShowOsd(shuffle ? Loc.T("osd.shuffleOn") : Loc.T("osd.shuffleOff"));
     }
 
     private void CaptureScreenshot()
     {
         if (!HasMedia())
         {
-            ShowOsd("没有正在播放的媒体");
+            ShowOsd(Loc.T("osd.noMediaPlaying"));
             return;
         }
 
@@ -945,12 +949,12 @@ public sealed partial class MainWindow
                 $"wiina-{DateTime.Now:yyyyMMdd-HHmmss}.png");
             Trace($"screenshot -> {path}");
             SendPlayerCommandAsync("screenshot-to-file", path, "subtitles");
-            ShowOsd("截图已保存", path);
+            ShowOsd(Loc.T("osd.screenshotSaved"), path);
         }
         catch (Exception ex)
         {
             Trace("screenshot failed: " + ex);
-            ShowOsd("截图失败", ex.Message);
+            ShowOsd(Loc.T("osd.screenshotFailed"), ex.Message);
         }
     }
 
@@ -981,7 +985,7 @@ public sealed partial class MainWindow
 
         bool visible = !_player.GetPropertyFlag("sub-visibility");
         _player.TrySetPropertyString("sub-visibility", visible ? "yes" : "no");
-        ShowOsd(visible ? "字幕显示" : "字幕隐藏");
+        ShowOsd(visible ? Loc.T("osd.subtitleShown") : Loc.T("osd.subtitleHidden"));
     }
 
     private void AdjustSubtitleDelay(double delta)
@@ -995,13 +999,13 @@ public sealed partial class MainWindow
         _player.TrySetPropertyString(
             "sub-delay",
             next.ToString("0.###", CultureInfo.InvariantCulture));
-        ShowOsd($"字幕延迟 {next:+0.0;-0.0;0.0}s");
+        ShowOsd(Loc.F("osd.subtitleDelay", next.ToString("+0.0;-0.0;0.0", CultureInfo.InvariantCulture) + "s"));
     }
 
     private void ResetSubtitleDelay()
     {
         _player?.TrySetPropertyString("sub-delay", "0");
-        ShowOsd("字幕延迟 0.0s");
+        ShowOsd(Loc.F("osd.subtitleDelay", "0.0s"));
     }
 
     private void AdjustSubtitlePosition(double delta)
@@ -1021,7 +1025,7 @@ public sealed partial class MainWindow
         _player.TrySetPropertyString(
             "sub-pos",
             Math.Round(next).ToString(CultureInfo.InvariantCulture));
-        ShowOsd($"字幕位置 {Math.Round(next)}");
+        ShowOsd(Loc.F("osd.subtitlePosition", Math.Round(next)));
     }
 
     private void AdjustSubtitleScale(double delta)
@@ -1041,7 +1045,7 @@ public sealed partial class MainWindow
         _player.TrySetPropertyString(
             "sub-scale",
             next.ToString("0.###", CultureInfo.InvariantCulture));
-        ShowOsd($"字幕缩放 {next:0.##}x");
+        ShowOsd(Loc.F("osd.subtitleScale", next.ToString("0.##", CultureInfo.InvariantCulture) + "x"));
     }
 
     private void SubtitleSeek(int direction)
@@ -1054,7 +1058,7 @@ public sealed partial class MainWindow
         SendPlayerCommandAsync(
             "sub-seek",
             direction.ToString(CultureInfo.InvariantCulture));
-        ShowOsd(direction > 0 ? "下一句字幕" : "上一句字幕");
+        ShowOsd(direction > 0 ? Loc.T("osd.subtitleNext") : Loc.T("osd.subtitlePrev"));
     }
 
     private void SelectTrack(TrackInfo track)
@@ -1064,13 +1068,13 @@ public sealed partial class MainWindow
             property,
             track.Id.ToString(CultureInfo.InvariantCulture));
         Trace($"select track {track.Type} {track.Id}");
-        ShowOsd($"已切换{TrackTypeLabel(track.Type)}", track.DisplayName);
+        ShowOsd(Loc.F("osd.track", TrackTypeLabel(track.Type)), track.DisplayName);
     }
 
     private void SetTrackSelection(TrackType type, string value, string label)
     {
         _player?.TrySetPropertyString(TrackProperty(type), value);
-        ShowOsd($"已切换{TrackTypeLabel(type)}", label);
+        ShowOsd(Loc.F("osd.track", TrackTypeLabel(type)), label);
     }
 
     private static string TrackProperty(TrackType type) => type switch
@@ -1082,9 +1086,9 @@ public sealed partial class MainWindow
 
     private static string TrackTypeLabel(TrackType type) => type switch
     {
-        TrackType.Video => "视频轨道",
-        TrackType.Audio => "音频轨道",
-        _ => "字幕轨道",
+        TrackType.Video => Loc.T("osd.trackVideo"),
+        TrackType.Audio => Loc.T("osd.trackAudio"),
+        _ => Loc.T("osd.trackSubtitle"),
     };
 
     private void SetSecondarySubtitle(int? id)
@@ -1093,29 +1097,29 @@ public sealed partial class MainWindow
             "secondary-sid",
             id is null ? "no" : id.Value.ToString(CultureInfo.InvariantCulture));
         ShowOsd(
-            "次字幕",
-            id is null ? "关闭" : $"轨道 #{id.Value}");
+            Loc.T("osd.secondarySubtitle"),
+            id is null ? Loc.T("menu.off") : Loc.F("osd.trackNumber", id.Value));
     }
 
     private void AddExternalSubtitle(string path)
     {
         if (string.IsNullOrWhiteSpace(path) || !File.Exists(path))
         {
-            ShowOsd("字幕文件不存在", path);
+            ShowOsd(Loc.T("osd.subtitleFileMissing"), path);
             return;
         }
 
         if (!HasMedia())
         {
             _pendingSubtitles.Add(path);
-            ShowOsd("已加入待加载字幕", Path.GetFileName(path));
+            ShowOsd(Loc.T("osd.subtitleQueued"), Path.GetFileName(path));
             return;
         }
 
         Trace($"sub-add {path}");
         SendPlayerCommandAsync("sub-add", path, "select");
         _wantSubtitleSelection = true;
-        ShowOsd("已加载字幕", Path.GetFileName(path));
+        ShowOsd(Loc.T("osd.subtitleLoaded"), Path.GetFileName(path));
     }
 
     private void FlushPendingSubtitles()
@@ -1135,7 +1139,7 @@ public sealed partial class MainWindow
         Trace(
             $"subtitles flushed; sid={_player?.GetPropertyInt64("sid")} " +
             $"visible={_player?.GetPropertyFlag("sub-visibility")}");
-        ShowOsd("已加载外挂字幕", $"{_pendingSubtitles.Count} 个");
+        ShowOsd(Loc.T("osd.subtitlesLoaded"), Loc.F("osd.fileCount", _pendingSubtitles.Count));
         _pendingSubtitles.Clear();
     }
 
@@ -1287,14 +1291,14 @@ public sealed partial class MainWindow
         DispatcherQueue.TryEnqueue(() =>
         {
             _pendingSubtitles.Clear();
-            TitleBar.Title = "Wiina — 打开失败";
+            TitleBar.Title = Loc.T("osd.openFailedTitle");
             Title = "Wiina";
             _currentPath = null;
             _currentTitle = null;
             EndStreamOpen();
             ShowOsd(OsdMessages.Error(
-                "无法打开媒体",
-                string.IsNullOrWhiteSpace(message) ? $"mpv 错误 {error}" : message));
+                Loc.T("osd.cannotOpenMedia"),
+                string.IsNullOrWhiteSpace(message) ? Loc.F("osd.mpvError", error) : message));
             UpdateSmtc();
         });
     }
@@ -1309,11 +1313,11 @@ public sealed partial class MainWindow
                 description.StartsWith("sub-add", StringComparison.Ordinal) ||
                 description.StartsWith("sub-seek", StringComparison.Ordinal))
             {
-                ShowOsd("播放命令失败", message ?? description);
+                ShowOsd(Loc.T("osd.playbackCommandFailed"), message ?? description);
             }
             else if (description.StartsWith("screenshot", StringComparison.Ordinal))
             {
-                ShowOsd("截图失败", message ?? description);
+                ShowOsd(Loc.T("osd.screenshotFailed"), message ?? description);
             }
         });
     }
@@ -1415,7 +1419,7 @@ public sealed partial class MainWindow
             entry.Position.ToString("0.###", CultureInfo.InvariantCulture),
             "absolute");
         ShowOsd(
-            $"从 {TimeFormatter.Format(entry.Position)} 继续",
+            Loc.F("osd.resumeFrom", TimeFormatter.Format(entry.Position)),
             _currentTitle);
     }
 

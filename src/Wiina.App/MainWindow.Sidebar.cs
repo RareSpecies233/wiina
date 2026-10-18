@@ -3,6 +3,7 @@ using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Wiina.App.Controls;
 using Wiina.Core.Filters;
+using Wiina.App.Localization;
 using Wiina.Core.Models;
 using Wiina.Core.Osd;
 using Wiina.Core.Settings;
@@ -95,7 +96,7 @@ public sealed partial class MainWindow
     {
         if (_compact)
         {
-            ShowOsd("窗口过窄", "侧边栏在 420 DIP 以下隐藏");
+            ShowOsd(Loc.T("osd.windowTooNarrow"), Loc.T("osd.sidebarHiddenBelow"));
             return;
         }
 
@@ -446,7 +447,7 @@ public sealed partial class MainWindow
                 index.ToString(CultureInfo.InvariantCulture));
         }
 
-        ShowOsd("已从播放列表移除", $"{indexes.Count} 项");
+        ShowOsd(Loc.T("osd.playlistRemoved"), Loc.F("osd.fileCount", indexes.Count));
     }
 
     private void MovePlaylistItem(int from, int to)
@@ -915,8 +916,8 @@ public sealed partial class MainWindow
         if (!_player.TrySetPropertyString("vf", result.Graph))
         {
             string message = result.Graph.Length == 0
-                ? "mpv 拒绝清空视频滤镜"
-                : "mpv 拒绝了视频滤镜图：" + FirstGraphPart(result.Graph);
+                ? Loc.T("osd.videoFilterClearRefused")
+                : Loc.T("osd.videoFilterGraphRejected") + FirstGraphPart(result.Graph);
             errors.Add(message);
             Trace(message);
         }
@@ -935,7 +936,7 @@ public sealed partial class MainWindow
                     ReloadForVideoFilters();
                 }
 
-                ShowOsd("视频滤镜", "已切换为软件解码以应用滤镜");
+                ShowOsd(Loc.T("osd.videoFilters"), Loc.T("osd.softwareDecode"));
             }
         }
         else if (!needsSoftwareDecode && _filterSoftwareDecode)

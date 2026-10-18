@@ -3,6 +3,7 @@
     x:Class="Wiina.App.Controls.TitleBarView"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:loc="using:Wiina.App.Localization"
     xmlns:local="using:Wiina.App.Controls">
 
     <Grid>
@@ -51,43 +52,50 @@
                             Style="{StaticResource TitleBarButtonStyle}"
                             Content="&#xE718;"
                             Click="OnPinClick"
-                            ToolTipService.ToolTip="置顶 / Pin" />
+                            loc:Loc.ToolTip="ui.pin"
+                            loc:Loc.AutomationName="ui.pin" />
                     <Button x:Name="LayoutButton"
                             Style="{StaticResource TitleBarButtonStyle}"
                             Content="&#xE7C4;"
                             Click="OnLayoutClick"
-                            ToolTipService.ToolTip="Edge-to-edge / Docked" />
+                            loc:Loc.ToolTip="ui.layout"
+                            loc:Loc.AutomationName="ui.layout" />
                     <Button x:Name="OscButton"
                             Style="{StaticResource TitleBarButtonStyle}"
                             Content="&#xE7F4;"
                             Click="OnOscClick"
-                            ToolTipService.ToolTip="OSC 位置" />
+                            loc:Loc.ToolTip="ui.oscPosition"
+                            loc:Loc.AutomationName="ui.oscPosition" />
                     <Button x:Name="SidebarButton"
                             Style="{StaticResource TitleBarButtonStyle}"
                             Content="&#xE700;"
                             Click="OnSidebarClick"
-                            ToolTipService.ToolTip="侧边栏" />
+                            loc:Loc.ToolTip="ui.sidebar"
+                            loc:Loc.AutomationName="ui.sidebar" />
                     <Button x:Name="ThemeButton"
                             Style="{StaticResource TitleBarButtonStyle}"
                             Content="&#xE793;"
                             Click="OnThemeClick"
-                            ToolTipService.ToolTip="主题" />
+                            loc:Loc.ToolTip="ui.theme"
+                            loc:Loc.AutomationName="ui.theme" />
                     <Button x:Name="IconsButton"
                             Style="{StaticResource TitleBarButtonStyle}"
                             Content="&#xE8FD;"
                             Click="OnIconsClick"
-                            ToolTipService.ToolTip="图标映射" />
+                            loc:Loc.ToolTip="ui.iconMapping"
+                            loc:Loc.AutomationName="ui.iconMapping" />
                     <Button x:Name="WindowButton"
                             Style="{StaticResource TitleBarButtonStyle}"
                             Content="&#xE8A9;"
                             Click="OnWindowClick"
-                            ToolTipService.ToolTip="窗口尺寸" />
+                            loc:Loc.ToolTip="ui.windowSize"
+                            loc:Loc.AutomationName="ui.windowSize" />
                     <Button x:Name="MoreButton"
                             Style="{StaticResource TitleBarButtonStyle}"
                             Content="&#xE712;"
                             Click="OnMoreClick"
-                            ToolTipService.ToolTip="更多操作"
-                            AutomationProperties.Name="更多" />
+                            loc:Loc.ToolTip="ui.moreActions"
+                            loc:Loc.AutomationName="ui.more" />
                 </StackPanel>
             </Grid>
 
@@ -111,18 +119,18 @@
                         <Button Style="{StaticResource OscIconButtonStyle}"
                                 Content="&#xE892;"
                                 Command="{Binding PreviousCommand}"
-                                ToolTipService.ToolTip="上一首"
-                                AutomationProperties.Name="上一首" />
+                                loc:Loc.ToolTip="ui.previous"
+                                loc:Loc.AutomationName="ui.previous" />
                         <Button Style="{StaticResource OscIconButtonStyle}"
                                 Content="{Binding PlayGlyph}"
                                 Command="{Binding PlayPauseCommand}"
-                                ToolTipService.ToolTip="播放 / 暂停"
-                                AutomationProperties.Name="播放或暂停" />
+                                loc:Loc.ToolTip="ui.playPauseSlash"
+                                loc:Loc.AutomationName="ui.playPause" />
                         <Button Style="{StaticResource OscIconButtonStyle}"
                                 Content="&#xE893;"
                                 Command="{Binding NextCommand}"
-                                ToolTipService.ToolTip="下一首"
-                                AutomationProperties.Name="下一首" />
+                                loc:Loc.ToolTip="ui.next"
+                                loc:Loc.AutomationName="ui.next" />
                     </StackPanel>
                     <TextBlock x:Name="TopCurrentTime"
                                Grid.Column="1"
@@ -155,3 +163,5 @@
         </Grid>
     </Grid>
 </UserControl>
+
+

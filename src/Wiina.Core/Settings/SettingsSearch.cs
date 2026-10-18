@@ -1,16 +1,22 @@
+using Wiina.Core.Localization;
+
 namespace Wiina.Core.Settings;
 
 /// <summary>One search result: either a concrete row or a page header.</summary>
 public sealed record SettingsSearchHit(
     SettingsPageInfo Page,
     SettingsRowDefinition? Row,
-    int Score)
+    int Score,
+    string Language = AppLanguage.ZhHans)
 {
-    public string Title => Row?.Title ?? Page.Title;
+    public string Title => Row is null
+        ? SettingsLocalization.PageTitle(Page, Language)
+        : SettingsLocalization.Title(Row, Language);
 
     public string Subtitle => Row is null
-        ? Page.Summary
-        : $"{Page.Title} › {Row.Section}";
+        ? SettingsLocalization.PageSummary(Page, Language)
+        : $"{SettingsLocalization.PageTitle(Page, Language)} › " +
+          SettingsLocalization.Section(Row.Section, Language);
 
     public string? RowId => Row?.Id;
 }
@@ -25,20 +31,27 @@ public sealed class SettingsSearchIndex
     private readonly SettingsPageInfo[] _pages;
     private readonly SettingsRowDefinition[] _rows;
     private readonly Dictionary<SettingsPageId, int> _pageOrder;
+    private readonly string _language;
 
     public SettingsSearchIndex(
         IEnumerable<SettingsPageInfo> pages,
-        IEnumerable<SettingsRowDefinition> rows)
+        IEnumerable<SettingsRowDefinition> rows,
+        string language = AppLanguage.ZhHans)
     {
         _pages = pages.ToArray();
         _rows = rows.ToArray();
+        _language = language;
         _pageOrder = _pages
             .Select((page, index) => (page.Id, index))
             .ToDictionary(pair => pair.Id, pair => pair.index);
     }
 
-    public IReadOnlyList<SettingsSearchHit> Search(string? query, int limit = 20)
+    public IReadOnlyList<SettingsSearchHit> Search(
+        string? query,
+        int limit = 20,
+        string? language = null)
     {
+        string resolvedLanguage = language ?? _language;
         string text = (query ?? string.Empty).Trim();
         if (text.Length == 0 || limit <= 0)
         {
@@ -54,10 +67,10 @@ public sealed class SettingsSearchIndex
         {
             SettingsRowDefinition row = _rows[index];
             SettingsPageInfo page = PageOf(row.Page);
-            int? score = ScoreRow(row, page, text, tokens);
+            int? score = ScoreRow(row, page, text, tokens, resolvedLanguage);
             if (score is not null)
             {
-                hits.Add(new SettingsSearchHit(page, row, score.Value * 1000 + index));
+                hits.Add(new SettingsSearchHit(page, row, score.Value * 1000 + index, resolvedLanguage));
             }
         }
 
@@ -70,10 +83,10 @@ public sealed class SettingsSearchIndex
                 continue;
             }
 
-            int? score = ScorePage(page, text, tokens);
+            int? score = ScorePage(page, text, tokens, resolvedLanguage);
             if (score is not null)
             {
-                hits.Add(new SettingsSearchHit(page, null, score.Value * 1000 + index));
+                hits.Add(new SettingsSearchHit(page, null, score.Value * 1000 + index, resolvedLanguage));
             }
         }
 
@@ -88,27 +101,33 @@ public sealed class SettingsSearchIndex
     private SettingsPageInfo PageOf(SettingsPageId id) =>
         _pages.First(page => page.Id == id);
 
-    private static int? ScoreRow(
+    private int? ScoreRow(
         SettingsRowDefinition row,
         SettingsPageInfo page,
         string query,
-        string[] tokens)
+        string[] tokens,
+        string language)
     {
         string combined = string.Join(
             ' ',
             row.Title,
+            SettingsLocalization.Title(row, language),
             row.Keywords,
             row.Description,
+            SettingsLocalization.Description(row, language),
             row.Section,
+            SettingsLocalization.Section(row.Section, language),
             page.Title,
-            page.Summary);
+            SettingsLocalization.PageTitle(page, language),
+            page.Summary,
+            SettingsLocalization.PageSummary(page, language));
 
         if (!AllTokensPresent(combined, tokens))
         {
             return null;
         }
 
-        int? full = BestFieldScore(row, page, query);
+        int? full = BestFieldScore(row, page, query, language);
         if (full is not null)
         {
             return full;
@@ -119,7 +138,7 @@ public sealed class SettingsSearchIndex
         int sum = 0;
         foreach (string token in tokens)
         {
-            int? tokenScore = BestFieldScore(row, page, token);
+            int? tokenScore = BestFieldScore(row, page, token, language);
             if (tokenScore is null)
             {
                 return null;
@@ -131,40 +150,44 @@ public sealed class SettingsSearchIndex
         return sum + 40;
     }
 
-    private static int? ScorePage(
+    private int? ScorePage(
         SettingsPageInfo page,
         string query,
-        string[] tokens)
+        string[] tokens,
+        string language)
     {
-        string combined = page.Title + " " + page.Summary;
+        string title = SettingsLocalization.PageTitle(page, language);
+        string summary = SettingsLocalization.PageSummary(page, language);
+        string combined = string.Join(' ', page.Title, title, page.Summary, summary);
         if (!AllTokensPresent(combined, tokens))
         {
             return null;
         }
 
-        int? title = FieldScore(page.Title, query, 24);
-        if (title is not null)
+        int? titleScore = FieldScore(title, query, 24);
+        if (titleScore is not null)
         {
-            return title.Value + 24;
+            return titleScore.Value + 24;
         }
 
-        int? summary = FieldScore(page.Summary, query, 30);
-        return summary is null ? null : summary.Value + 24;
+        int? summaryScore = FieldScore(summary, query, 30);
+        return summaryScore is null ? null : summaryScore.Value + 24;
     }
 
-    private static int? BestFieldScore(
+    private int? BestFieldScore(
         SettingsRowDefinition row,
         SettingsPageInfo page,
-        string query)
+        string query,
+        string language)
     {
         int? best = null;
         foreach ((string text, int weight) in new[]
                  {
-                     (row.Title, 0),
+                     (SettingsLocalization.Title(row, language), 0),
                      (row.Keywords, 6),
-                     (row.Description, 12),
-                     (row.Section, 18),
-                     (page.Title, 24),
+                     (SettingsLocalization.Description(row, language), 12),
+                     (SettingsLocalization.Section(row.Section, language), 18),
+                     (SettingsLocalization.PageTitle(page, language), 24),
                  })
         {
             int? score = FieldScore(text, query, weight);
@@ -224,3 +247,4 @@ public sealed class SettingsSearchIndex
         return true;
     }
 }
+

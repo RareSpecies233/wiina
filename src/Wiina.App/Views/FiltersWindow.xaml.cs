@@ -4,6 +4,7 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Controls.Primitives;
 using Wiina.App.Controls;
+using Wiina.App.Localization;
 using Wiina.App.Services;
 using Wiina.Core.Filters;
 using Wiina.Core.Models;
@@ -30,7 +31,7 @@ public sealed partial class FiltersWindow : Window
     public FiltersWindow()
     {
         InitializeComponent();
-        Title = "Wiina 滤镜与均衡器";
+        Title = Loc.T("filters.windowTitle");
         RootGrid.RequestedTheme = _settings.Theme switch
         {
             ThemeMode.Dark => ElementTheme.Dark,
@@ -61,7 +62,7 @@ public sealed partial class FiltersWindow : Window
         RefreshAudioPresets();
         RefreshVideoList();
         RefreshAudioList();
-        SetStatus("就绪：所有更改即时写入 mpv。");
+        SetStatus(Loc.T("filters.ready"));
 
         Closed += (_, _) =>
         {
@@ -79,7 +80,7 @@ public sealed partial class FiltersWindow : Window
         AudioPanel.Visibility = audio ? Visibility.Visible : Visibility.Collapsed;
         VideoTabButton.IsChecked = !audio;
         AudioTabButton.IsChecked = audio;
-        TitleText.Text = audio ? "音频滤镜与均衡器" : "视频滤镜";
+        TitleText.Text = audio ? Loc.T("filters.audioTitle") : Loc.T("filters.videoTitle");
     }
 
     private void OnTabClick(object sender, RoutedEventArgs e)
@@ -99,10 +100,10 @@ public sealed partial class FiltersWindow : Window
                 filter.Id,
                 VideoFilterCatalog.Info(filter.Kind).Name,
                 VideoFilterCatalog.Describe(filter),
-                filter.Enabled ? string.Empty : "已停用"))
+                filter.Enabled ? string.Empty : Loc.T("filters.disabled")))
             .ToList();
         VideoFilterList.ItemsSource = _videoRows;
-        VideoCountText.Text = $"{_videoRows.Count} 个";
+        VideoCountText.Text = Loc.F("filters.count", _videoRows.Count);
 
         if (_videoRows.Count == 0)
         {
@@ -143,7 +144,7 @@ public sealed partial class FiltersWindow : Window
         {
             VideoEditorPanel.Children.Add(new TextBlock
             {
-                Text = "选择一个滤镜以编辑参数。",
+                Text = Loc.T("filters.pickFilter"),
                 FontSize = 12,
                 Opacity = 0.6,
             });
@@ -195,7 +196,7 @@ public sealed partial class FiltersWindow : Window
         {
             var format = new ComboBox
             {
-                Header = "像素格式",
+                Header = Loc.T("filters.paramFormat"),
                 ItemsSource = VideoFilterCatalog.PixelFormats,
                 HorizontalAlignment = HorizontalAlignment.Stretch,
             };
@@ -217,11 +218,11 @@ public sealed partial class FiltersWindow : Window
 
         var enable = new ToggleSwitch
         {
-            Header = "启用此滤镜",
+            Header = Loc.T("filters.enableFilter"),
             IsOn = filter.Enabled,
             MinWidth = 0,
-            OnContent = "启用",
-            OffContent = "停用",
+            OnContent = Loc.T("filters.enable"),
+            OffContent = Loc.T("filters.disable"),
         };
         enable.Toggled += (_, _) =>
         {
@@ -243,7 +244,7 @@ public sealed partial class FiltersWindow : Window
         if (row is not null)
         {
             row.Summary = VideoFilterCatalog.Describe(filter);
-            row.State = filter.Enabled ? string.Empty : "已停用";
+            row.State = filter.Enabled ? string.Empty : Loc.T("filters.disabled");
         }
     }
 
@@ -349,10 +350,10 @@ public sealed partial class FiltersWindow : Window
                 filter.Id,
                 AudioFilterCatalog.Info(filter.Kind).Name,
                 AudioFilterCatalog.Describe(filter),
-                filter.Enabled ? string.Empty : "已停用"))
+                filter.Enabled ? string.Empty : Loc.T("filters.disabled")))
             .ToList();
         AudioFilterList.ItemsSource = _audioRows;
-        AudioCountText.Text = $"{_audioRows.Count} 个";
+        AudioCountText.Text = Loc.F("filters.count", _audioRows.Count);
 
         if (_audioRows.Count == 0)
         {
@@ -393,7 +394,7 @@ public sealed partial class FiltersWindow : Window
         {
             AudioEditorPanel.Children.Add(new TextBlock
             {
-                Text = "选择一个附加音频滤镜以编辑参数。",
+                Text = Loc.T("filters.pickAudioFilter"),
                 FontSize = 12,
                 Opacity = 0.6,
             });
@@ -418,16 +419,16 @@ public sealed partial class FiltersWindow : Window
         var parameters = new List<FilterParameter>();
         if (filter.Kind == AudioFilterKind.Loudnorm)
         {
-            parameters.Add(new FilterParameter("I", "目标响度", -70, -5, 0.5, " LUFS"));
-            parameters.Add(new FilterParameter("TP", "真峰值", -9, 0, 0.1, " dB"));
-            parameters.Add(new FilterParameter("LRA", "响度范围", 1, 50, 1, " LU"));
+            parameters.Add(new FilterParameter("I", Loc.T("filters.paramLoudness"), -70, -5, 0.5, " LUFS"));
+            parameters.Add(new FilterParameter("TP", Loc.T("filters.paramTruePeak"), -9, 0, 0.1, " dB"));
+            parameters.Add(new FilterParameter("LRA", Loc.T("filters.paramLoudnessRange"), 1, 50, 1, " LU"));
         }
         else
         {
-            parameters.Add(new FilterParameter("f", "帧长", 10, 8000, 10, " ms"));
-            parameters.Add(new FilterParameter("g", "高斯窗口", 3, 301, 2, string.Empty));
-            parameters.Add(new FilterParameter("p", "峰值", 0, 1, 0.01, string.Empty));
-            parameters.Add(new FilterParameter("m", "最大增益", 0, 30, 0.5, " dB"));
+            parameters.Add(new FilterParameter("f", Loc.T("filters.paramFrameLength"), 10, 8000, 10, " ms"));
+            parameters.Add(new FilterParameter("g", Loc.T("filters.paramGaussianWindow"), 3, 301, 2, string.Empty));
+            parameters.Add(new FilterParameter("p", Loc.T("filters.paramPeak"), 0, 1, 0.01, string.Empty));
+            parameters.Add(new FilterParameter("m", Loc.T("filters.paramMaxGain"), 0, 30, 0.5, " dB"));
         }
 
         foreach (FilterParameter parameter in parameters)
@@ -492,11 +493,11 @@ public sealed partial class FiltersWindow : Window
 
         var enable = new ToggleSwitch
         {
-            Header = "启用此滤镜",
+            Header = Loc.T("filters.enableFilter"),
             IsOn = filter.Enabled,
             MinWidth = 0,
-            OnContent = "启用",
-            OffContent = "停用",
+            OnContent = Loc.T("filters.enable"),
+            OffContent = Loc.T("filters.disable"),
         };
         enable.Toggled += (_, _) =>
         {
@@ -518,7 +519,7 @@ public sealed partial class FiltersWindow : Window
         if (row is not null)
         {
             row.Summary = AudioFilterCatalog.Describe(filter);
-            row.State = filter.Enabled ? string.Empty : "已停用";
+            row.State = filter.Enabled ? string.Empty : Loc.T("filters.disabled");
         }
     }
 
@@ -709,7 +710,7 @@ public sealed partial class FiltersWindow : Window
         string name = VideoPresetName.Text.Trim();
         if (name.Length == 0)
         {
-            SetStatus("请输入预设名称。", error: true);
+            SetStatus(Loc.T("filters.enterPreset"), error: true);
             return;
         }
 
@@ -725,14 +726,14 @@ public sealed partial class FiltersWindow : Window
         RefreshVideoPresets();
         VideoPresetBox.SelectedItem = preset.Name;
         ScheduleSave();
-        SetStatus($"已保存视频滤镜预设“{name}”。");
+        SetStatus(Loc.F("filters.videoPresetSaved", name));
     }
 
     private void OnVideoPresetLoadClick(object sender, RoutedEventArgs e)
     {
         if (VideoPresetBox.SelectedItem is not string name)
         {
-            SetStatus("请选择一个视频滤镜预设。", error: true);
+            SetStatus(Loc.T("filters.pickVideoPreset"), error: true);
             return;
         }
 
@@ -748,7 +749,7 @@ public sealed partial class FiltersWindow : Window
         RefreshVideoList();
         BuildVideoEditor();
         ApplyNow();
-        SetStatus($"已载入视频滤镜预设“{name}”。");
+        SetStatus(Loc.F("filters.videoPresetLoaded", name));
     }
 
     private void OnVideoPresetDeleteClick(object sender, RoutedEventArgs e)
@@ -762,7 +763,7 @@ public sealed partial class FiltersWindow : Window
             preset => string.Equals(preset.Name, name, StringComparison.Ordinal));
         RefreshVideoPresets();
         ScheduleSave();
-        SetStatus($"已删除视频滤镜预设“{name}”。");
+        SetStatus(Loc.F("filters.videoPresetDeleted", name));
     }
 
     private void OnAudioPresetSaveClick(object sender, RoutedEventArgs e)
@@ -770,7 +771,7 @@ public sealed partial class FiltersWindow : Window
         string name = AudioPresetName.Text.Trim();
         if (name.Length == 0)
         {
-            SetStatus("请输入预设名称。", error: true);
+            SetStatus(Loc.T("filters.enterPreset"), error: true);
             return;
         }
 
@@ -788,14 +789,14 @@ public sealed partial class FiltersWindow : Window
         RefreshAudioPresets();
         AudioPresetBox.SelectedItem = preset.Name;
         ScheduleSave();
-        SetStatus($"已保存音频预设“{name}”。");
+        SetStatus(Loc.F("filters.audioPresetSaved", name));
     }
 
     private void OnAudioPresetLoadClick(object sender, RoutedEventArgs e)
     {
         if (AudioPresetBox.SelectedItem is not string name)
         {
-            SetStatus("请选择一个音频预设。", error: true);
+            SetStatus(Loc.T("filters.pickAudioPreset"), error: true);
             return;
         }
 
@@ -815,7 +816,7 @@ public sealed partial class FiltersWindow : Window
         RefreshAudioList();
         BuildAudioEditor();
         ApplyNow();
-        SetStatus($"已载入音频预设“{name}”。");
+        SetStatus(Loc.F("filters.audioPresetLoaded", name));
     }
 
     private void OnAudioPresetDeleteClick(object sender, RoutedEventArgs e)
@@ -829,7 +830,7 @@ public sealed partial class FiltersWindow : Window
             preset => string.Equals(preset.Name, name, StringComparison.Ordinal));
         RefreshAudioPresets();
         ScheduleSave();
-        SetStatus($"已删除音频预设“{name}”。");
+        SetStatus(Loc.F("filters.audioPresetDeleted", name));
     }
 
     // ------------------------------------------------------------- plumbing
@@ -842,7 +843,7 @@ public sealed partial class FiltersWindow : Window
         ScheduleSave();
         int videoCount = _settings.VideoFilters.Count(filter => filter.Enabled);
         int audioCount = _settings.AudioFilters.Count(filter => filter.Enabled);
-        string summary = $"已应用：视频 {videoCount} 项 · 均衡器{(_settings.EqualizerEnabled ? "开启" : "关闭")} · 附加音频 {audioCount} 项";
+        string summary = Loc.F("filters.appliedSummary", videoCount, _settings.EqualizerEnabled ? Loc.T("filters.on") : Loc.T("filters.off"), audioCount);
         SetStatus(errors.Count == 0 ? summary : summary + "；" + string.Join("；", errors), errors.Count > 0);
     }
 

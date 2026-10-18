@@ -2,7 +2,9 @@
 <UserControl
     x:Class="Wiina.App.Controls.PluginsView"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:loc="using:Wiina.App.Localization"
+>
 
     <ScrollViewer Padding="16,8,16,16" VerticalScrollBarVisibility="Auto">
         <Border Style="{StaticResource CardBorderStyle}" Padding="14">
@@ -11,19 +13,21 @@
                     <FontIcon Glyph="&#xEA86;"
                               FontSize="16"
                               Foreground="{ThemeResource SecondaryTextBrush}" />
-                    <TextBlock Text="插件侧栏" Style="{StaticResource SectionTitleStyle}" />
+                    <TextBlock loc:Loc.Text="ui.pluginSidebar" Style="{StaticResource SectionTitleStyle}" />
                 </StackPanel>
-                <TextBlock Text="插件侧栏由 Stage 9 的 WebView2 宿主提供。本阶段只保留入口与容器，不渲染任何假的插件内容。"
+                <TextBlock loc:Loc.Text="ui.pluginSidebarBody"
                            Style="{StaticResource CaptionTextStyle}"
                            TextWrapping="Wrap" />
-                <Button Content="安装插件…（Stage 9）"
+                <Button loc:Loc.Content="ui.installPluginStage9"
                         IsEnabled="False"
                         HorizontalAlignment="Left"
-                        ToolTipService.ToolTip="插件 API 与 WebView2 宿主在 Stage 9 实装" />
-                <TextBlock Text="禁用原因：插件加载、权限与 Info.json 解析尚未实现；提前放置可点击按钮会造成死控件。"
+                        loc:Loc.ToolTip="ui.pluginStage9Hint" />
+                <TextBlock loc:Loc.Text="ui.pluginDisabledReason"
                            Style="{StaticResource CaptionTextStyle}"
                            TextWrapping="Wrap" />
             </StackPanel>
         </Border>
     </ScrollViewer>
 </UserControl>
+
+

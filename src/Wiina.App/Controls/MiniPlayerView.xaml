@@ -2,7 +2,9 @@
 <UserControl
     x:Class="Wiina.App.Controls.MiniPlayerView"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:loc="using:Wiina.App.Localization"
+>
 
     <Grid x:Name="Root"
           Background="Transparent"
@@ -118,14 +120,14 @@
                         Style="{StaticResource MiniIconButtonStyle}"
                         Content="&#xE74F;"
                         Click="OnMuteClick"
-                        ToolTipService.ToolTip="音量"
-                        AutomationProperties.Name="音量" />
+                        loc:Loc.ToolTip="ui.volume"
+                        loc:Loc.AutomationName="ui.volume" />
                 <Button x:Name="PreviousButton"
                         Style="{StaticResource MiniIconButtonStyle}"
                         Content="&#xE892;"
                         Click="OnPreviousClick"
-                        ToolTipService.ToolTip="上一首"
-                        AutomationProperties.Name="上一首" />
+                        loc:Loc.ToolTip="ui.previous"
+                        loc:Loc.AutomationName="ui.previous" />
                 <Button x:Name="PlayPauseButton"
                         Style="{StaticResource MiniIconButtonStyle}"
                         Width="36"
@@ -133,26 +135,26 @@
                         FontSize="18"
                         Content="&#xE768;"
                         Click="OnPlayPauseClick"
-                        ToolTipService.ToolTip="播放 / 暂停"
-                        AutomationProperties.Name="播放或暂停" />
+                        loc:Loc.ToolTip="ui.playPauseSlash"
+                        loc:Loc.AutomationName="ui.playPause" />
                 <Button x:Name="NextButton"
                         Style="{StaticResource MiniIconButtonStyle}"
                         Content="&#xE893;"
                         Click="OnNextClick"
-                        ToolTipService.ToolTip="下一首"
-                        AutomationProperties.Name="下一首" />
+                        loc:Loc.ToolTip="ui.next"
+                        loc:Loc.AutomationName="ui.next" />
                 <Button x:Name="PlaylistButton"
                         Style="{StaticResource MiniIconButtonStyle}"
                         Content="&#xE8FD;"
                         Click="OnPlaylistClick"
-                        ToolTipService.ToolTip="播放列表"
-                        AutomationProperties.Name="播放列表" />
+                        loc:Loc.ToolTip="ui.playlist"
+                        loc:Loc.AutomationName="ui.playlist" />
                 <Button x:Name="RestoreButton"
                         Style="{StaticResource MiniIconButtonStyle}"
                         Content="&#xE73F;"
                         Click="OnRestoreClick"
-                        ToolTipService.ToolTip="返回主窗口"
-                        AutomationProperties.Name="返回主窗口" />
+                        loc:Loc.ToolTip="ui.returnMain"
+                        loc:Loc.AutomationName="ui.returnMain" />
             </StackPanel>
         </Grid>
 
@@ -174,8 +176,8 @@
                             Style="{StaticResource MiniIconButtonStyle}"
                             Content="&#xE767;"
                             Click="OnMuteClick"
-                            ToolTipService.ToolTip="静音"
-                            AutomationProperties.Name="静音" />
+                            loc:Loc.ToolTip="osd.mute"
+                            loc:Loc.AutomationName="osd.mute" />
                     <TextBlock x:Name="VolumeText"
                                Text="100%"
                                FontSize="11"
@@ -204,12 +206,12 @@
                     <RowDefinition Height="*" />
                 </Grid.RowDefinitions>
                 <Grid>
-                    <TextBlock Text="播放列表" FontSize="13" FontWeight="SemiBold" />
+                    <TextBlock loc:Loc.Text="ui.playlist" FontSize="13" FontWeight="SemiBold" />
                     <Button HorizontalAlignment="Right"
                             Style="{StaticResource MiniIconButtonStyle}"
                             Content="&#xE711;"
                             Click="OnPlaylistClick"
-                            AutomationProperties.Name="关闭播放列表" />
+                            loc:Loc.AutomationName="ui.closePlaylist" />
                 </Grid>
                 <ListView x:Name="PlaylistList"
                           Grid.Row="1"
@@ -220,5 +222,7 @@
         </Border>
     </Grid>
 </UserControl>
+
+
 
 

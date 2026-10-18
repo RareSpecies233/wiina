@@ -1,3 +1,4 @@
+using Wiina.App.Localization;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
@@ -58,8 +59,8 @@ public sealed partial class PlaylistView : UserControl
 
         _currentIndex = currentIndex;
         CountText.Text = items.Count == 0
-            ? "0 项"
-            : $"{items.Count} 项 · 第 {Math.Clamp(currentIndex + 1, 0, items.Count)} 项";
+            ? Loc.T("playlist.items0")
+            : Loc.F("playlist.items", items.Count, Math.Clamp(currentIndex + 1, 0, items.Count));
         EmptyHint.Visibility = items.Count == 0
             ? Visibility.Visible
             : Visibility.Collapsed;
@@ -74,8 +75,8 @@ public sealed partial class PlaylistView : UserControl
         }
 
         CountText.Text = _rows.Count == 0
-            ? "0 项"
-            : $"{_rows.Count} 项 · 第 {Math.Clamp(currentIndex + 1, 0, _rows.Count)} 项";
+            ? Loc.T("playlist.items0")
+            : Loc.F("playlist.items", _rows.Count, Math.Clamp(currentIndex + 1, 0, _rows.Count));
     }
 
     public void SetProgress(double position, double duration)
@@ -153,12 +154,12 @@ public sealed partial class PlaylistView : UserControl
             return item;
         }
 
-        Add("播放", () => PlayRequested?.Invoke(this, row.Index));
-        Add("上移", () => MoveFirstSelected(-1));
-        Add("下移", () => MoveFirstSelected(1));
+        Add(Loc.T("playlist.play"), () => PlayRequested?.Invoke(this, row.Index));
+        Add(Loc.T("playlist.moveUp"), () => MoveFirstSelected(-1));
+        Add(Loc.T("playlist.moveDown"), () => MoveFirstSelected(1));
         flyout.Items.Add(new MenuFlyoutSeparator());
-        Add("移除", RemoveSelected);
-        Add("复制路径", () => CopyPath(row.Path));
+        Add(Loc.T("playlist.remove"), RemoveSelected);
+        Add(Loc.T("playlist.copyPath"), () => CopyPath(row.Path));
         flyout.ShowAt(ItemList, new FlyoutShowOptions { Position = e.GetPosition(ItemList) });
         e.Handled = true;
     }

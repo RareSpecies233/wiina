@@ -3,6 +3,7 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
 using Windows.ApplicationModel.DataTransfer;
+using Wiina.App.Localization;
 using Wiina.App.Services;
 using Wiina.Core.Models;
 using DispatcherQueueTimer = Microsoft.UI.Dispatching.DispatcherQueueTimer;
@@ -23,7 +24,7 @@ public sealed partial class InspectorWindow : Window
     public InspectorWindow()
     {
         InitializeComponent();
-        Title = "Wiina 检查器";
+        Title = Loc.T("inspector.title");
         RootGrid.RequestedTheme = App.Settings.Theme switch
         {
             ThemeMode.Dark => ElementTheme.Dark,
@@ -67,11 +68,11 @@ public sealed partial class InspectorWindow : Window
         MainWindow? window = App.ActiveWindow;
         if (window is null)
         {
-            TitleText.Text = "检查器 — 没有活动的播放窗口";
+            TitleText.Text = Loc.T("inspector.noWindow");
             ContentPanel.Children.Clear();
             ContentPanel.Children.Add(new TextBlock
             {
-                Text = "打开一个播放窗口后，这里会显示文件、视频、音频、字幕与播放状态的技术属性。",
+                Text = Loc.T("inspector.noWindowBody"),
                 FontSize = 12,
                 TextWrapping = TextWrapping.Wrap,
                 Opacity = 0.7,
@@ -88,13 +89,13 @@ public sealed partial class InspectorWindow : Window
                 return;
             }
 
-            TitleText.Text = "检查器 — " + (window.CurrentTitle ?? "未命名");
+            TitleText.Text = Loc.T("inspector.title") + " — " + (window.CurrentTitle ?? Loc.T("inspector.untitled"));
             ContentPanel.Children.Clear();
             if (rows.Count == 0)
             {
                 ContentPanel.Children.Add(new TextBlock
                 {
-                    Text = "当前没有媒体，或播放引擎尚未启动。",
+                    Text = Loc.T("inspector.noMedia"),
                     FontSize = 12,
                     Opacity = 0.7,
                 });

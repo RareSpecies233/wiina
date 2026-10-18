@@ -3,6 +3,7 @@ using Windows.UI;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
+using Wiina.App.Localization;
 using Wiina.App.Services;
 using Wiina.Core.Settings;
 using Wiina.Core.Text;
@@ -30,10 +31,10 @@ internal static class Dialogs
         var recent = new ComboBox
         {
             ItemsSource = settings.RecentUrls.ToArray(),
-            PlaceholderText = "最近打开的地址",
+            PlaceholderText = Loc.T("dialogs.recentUrls"),
             HorizontalAlignment = HorizontalAlignment.Stretch,
         };
-        var newWindow = new CheckBox { Content = "在新窗口打开" };
+        var newWindow = new CheckBox { Content = Loc.T("dialogs.openInNewWindow") };
         var error = new TextBlock
         {
             FontSize = 11,
@@ -54,10 +55,10 @@ internal static class Dialogs
 
         var dialog = new ContentDialog
         {
-            Title = "打开 URL",
+            Title = Loc.T("dialogs.openUrl"),
             Content = panel,
-            PrimaryButtonText = "打开",
-            CloseButtonText = "取消",
+            PrimaryButtonText = Loc.T("dialogs.open"),
+            CloseButtonText = Loc.T("dialogs.cancel"),
             DefaultButton = ContentDialogButton.Primary,
             IsPrimaryButtonEnabled = false,
             XamlRoot = xamlRoot,
@@ -76,8 +77,8 @@ internal static class Dialogs
             {
                 normalized = null;
                 error.Text = input.Text.Trim().Length == 0
-                    ? "请输入 URL。"
-                    : "不是有效的媒体 URL（支持 http/https/rtmp/rtsp/ftp 等）。";
+                    ? Loc.T("dialogs.enterUrl")
+                    : Loc.T("dialogs.invalidUrl");
                 error.Visibility = Visibility.Visible;
                 dialog.IsPrimaryButtonEnabled = false;
             }
@@ -120,12 +121,12 @@ internal static class Dialogs
         };
         var search = new AutoSuggestBox
         {
-            PlaceholderText = "筛选字体",
+            PlaceholderText = Loc.T("dialogs.filterFonts"),
             QueryIcon = new SymbolIcon(Symbol.Find),
         };
         var preview = new TextBlock
         {
-            Text = "字幕预览 · Subtitle 123",
+            Text = Loc.T("dialogs.fontPreview"),
             FontSize = 22,
             TextWrapping = TextWrapping.Wrap,
             FontFamily = new FontFamily(current),
@@ -140,7 +141,7 @@ internal static class Dialogs
         };
         var note = new TextBlock
         {
-            Text = "列表为常用字体；也可以在输入框中直接填写已安装的字体家族名。完整 DirectWrite 枚举在 Stage 11 补充。",
+            Text = Loc.T("dialogs.fontHint"),
             FontSize = 11,
             TextWrapping = TextWrapping.Wrap,
             Opacity = 0.7,
@@ -184,10 +185,10 @@ internal static class Dialogs
 
         var dialog = new ContentDialog
         {
-            Title = "选择字幕字体",
+            Title = Loc.T("dialogs.chooseFont"),
             Content = panel,
-            PrimaryButtonText = "使用此字体",
-            CloseButtonText = "取消",
+            PrimaryButtonText = Loc.T("dialogs.useFont"),
+            CloseButtonText = Loc.T("dialogs.cancel"),
             DefaultButton = ContentDialogButton.Primary,
             XamlRoot = xamlRoot,
         };
@@ -206,7 +207,7 @@ internal static class Dialogs
         XamlRoot xamlRoot,
         string title,
         string message,
-        string primaryText = "继续")
+        string? primaryText = null)
     {
         var dialog = new ContentDialog
         {
@@ -217,8 +218,8 @@ internal static class Dialogs
                 TextWrapping = TextWrapping.Wrap,
                 MaxWidth = 420,
             },
-            PrimaryButtonText = primaryText,
-            CloseButtonText = "取消",
+            PrimaryButtonText = primaryText ?? Loc.T("dialogs.continue"),
+            CloseButtonText = Loc.T("dialogs.cancel"),
             DefaultButton = ContentDialogButton.Close,
             XamlRoot = xamlRoot,
         };
@@ -239,7 +240,7 @@ internal static class Dialogs
                 TextWrapping = TextWrapping.Wrap,
                 MaxWidth = 460,
             },
-            CloseButtonText = "关闭",
+            CloseButtonText = Loc.T("dialogs.close"),
             XamlRoot = xamlRoot,
         };
         await dialog.ShowAsync();

@@ -1,3 +1,5 @@
+using Wiina.Core.Localization;
+
 namespace Wiina.Core.Menu;
 
 /// <summary>Stable command ids used by the application menu and its handlers.</summary>
@@ -187,9 +189,11 @@ public sealed record MenuGroupDefinition(
 /// </summary>
 public static class MenuCatalog
 {
-    public static IReadOnlyList<MenuGroupDefinition> Build(MenuState state)
+    public static IReadOnlyList<MenuGroupDefinition> Build(
+        MenuState state,
+        string? language = AppLanguage.ZhHans)
     {
-        return new[]
+        var groups = new[]
         {
             FileMenu(state),
             PlaybackMenu(state),
@@ -200,6 +204,7 @@ public static class MenuCatalog
             WindowMenu(state),
             HelpMenu(state),
         };
+        return MenuLocalization.Translate(groups, language);
     }
 
     /// <summary>Flattens a built tree (parents included, depth first).</summary>

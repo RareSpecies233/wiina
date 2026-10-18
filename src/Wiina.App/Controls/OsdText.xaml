@@ -3,6 +3,7 @@
     x:Class="Wiina.App.Controls.OsdText"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:loc="using:Wiina.App.Localization"
     IsHitTestVisible="False"
     IsTabStop="False">
 
@@ -51,8 +52,8 @@
                         FontSize="11"
                         Foreground="{ThemeResource SecondaryTextBrush}"
                         Content="&#xE711;"
-                        ToolTipService.ToolTip="关闭（Esc）"
-                        AutomationProperties.Name="关闭 OSD"
+                        loc:Loc.ToolTip="ui.closeEsc"
+                        loc:Loc.AutomationName="ui.closeOsd"
                         Visibility="Collapsed"
                         Click="OnCloseClick" />
             </Grid>
@@ -89,10 +90,12 @@
                                TextWrapping="Wrap"
                                IsTextSelectionEnabled="True" />
                 </ScrollViewer>
-                <TextBlock Text="Esc 或点击 × 关闭"
+                <TextBlock loc:Loc.Text="ui.escCloseHint"
                            Style="{StaticResource CaptionTextStyle}"
                            Foreground="{ThemeResource TertiaryTextBrush}" />
             </StackPanel>
         </StackPanel>
     </Border>
 </UserControl>
+
+

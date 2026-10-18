@@ -1,3 +1,4 @@
+using Wiina.Core.Localization;
 using Wiina.Core.Text;
 
 namespace Wiina.Core.Osd;
@@ -82,12 +83,12 @@ public static class OsdMessages
             IconGlyph = icon,
         };
 
-    public static OsdMessage Volume(double percent)
+    public static OsdMessage Volume(double percent, string? language = null)
     {
         double clamped = Math.Clamp(percent, 0, 500);
         return new OsdMessage
         {
-            Text = $"音量 {Math.Round(clamped)}%",
+            Text = UiStrings.Format("osd.volume", language, Math.Round(clamped)),
             IconGlyph = clamped < 1 ? OsdIcons.Mute : OsdIcons.Volume,
             Kind = OsdMessageKind.Volume,
             Progress = Math.Clamp(clamped / 100.0, 0, 1),
@@ -95,10 +96,10 @@ public static class OsdMessages
         };
     }
 
-    public static OsdMessage Mute(bool muted) =>
+    public static OsdMessage Mute(bool muted, string? language = null) =>
         new()
         {
-            Text = muted ? "静音" : "取消静音",
+            Text = UiStrings.Get(muted ? "osd.mute" : "osd.unmute", language),
             IconGlyph = muted ? OsdIcons.Mute : OsdIcons.Volume,
             Kind = OsdMessageKind.Volume,
             Progress = muted ? 0 : null,
@@ -118,22 +119,22 @@ public static class OsdMessages
         };
     }
 
-    public static OsdMessage Speed(double speed)
+    public static OsdMessage Speed(double speed, string? language = null)
     {
         double clamped = Math.Clamp(speed, 0.05, 8);
         return new OsdMessage
         {
-            Text = $"速度 {clamped:0.##}x",
+            Text = UiStrings.Format("osd.speed", language, clamped),
             IconGlyph = OsdIcons.Speed,
             Kind = OsdMessageKind.Speed,
             Progress = Math.Clamp(clamped / 4.0, 0, 1),
         };
     }
 
-    public static OsdMessage Track(string label, string? name) =>
+    public static OsdMessage Track(string label, string? name, string? language = null) =>
         new()
         {
-            Text = $"已切换{label}",
+            Text = UiStrings.Format("osd.track", language, TrackLabel(label, language)),
             Secondary = name,
             IconGlyph = OsdIcons.Track,
             Kind = OsdMessageKind.Track,
@@ -149,10 +150,10 @@ public static class OsdMessages
             LeftToRight = secondary is not null && LooksLikeTime(secondary),
         };
 
-    public static OsdMessage Pause(bool paused) =>
+    public static OsdMessage Pause(bool paused, string? language = null) =>
         new()
         {
-            Text = paused ? "暂停" : "播放",
+            Text = UiStrings.Get(paused ? "osd.pause" : "osd.play", language),
             IconGlyph = paused ? OsdIcons.Pause : OsdIcons.Play,
             Kind = OsdMessageKind.Pause,
         };
@@ -186,29 +187,29 @@ public static class OsdMessages
             Duration = TimeSpan.FromSeconds(3),
         };
 
-    public static OsdMessage Buffer(string? text = null, double? percent = null, string? secondary = null) =>
+    public static OsdMessage Buffer(string? text = null, double? percent = null, string? secondary = null, string? language = null) =>
         new()
         {
-            Text = text ?? "正在缓冲…",
+            Text = text ?? UiStrings.Get("osd.buffering", language),
             Secondary = secondary,
             IconGlyph = OsdIcons.Buffer,
             Kind = OsdMessageKind.Buffer,
             Progress = percent is null ? null : Math.Clamp(percent.Value / 100.0, 0, 1),
         };
 
-    public static OsdMessage NetworkOpening(string? target = null) =>
+    public static OsdMessage NetworkOpening(string? target = null, string? language = null) =>
         new()
         {
-            Text = "正在打开流…",
+            Text = UiStrings.Get("osd.opening", language),
             Secondary = target,
             IconGlyph = OsdIcons.Network,
             Kind = OsdMessageKind.Network,
         };
 
-    public static OsdMessage NetworkSeeking() =>
+    public static OsdMessage NetworkSeeking(string? language = null) =>
         new()
         {
-            Text = "正在跳转…",
+            Text = UiStrings.Get("osd.seeking", language),
             IconGlyph = OsdIcons.Network,
             Kind = OsdMessageKind.Network,
         };
@@ -226,7 +227,7 @@ public static class OsdMessages
     /// Stage 3 call sites pass plain strings. Map the common catalogue entries
     /// to semantic messages; unknown text keeps the generic info icon.
     /// </summary>
-    public static OsdMessage FromText(string text, string? secondary = null)
+    public static OsdMessage FromText(string text, string? secondary = null, string? language = null)
     {
         string value = text.Trim();
         if (value.Length == 0)
@@ -261,17 +262,17 @@ public static class OsdMessages
 
         if (value.StartsWith("已切换", StringComparison.Ordinal))
         {
-            return Track(value["已切换".Length..], secondary);
+            return Track(value["已切换".Length..], secondary, language);
         }
 
         if (value is "播放" or "暂停")
         {
-            return Pause(value == "暂停");
+            return Pause(value == "暂停", language);
         }
 
         if (value is "静音" or "取消静音")
         {
-            return Mute(value == "静音");
+            return Mute(value == "静音", language);
         }
 
         if (value.StartsWith("A 点", StringComparison.Ordinal) ||
@@ -344,6 +345,14 @@ public static class OsdMessages
             : null;
     }
 
+    private static string TrackLabel(string label, string? language) => label switch
+    {
+        "音频" => UiStrings.Get("osd.track.audio", language),
+        "字幕" => UiStrings.Get("osd.track.subtitle", language),
+        "视频" => UiStrings.Get("osd.track.video", language),
+        _ => label,
+    };
+
     private static bool LooksLikeTime(string text) => TryParseTime(text, out _);
 
     private static bool LooksLikeTimePair(string text)
@@ -403,3 +412,5 @@ public static class OsdMessages
         return true;
     }
 }
+
+

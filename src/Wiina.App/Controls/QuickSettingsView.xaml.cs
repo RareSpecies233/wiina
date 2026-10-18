@@ -2,6 +2,7 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Controls.Primitives;
 using Wiina.Core.Models;
+using Wiina.App.Localization;
 using Wiina.Core.Osd;
 using Wiina.Core.Settings;
 using Wiina.Core.Subtitles;
@@ -97,6 +98,10 @@ public sealed partial class QuickSettingsView : UserControl
         SetupStaticOptions();
         ShowPage(QuickSettingsPage.Video);
         UpdateRangeLabels();
+        Loc.LanguageChanged += OnLanguageChanged;
+        // Static event: unhook when this instance goes away so a closed window
+        // is not kept alive by the localization layer.
+        Unloaded += (_, _) => Loc.LanguageChanged -= OnLanguageChanged;
     }
 
     public event EventHandler<QuickSettingChangedEventArgs>? SettingChanged;
@@ -114,11 +119,7 @@ public sealed partial class QuickSettingsView : UserControl
         OsdSizeSlider.Maximum = 500;
         OsdSizeSlider.Minimum = 1;
 
-        ThemeBox.ItemsSource = new[] { "跟随系统", "深色", "浅色" };
-        LayoutBox.ItemsSource = new[] { "Edge-to-edge（覆盖视频）", "Docked（视频让位）" };
-        OscPositionBox.ItemsSource = new[] { "浮动", "底部", "顶部" };
-        OsdPositionBox.ItemsSource = new[] { "右下", "左下", "右上" };
-        SidebarSideBox.ItemsSource = new[] { "左侧（leading）", "右侧（trailing）" };
+        ApplyLocalizedChoices();
 
         AspectBox.ItemsSource = QuickSettings.AspectRatios;
         AspectBox.DisplayMemberPath = "Label";
@@ -137,6 +138,44 @@ public sealed partial class QuickSettingsView : UserControl
         EqualizerPresetBox.ItemsSource = Wiina.Core.Filters.EqualizerBands.PresetNames
             .Concat(new[] { Wiina.Core.Filters.EqualizerBands.CustomPreset })
             .ToArray();
+    }
+
+    /// <summary>
+    /// Rebuilds the localized choice lists in place, preserving the current
+    /// selection, so switching language does not send a spurious change event.
+    /// </summary>
+    private void ApplyLocalizedChoices()
+    {
+        SetLocalizedItems(ThemeBox,
+            Loc.T("quick.themeSystem"), Loc.T("quick.themeDark"), Loc.T("quick.themeLight"));
+        SetLocalizedItems(LayoutBox,
+            Loc.T("quick.layoutEdge"), Loc.T("quick.layoutDocked"));
+        SetLocalizedItems(OscPositionBox,
+            Loc.T("quick.oscFloating"), Loc.T("quick.oscBottom"), Loc.T("quick.oscTop"));
+        SetLocalizedItems(OsdPositionBox,
+            Loc.T("quick.osdBottomRight"), Loc.T("quick.osdBottomLeft"), Loc.T("quick.osdTopRight"));
+        SetLocalizedItems(SidebarSideBox,
+            Loc.T("quick.sidebarLeft"), Loc.T("quick.sidebarRight"));
+    }
+
+    private static void SetLocalizedItems(ComboBox box, params string[] items)
+    {
+        int selected = box.SelectedIndex;
+        box.ItemsSource = items;
+        if (selected >= 0 && selected < items.Length)
+        {
+            box.SelectedIndex = selected;
+        }
+    }
+
+    private void OnLanguageChanged(object? sender, EventArgs e)
+    {
+        if (DispatcherQueue is null)
+        {
+            return;
+        }
+
+        DispatcherQueue.TryEnqueue(ApplyLocalizedChoices);
     }
 
     public void LoadFromSettings(AppSettings settings)
@@ -302,8 +341,8 @@ public sealed partial class QuickSettingsView : UserControl
                 : devices.FirstOrDefault()?.Name;
             AudioDeviceBox.IsEnabled = _hasMedia && devices.Count > 0;
             AudioDeviceHint.Text = devices.Count == 0
-                ? "libmpv 未报告音频输出设备。"
-                : $"共 {devices.Count} 个设备；选择后立即切换。";
+                ? Loc.T("quick.noAudioDevices")
+                : Loc.F("quick.audioDevices", devices.Count);
         }
         finally
         {
@@ -427,7 +466,7 @@ public sealed partial class QuickSettingsView : UserControl
     {
         var choices = new List<TrackChoice>
         {
-            new(-2, "自动（默认）"),
+            new(-2, Loc.T("quick.autoDefault")),
             new(-1, "关闭"),
         };
         choices.AddRange(_tracks
@@ -449,7 +488,7 @@ public sealed partial class QuickSettingsView : UserControl
 
     private void PopulateSecondarySubtitleBox()
     {
-        var choices = new List<TrackChoice> { new(-1, "关闭") };
+        var choices = new List<TrackChoice> { new(-1, Loc.T("menu.off")) };
         choices.AddRange(_tracks
             .Where(track => track.Type == TrackType.Subtitle)
             .Select(track => new TrackChoice(track.Id, TrackLabel(track))));
@@ -511,8 +550,8 @@ public sealed partial class QuickSettingsView : UserControl
         PanXValueText.Text = $"{PanXSlider.Value:0.00}";
         PanYValueText.Text = $"{PanYSlider.Value:0.00}";
         VolumeValueText.Text = $"{Math.Round(VolumeSlider.Value)}%";
-        AudioDelayText.Text = $"{AudioDelaySlider.Value:+0.0;-0.0;0.0} 秒";
-        SubtitleDelayText.Text = $"{SubtitleDelaySlider.Value:+0.0;-0.0;0.0} 秒";
+        AudioDelayText.Text = Loc.F("quick.seconds", $"{AudioDelaySlider.Value:+0.0;-0.0;0.0}");
+        SubtitleDelayText.Text = Loc.F("quick.seconds", $"{SubtitleDelaySlider.Value:+0.0;-0.0;0.0}");
         SubtitlePositionText.Text = $"{Math.Round(SubtitlePositionSlider.Value)}";
         SubtitleScaleText.Text = $"{SubtitleScaleSlider.Value:0.00}×";
     }

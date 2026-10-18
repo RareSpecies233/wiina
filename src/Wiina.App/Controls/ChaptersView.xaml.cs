@@ -7,6 +7,7 @@ using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 using Wiina.Core.Models;
 using Wiina.Core.Text;
+using Wiina.App.Localization;
 
 namespace Wiina.App.Controls;
 
@@ -40,7 +41,7 @@ public sealed partial class ChaptersView : UserControl
         }
 
         _currentIndex = currentIndex;
-        CountText.Text = $"{chapters.Count} 个";
+        CountText.Text = Loc.F("chapters.count", chapters.Count);
         EmptyHint.Visibility = chapters.Count == 0
             ? Visibility.Visible
             : Visibility.Collapsed;

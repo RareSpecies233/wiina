@@ -3,6 +3,7 @@
     x:Class="Wiina.App.Controls.OscFloatingView"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:loc="using:Wiina.App.Localization"
     xmlns:local="using:Wiina.App.Controls"
     Width="460">
 
@@ -40,19 +41,19 @@
                     <Button Style="{StaticResource OscIconButtonStyle}"
                             Content="&#xE892;"
                             Command="{Binding PreviousCommand}"
-                            ToolTipService.ToolTip="上一首"
-                            AutomationProperties.Name="上一首" />
+                            loc:Loc.ToolTip="ui.previous"
+                            loc:Loc.AutomationName="ui.previous" />
                     <Button Style="{StaticResource OscIconButtonStyle}"
                             Content="{Binding PlayGlyph}"
                             Command="{Binding PlayPauseCommand}"
                             FontSize="18"
-                            ToolTipService.ToolTip="播放 / 暂停"
-                            AutomationProperties.Name="播放或暂停" />
+                            loc:Loc.ToolTip="ui.playPauseSlash"
+                            loc:Loc.AutomationName="ui.playPause" />
                     <Button Style="{StaticResource OscIconButtonStyle}"
                             Content="&#xE893;"
                             Command="{Binding NextCommand}"
-                            ToolTipService.ToolTip="下一首"
-                            AutomationProperties.Name="下一首" />
+                            loc:Loc.ToolTip="ui.next"
+                            loc:Loc.AutomationName="ui.next" />
                     <TextBlock x:Name="RightSpeed"
                                Text="{Binding SpeedText}"
                                Visibility="{Binding ShowSpeed, Converter={StaticResource BoolToVisibility}}"
@@ -90,3 +91,5 @@
         </Grid>
     </Border>
 </UserControl>
+
+

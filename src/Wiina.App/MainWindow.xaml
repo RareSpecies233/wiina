@@ -3,6 +3,7 @@
     x:Class="Wiina.App.MainWindow"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:loc="using:Wiina.App.Localization"
     xmlns:controls="using:Wiina.App.Controls">
 
     <Grid x:Name="RootGrid"
@@ -22,7 +23,7 @@
         </Grid.RowDefinitions>
 
         <!-- Video layer. In docked mode this becomes row 1 only. -->
-        <Grid x:Name="VideoFrame" Grid.RowSpan="3" Background="Transparent">
+        <Grid x:Name="VideoFrame" Grid.RowSpan="3" Background="Transparent" FlowDirection="LeftToRight">
             <controls:MpvVideoView x:Name="VideoHost"
                                    HorizontalAlignment="Left"
                                    VerticalAlignment="Top" />
@@ -39,24 +40,24 @@
                               FontSize="36"
                               Foreground="{ThemeResource SecondaryTextBrush}" />
                     <TextBlock x:Name="PipPlaceholderTitle"
-                               Text="正在画中画"
+                               loc:Loc.Text="ui.inPip"
                                FontSize="20"
                                FontWeight="SemiBold"
                                HorizontalAlignment="Center" />
                     <TextBlock x:Name="PipPlaceholderSubtitle"
-                               Text="视频正在画中画窗口中播放"
+                               loc:Loc.Text="ui.pipPlaying"
                                FontSize="12"
                                Foreground="{ThemeResource SecondaryTextBrush}"
                                HorizontalAlignment="Center" />
                     <StackPanel Orientation="Horizontal"
                                 Spacing="8"
                                 HorizontalAlignment="Center">
-                        <Button Content="恢复"
+                        <Button loc:Loc.Content="ui.restore"
                                 Click="OnPipRestoreClick"
-                                AutomationProperties.Name="恢复画中画" />
-                        <Button Content="退出画中画"
+                                loc:Loc.AutomationName="ui.restorePip" />
+                        <Button loc:Loc.Content="ui.exitPip"
                                 Click="OnPipExitClick"
-                                AutomationProperties.Name="退出画中画" />
+                                loc:Loc.AutomationName="ui.exitPip" />
                     </StackPanel>
                 </StackPanel>
             </Grid>
@@ -68,15 +69,17 @@
 
         <controls:OscBottomView x:Name="OscBottom"
                                 Grid.Row="2"
+                                FlowDirection="LeftToRight"
                                 Visibility="Collapsed" />
 
         <!-- Floating overlays: OSC, sidebars, time preview. Empty areas stay hit-test transparent. -->
         <Grid x:Name="OverlayLayer" Grid.RowSpan="3">
             <Canvas x:Name="OscCanvas" Grid.RowSpan="3">
-                <controls:OscFloatingView x:Name="OscFloating" />
+                <controls:OscFloatingView x:Name="OscFloating" FlowDirection="LeftToRight" />
             </Canvas>
             <controls:OscBottomView x:Name="OscTop"
                                     VerticalAlignment="Top"
+                                    FlowDirection="LeftToRight"
                                     Visibility="Collapsed"
                                     PointerEntered="OnChromePointerEntered"
                                     PointerExited="OnChromePointerExited" />
@@ -125,3 +128,5 @@
                           VerticalAlignment="Bottom" />
     </Grid>
 </Window>
+
+

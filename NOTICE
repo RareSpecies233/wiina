@@ -1,90 +1,86 @@
 Wiina — Third-Party Notices
 ===========================
 
-This product includes or builds upon the following third-party works. The full
-license texts are in the `licenses/` directory of a release, and the
-corresponding source is available as described below.
+Wiina 1.0.0 is licensed under the GNU General Public License, version 3 only
+(GPL-3.0-only). The full license text is in LICENSE. Corresponding source for
+this release is published at:
+
+    https://github.com/RareSpecies233/wiina
+
+Release builds are self-contained and do not require a separate .NET or Windows
+App Runtime installation. The exact commit and build date are recorded in
+SOURCE.txt inside the release archive.
 
 1. IINA (https://github.com/iina/iina)
    License: GNU General Public License v3.0 (GPL-3.0)
-   Use: The application's window layout, on-screen controller, quick settings
-   panel, OSD and overall interaction model are inspired by IINA's macOS UI.
-   No IINA Swift/AppKit source code, .xcassets image assets, or SF Symbols are
-   copied into this project. The behavioral specification in
-   docs/reference/ was derived from IINA and is distributed under GPL-3.0.
-   IINA is a separate project; this project is not affiliated with or endorsed
-   by IINA or its authors. The IINA plugin API compatibility layer is
-   implemented from IINA's public API documentation (GPL-3.0); any IINA plugin
-   type definitions or sample code used during development remain GPL-3.0 and
-   are not relicensed by Wiina.
+   Use: Wiina's window layout, on-screen controller, quick-settings panel, OSD
+   and interaction model are inspired by IINA's macOS UI. No IINA
+   Swift/AppKit source code, .xcassets image assets, or SF Symbols are copied
+   into this project. The behavioral specification under docs/reference/ was
+   derived from IINA and remains GPL-3.0. IINA is a separate project; Wiina is
+   not affiliated with or endorsed by IINA or its authors.
 
 2. mpv / libmpv (https://mpv.io/, https://github.com/mpv-player/mpv)
    License: GNU General Public License v2.0 or later (GPL-2.0-or-later) for the
-   default build; libmpv is LGPL-2.1-or-later only when built with -Dgpl=false.
-   Use: Playback, decoding, audio/subtitle rendering, hardware decoding.
-   We distribute an unmodified libmpv build (currently from
-   https://github.com/shinchiro/mpv-winbuild-cmake) next to the application.
-   The corresponding mpv source is available at the URL above; the exact build
-   revision is recorded in the release notes and in tools/fetch-libmpv.ps1.
-   mpv's GPL/LGPL license texts are included in the release's licenses/ folder.
+   default Windows build used here; libmpv is LGPL-2.1-or-later only when built
+   with -Dgpl=false. This release ships an unmodified libmpv-2.dll from the
+   shinchiro/mpv-winbuild-cmake build tag 20261018-git-01e2533f31
+   (https://github.com/shinchiro/mpv-winbuild-cmake/releases/tag/20261018).
+   Use: playback, decoding, audio/subtitle rendering and hardware decoding.
+   libmpv is loaded dynamically at runtime as libmpv-2.dll; it is not linked
+   statically. FFmpeg and other libraries compiled into that libmpv build are
+   covered by their own licenses (LGPL-2.1-or-later and/or GPL, depending on
+   the build options chosen by the libmpv distributor).
+   Source offer: the corresponding source for libmpv and the FFmpeg version it
+   contains is available from https://github.com/mpv-player/mpv and
+   https://ffmpeg.org/download.html, and from the libmpv build project above.
+   Written offer: for at least three years from distribution, the Wiina
+   maintainers will provide the corresponding source of the libmpv binaries
+   shipped with a release on request via the project's source repository issue
+   tracker. The offer is valid for the binaries actually distributed by Wiina.
 
 3. Microsoft Windows App SDK (https://github.com/microsoft/WindowsAppSDK)
    License: MIT
-   Use: WinUI 3, windowing, composition, app lifecycle.
+   Use: WinUI 3, windowing, composition and application lifecycle. The runtime
+   is bundled by the self-contained publish (WindowsAppSDKSelfContained).
 
 4. Microsoft.Windows.SDK.BuildTools
-   License: Microsoft proprietary redistributable (build tooling only).
+   License: Microsoft proprietary redistributable terms (build tooling only;
+   used to compile, not shipped as an application component beyond the
+   redistributable Windows SDK binaries included by the .NET/Windows App SDK
+   toolchain).
 
-5. CommunityToolkit.Mvvm (https://github.com/CommunityToolkit/dotnet)
+5. .NET Runtime (https://github.com/dotnet/runtime)
    License: MIT
-   Use: MVVM source generators and helpers (planned).
+   Use: bundled by the self-contained win-x64 publish.
 
-6. Microsoft.Windows.CsWin32 (https://github.com/microsoft/CsWin32)
-   License: MIT
-   Use: Source-generated Win32 P/Invoke (planned).
+6. xUnit.net (https://github.com/xunit/xunit) — Apache-2.0
+   Microsoft.NET.Test.Sdk — MIT
+   Test-only dependencies; not shipped in the release archive.
 
-7. .NET Runtime / SDK (https://github.com/dotnet/runtime)
-   License: MIT
+7. Fonts and icons
+   Segoe UI Variable and Segoe Fluent Icons are Microsoft system fonts used at
+   runtime; Wiina does not redistribute them. SF Symbols are Apple proprietary
+   assets and are NOT used. Custom icons in this repository are original work
+   licensed GPL-3.0-only.
 
-8. Microsoft Edge WebView2 Runtime
-   License: Microsoft proprietary redistributable terms.
-   Use: Plugin UI (overlay / sidebar / standalone window, v1). The Evergreen
-   runtime is preinstalled on Windows 11 and updated by Microsoft; this project
-   does not bundle or redistribute the runtime.
+8. Test media
+   No copyrighted media is committed to this repository. Development and
+   performance checks used generated test patterns created locally in %TEMP%.
 
-9. yt-dlp (https://github.com/yt-dlp/yt-dlp)
-   License: The Unlicense (public domain).
-   Use: Resolving URLs for mpv (v1). Wiina invokes a user-installed yt-dlp
-   found on PATH; it does not download, bundle, or redistribute the binary.
-
-10. OpenSubtitles.com API (https://www.opensubtitles.com/)
-    License/terms: OpenSubtitles API terms of service.
-    Use: Online subtitle search/download (v1). The user supplies their own API
-    key in Settings; no shared or embedded key is distributed with Wiina.
-
-11. xUnit.net (https://github.com/xunit/xunit) — Apache-2.0 (tests only)
-    Microsoft.NET.Test.Sdk — MIT (tests only)
-    coverlet.collector — MIT (tests only)
-
-12. Fonts and icons
-    Segoe UI Variable and Segoe Fluent Icons are Microsoft system fonts. They
-    are used at runtime on Windows and are not redistributed by this project.
-    SF Symbols are Apple proprietary assets and are NOT used or redistributed.
-    Any custom icons in this repository are original SVG work licensed GPL-3.0.
-
-13. Test media
-    No copyrighted media is committed to this repository. Development uses
-    generated test patterns (mpv `testsrc`) and, when needed, CC-licensed
-    samples such as "Big Buck Bunny" (Blender Foundation, CC-BY 3.0).
-
-Plugins
--------
-Third-party Wiina plugins are separate works with their own licenses. The
-plugin host and JS API are part of Wiina (GPL-3.0-only). Installing a plugin
-does not change Wiina's license, and Wiina does not relicense plugin code.
+Not included in this release
+-----------------------------
+Stage 9 (plugins, WebView2 plugin host, Info.json, plugin permissions) and
+Stage 10 (online subtitles/OpenSubtitles, yt-dlp integration) were intentionally
+skipped by the maintainer. This release contains no plugin host, no WebView2
+runtime dependency, no online-subtitle client, and no yt-dlp invocation. The
+corresponding settings rows and menu entries are visibly disabled and explain
+that the feature is not implemented. No WebView2, yt-dlp, OpenSubtitles or
+plugin code is shipped, so no additional permissions or third-party terms apply
+to this release.
 
 Trademarks
 ----------
 "IINA" and the IINA logo are trademarks of their respective owners. "mpv" is a
-project name of the mpv authors. This project's name and logo are independent.
+project name of the mpv authors. Wiina's name and artwork are independent.
 Nothing in this repository grants trademark rights.

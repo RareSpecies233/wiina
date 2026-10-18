@@ -3,10 +3,11 @@
     x:Class="Wiina.App.Controls.TimelineControl"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:loc="using:Wiina.App.Localization"
     Height="22"
     IsTabStop="True"
-    AutomationProperties.Name="播放进度"
-    AutomationProperties.HelpText="左右方向键跳转 5 秒，Home/End 跳到开头或结尾">
+    loc:Loc.AutomationName="ui.playbackProgress"
+    loc:Loc.HelpText="ui.timelineKeysHelp">
 
     <Grid x:Name="Root" Background="Transparent" SizeChanged="OnSizeChanged">
         <Border x:Name="Track"
@@ -58,3 +59,5 @@
                 Visibility="Collapsed" />
     </Grid>
 </UserControl>
+
+

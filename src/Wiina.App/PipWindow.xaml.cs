@@ -7,6 +7,7 @@ using Microsoft.UI.Xaml.Media.Animation;
 using Windows.Graphics;
 using Wiina.App.Interop;
 using Wiina.Core.State;
+using Wiina.App.Localization;
 
 namespace Wiina.App;
 
@@ -39,8 +40,8 @@ public sealed partial class PipWindow : Window
         ExtendsContentIntoTitleBar = true;
         SetTitleBar(DragRegion);
         AppWindow.TitleBar.PreferredHeightOption = TitleBarHeightOption.Collapsed;
-        AppWindow.Title = "画中画 — Wiina";
-        Title = "画中画 — Wiina";
+        AppWindow.Title = Loc.T("pip.title");
+        Title = Loc.T("pip.title");
 
         if (AppWindow.Presenter is OverlappedPresenter presenter)
         {
@@ -126,7 +127,7 @@ public sealed partial class PipWindow : Window
 
     public void SetTitle(string? title)
     {
-        string resolved = string.IsNullOrWhiteSpace(title) ? "画中画 — Wiina" : title;
+        string resolved = string.IsNullOrWhiteSpace(title) ? Loc.T("pip.title") : title;
         AppWindow.Title = resolved;
         Title = resolved;
     }

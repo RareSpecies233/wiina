@@ -2,7 +2,9 @@
 <UserControl
     x:Class="Wiina.App.Controls.PlaylistView"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:loc="using:Wiina.App.Localization"
+>
 
     <Grid>
         <Grid.RowDefinitions>
@@ -20,35 +22,35 @@
                 <Button Style="{StaticResource OscIconButtonStyle}"
                         Content="&#xE710;"
                         Click="OnAddClick"
-                        ToolTipService.ToolTip="添加文件"
-                        AutomationProperties.Name="添加文件" />
+                        loc:Loc.ToolTip="ui.addFiles"
+                        loc:Loc.AutomationName="ui.addFiles" />
                 <Button Style="{StaticResource OscIconButtonStyle}"
                         Content="&#xE74D;"
                         Click="OnRemoveClick"
-                        ToolTipService.ToolTip="移除所选"
-                        AutomationProperties.Name="移除所选" />
+                        loc:Loc.ToolTip="ui.removeSelected"
+                        loc:Loc.AutomationName="ui.removeSelected" />
                 <Button Style="{StaticResource OscIconButtonStyle}"
                         Content="&#xE74A;"
                         Click="OnMoveUpClick"
-                        ToolTipService.ToolTip="上移"
-                        AutomationProperties.Name="上移" />
+                        loc:Loc.ToolTip="ui.moveUp"
+                        loc:Loc.AutomationName="ui.moveUp" />
                 <Button Style="{StaticResource OscIconButtonStyle}"
                         Content="&#xE74B;"
                         Click="OnMoveDownClick"
-                        ToolTipService.ToolTip="下移"
-                        AutomationProperties.Name="下移" />
+                        loc:Loc.ToolTip="ui.moveDown"
+                        loc:Loc.AutomationName="ui.moveDown" />
                 <Button Style="{StaticResource OscIconButtonStyle}"
                         Content="&#xE74E;"
                         Click="OnSaveClick"
-                        ToolTipService.ToolTip="保存 .m3u"
-                        AutomationProperties.Name="保存播放列表" />
+                        loc:Loc.ToolTip="ui.saveM3u"
+                        loc:Loc.AutomationName="ui.savePlaylist" />
             </StackPanel>
 
             <TextBlock x:Name="CountText"
                        Grid.Column="1"
                        HorizontalAlignment="Right"
                        Style="{StaticResource CaptionTextStyle}"
-                       Text="0 项" />
+                       loc:Loc.Text="ui.zeroItemsShort" />
         </Grid>
 
         <ListView x:Name="ItemList"
@@ -111,7 +113,7 @@
         <TextBlock x:Name="EmptyHint"
                    Grid.Row="1"
                    Margin="24"
-                   Text="播放列表为空。用工具栏 + 添加文件，或把文件拖到窗口。"
+                   loc:Loc.Text="ui.playlistEmpty"
                    Style="{StaticResource CaptionTextStyle}"
                    TextWrapping="Wrap"
                    HorizontalAlignment="Center"
@@ -119,3 +121,5 @@
                    TextAlignment="Center" />
     </Grid>
 </UserControl>
+
+

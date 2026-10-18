@@ -3,6 +3,7 @@ using System.Text;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Windows.ApplicationModel.DataTransfer;
+using Wiina.App.Localization;
 using Wiina.App.Services;
 using Wiina.Core;
 using Wiina.Core.Models;
@@ -16,7 +17,7 @@ public sealed partial class AboutWindow : Window
     public AboutWindow()
     {
         InitializeComponent();
-        Title = "关于 Wiina";
+        Title = Loc.T("about.title");
         RootGrid.RequestedTheme = App.Settings.Theme switch
         {
             ThemeMode.Dark => ElementTheme.Dark,
@@ -32,21 +33,21 @@ public sealed partial class AboutWindow : Window
             minWidth: 440,
             minHeight: 430);
 
-        VersionText.Text = $"版本 {Branding.Version} · {Branding.Tagline}";
+        VersionText.Text = Loc.F("about.version", Branding.Version, Branding.Tagline);
         BuildInfo();
         Closed += (_, _) => WindowShell.Detach(this);
     }
 
     private void BuildInfo()
     {
-        Add("许可证", "GNU GPL-3.0-only（含无担保声明）");
-        Add("播放引擎", $"mpv / libmpv（客户端 API {MpvRuntime.ClientApiVersion}）");
-        Add("界面", $"WinUI 3 / Windows App SDK {WinUiVersion()}");
-        Add("运行时", $".NET {Environment.Version} · {Environment.OSVersion.VersionString}");
-        Add("项目主页", Branding.ProjectUrl);
-        Add("声明", Branding.Disclaimer);
-        Add("字体/图标", "Segoe UI · Segoe Fluent Icons（Microsoft 许可，未使用 SF Symbols）");
-        Add("说明", "Wiina 为原创实现；未复制 IINA 的源码、图片或应用图标。");
+        Add(Loc.T("about.license"), Loc.T("about.licenseValue"));
+        Add(Loc.T("about.engine"), $"mpv / libmpv (client API {MpvRuntime.ClientApiVersion})");
+        Add(Loc.T("about.ui"), $"WinUI 3 / Windows App SDK {WinUiVersion()}");
+        Add(Loc.T("about.runtime"), $".NET {Environment.Version} · {Environment.OSVersion.VersionString}");
+        Add(Loc.T("about.homepage"), Branding.ProjectUrl);
+        Add(Loc.T("about.disclaimer"), Branding.Disclaimer);
+        Add(Loc.T("about.fonts"), Loc.T("about.fontsValue"));
+        Add(Loc.T("about.note"), Loc.T("about.noteValue"));
     }
 
     private void Add(string label, string value)
@@ -87,11 +88,11 @@ public sealed partial class AboutWindow : Window
                 return plus > 0 ? version[..plus] : version;
             }
 
-            return assembly.GetName().Version?.ToString(3) ?? "未知";
+            return assembly.GetName().Version?.ToString(3) ?? Loc.T("about.unknown");
         }
         catch
         {
-            return "未知";
+            return Loc.T("about.unknown");
         }
     }
 

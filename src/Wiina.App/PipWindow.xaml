@@ -3,6 +3,7 @@
     x:Class="Wiina.App.PipWindow"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:loc="using:Wiina.App.Localization"
     xmlns:controls="using:Wiina.App.Controls">
 
     <Grid x:Name="Root"
@@ -55,8 +56,8 @@
                         FontSize="16"
                         Content="&#xE768;"
                         Click="OnPlayPauseClick"
-                        ToolTipService.ToolTip="播放 / 暂停"
-                        AutomationProperties.Name="播放或暂停" />
+                        loc:Loc.ToolTip="ui.playPauseSlash"
+                        loc:Loc.AutomationName="ui.playPause" />
                 <Button x:Name="RestoreButton"
                         Width="36"
                         Height="32"
@@ -68,8 +69,8 @@
                         FontSize="16"
                         Content="&#xE73F;"
                         Click="OnRestoreClick"
-                        ToolTipService.ToolTip="返回主窗口"
-                        AutomationProperties.Name="返回主窗口" />
+                        loc:Loc.ToolTip="ui.returnMain"
+                        loc:Loc.AutomationName="ui.returnMain" />
                 <Button x:Name="CloseButton"
                         Width="36"
                         Height="32"
@@ -81,8 +82,8 @@
                         FontSize="16"
                         Content="&#xE711;"
                         Click="OnCloseClick"
-                        ToolTipService.ToolTip="关闭画中画"
-                        AutomationProperties.Name="关闭画中画" />
+                        loc:Loc.ToolTip="ui.closePip"
+                        loc:Loc.AutomationName="ui.closePip" />
             </StackPanel>
         </Border>
 
@@ -94,9 +95,11 @@
                 CornerRadius="12"
                 Background="#99000000"
                 IsHitTestVisible="False">
-            <TextBlock Text="画中画 · 双击返回"
+            <TextBlock loc:Loc.Text="ui.pipDoubleClick"
                        FontSize="11"
                        Foreground="#CCFFFFFF" />
         </Border>
     </Grid>
 </Window>
+
+

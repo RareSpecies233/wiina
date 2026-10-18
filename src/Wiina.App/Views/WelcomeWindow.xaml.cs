@@ -4,6 +4,7 @@ using Microsoft.UI.Xaml.Input;
 using Windows.ApplicationModel.DataTransfer;
 using Windows.Storage;
 using Windows.Storage.Pickers;
+using Wiina.App.Localization;
 using Wiina.App.Services;
 using Wiina.Core;
 using Wiina.Core.History;
@@ -25,7 +26,7 @@ public sealed partial class WelcomeWindow : Window
     public WelcomeWindow()
     {
         InitializeComponent();
-        Title = "欢迎使用 Wiina";
+        Title = Loc.T("welcome.title");
         bool dark = App.Settings.Theme != ThemeMode.Light;
         RootGrid.RequestedTheme = App.Settings.Theme switch
         {
@@ -45,7 +46,7 @@ public sealed partial class WelcomeWindow : Window
             minWidth: 560,
             minHeight: 440);
 
-        VersionText.Text = "版本 " + Branding.Version;
+        VersionText.Text = Loc.F("welcome.version", Branding.Version);
         Refresh();
         Closed += (_, _) => WindowShell.Detach(this);
     }
@@ -79,7 +80,7 @@ public sealed partial class WelcomeWindow : Window
             ResumeTitle.Text = string.IsNullOrWhiteSpace(_resume.Title)
                 ? System.IO.Path.GetFileName(_resume.Path)
                 : _resume.Title;
-            ResumePosition.Text = $"上次看到 {TimeSpan.FromSeconds(_resume.Position):mm\\:ss} / {TimeSpan.FromSeconds(_resume.Duration):mm\\:ss}";
+            ResumePosition.Text = Loc.F("welcome.resume", TimeSpan.FromSeconds(_resume.Position).ToString("mm\\:ss"), TimeSpan.FromSeconds(_resume.Duration).ToString("mm\\:ss"));
         }
     }
 
@@ -122,9 +123,9 @@ public sealed partial class WelcomeWindow : Window
     {
         if (!await Dialogs.ConfirmAsync(
                 RootGrid.XamlRoot,
-                "清除最近记录",
-                "将从欢迎窗口和“打开最近”菜单中移除全部记录。",
-                "清除"))
+                Loc.T("welcome.clearRecentTitle"),
+                Loc.T("welcome.clearRecentBody"),
+                Loc.T("welcome.clear")))
         {
             return;
         }
@@ -198,7 +199,7 @@ public sealed partial class WelcomeWindow : Window
     private void OnDragOver(object sender, DragEventArgs e)
     {
         e.AcceptedOperation = DataPackageOperation.Copy;
-        e.DragUIOverride.Caption = "用 Wiina 打开";
+        e.DragUIOverride.Caption = Loc.T("welcome.dragCaption");
         e.DragUIOverride.IsCaptionVisible = true;
     }
 

@@ -4,6 +4,7 @@ using Microsoft.UI.Windowing;
 using Wiina.App.Controls;
 using Wiina.App.Views;
 using Wiina.Core.Diagnostics;
+using Wiina.App.Localization;
 using Wiina.Core.Filters;
 using Wiina.Core.Input;
 using Wiina.Core.Menu;
@@ -55,7 +56,7 @@ public sealed partial class MainWindow
     {
         if (_player is null)
         {
-            return "播放引擎未启动";
+            return Loc.T("settings.engineNotStarted");
         }
 
         string api = _player.GetPropertyString("gpu-api") ?? "—";
@@ -286,7 +287,7 @@ public sealed partial class MainWindow
         ApplyAudioFiltersCore(errors);
         if (errors.Count > 0)
         {
-            ShowOsd("滤镜图警告", errors[0]);
+            ShowOsd(Loc.T("osd.filterGraphWarning"), errors[0]);
         }
 
         return errors;
@@ -341,8 +342,8 @@ public sealed partial class MainWindow
         if (!_player!.TrySetPropertyString("af", result.Graph))
         {
             string message = result.Graph.Length == 0
-                ? "mpv 拒绝清空音频滤镜"
-                : "mpv 拒绝了音频滤镜图：" + FirstGraphPart(result.Graph);
+                ? Loc.T("osd.audioFilterClearRefused")
+                : Loc.T("osd.audioFilterGraphRejected") + FirstGraphPart(result.Graph);
             errors.Add(message);
             Trace(message);
         }
@@ -400,7 +401,7 @@ public sealed partial class MainWindow
     {
         if (!_settings.EqualizerEnabled)
         {
-            return "关闭";
+            return Loc.T("menu.off");
         }
 
         IReadOnlyList<double> gains = EqualizerBands.NormalizeGains(_settings.EqualizerGains);
@@ -728,7 +729,7 @@ public sealed partial class MainWindow
     {
         _settings.AudioDelay = QuickSettings.ClampAudioDelay(_settings.AudioDelay + delta);
         ApplyMpvString("audio-delay", FormatDouble(_settings.AudioDelay));
-        ShowOsd("音频延迟", $"{_settings.AudioDelay:+0.0;-0.0;0.0} s");
+        ShowOsd(Loc.T("osd.audioDelay"), $"{_settings.AudioDelay:+0.0;-0.0;0.0} s");
         SaveSettings();
     }
 

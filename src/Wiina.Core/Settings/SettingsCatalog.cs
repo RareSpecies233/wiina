@@ -1,4 +1,5 @@
 using Wiina.Core.Filters;
+using Wiina.Core.Localization;
 using Wiina.Core.Models;
 
 namespace Wiina.Core.Settings;
@@ -72,22 +73,11 @@ public static class SettingsCatalog
             "animation motion reduce 动画"));
         rows.Add(ChoiceRow(
             "general.language", SettingsPageId.General, "外观与启动",
-            "界面语言", "资源字符串目前只有 zh-Hans；语言切换在 Stage 11 完成。",
+            "界面语言", "选择界面语言；更改立即应用并记住，重启后保持。",
             new[] { "跟随系统", "简体中文", "English" },
-            settings => settings.Language switch
-            {
-                "zh-Hans" => 1,
-                "en" => 2,
-                _ => 0,
-            },
-            (settings, value) => settings.Language = value switch
-            {
-                1 => "zh-Hans",
-                2 => "en",
-                _ => "system",
-            },
-            "language locale i18n 语言",
-            unavailable: "界面本地化资源在 Stage 11 提供。"));
+            settings => AppLanguage.ToChoiceIndex(settings.Language),
+            (settings, value) => settings.Language = AppLanguage.FromChoiceIndex(value),
+            "language locale i18n 语言"));
         rows.Add(BoolRow(
             "general.welcome", SettingsPageId.General, "外观与启动",
             "启动时显示欢迎窗口", "没有通过命令行/最近文件打开媒体时显示欢迎页。",

@@ -7,6 +7,7 @@ using Windows.System;
 using Wiina.App.Views;
 using Wiina.Core;
 using Wiina.Core.Files;
+using Wiina.App.Localization;
 using Wiina.Core.Input;
 using Wiina.Core.Menu;
 using Wiina.Core.Models;
@@ -27,7 +28,7 @@ public sealed partial class MainWindow
     {
         var flyout = new MenuFlyout();
         MenuState state = BuildMenuState();
-        foreach (MenuGroupDefinition group in MenuCatalog.Build(state))
+        foreach (MenuGroupDefinition group in MenuCatalog.Build(state, Loc.CurrentLanguage))
         {
             var top = new MenuFlyoutSubItem { Text = group.Title };
             foreach (MenuItemDefinition item in group.Items)
@@ -126,7 +127,7 @@ public sealed partial class MainWindow
         {
             sub.Items.Add(new MenuFlyoutItem
             {
-                Text = "（暂无记录）",
+                Text = Loc.T("menu.noRecent"),
                 IsEnabled = false,
             });
             return;
@@ -144,11 +145,11 @@ public sealed partial class MainWindow
         }
 
         sub.Items.Add(new MenuFlyoutSeparator());
-        var clear = new MenuFlyoutItem { Text = "清除最近记录" };
+        var clear = new MenuFlyoutItem { Text = Loc.T("menu.clearRecent") };
         clear.Click += (_, _) =>
         {
             App.ClearHistory();
-            ShowOsd("最近记录已清空");
+            ShowOsd(Loc.T("menu.recentCleared"));
         };
         sub.Items.Add(clear);
     }
@@ -158,15 +159,15 @@ public sealed partial class MainWindow
         var auto = new MenuFlyoutItem
         {
             Text = _trackList.Any(track => track.Type == type && track.IsSelected)
-                ? "自动"
-                : "✓ 自动",
+                ? Loc.T("menu.auto")
+                : Loc.T("menu.autoChecked"),
         };
         TrackType capturedType = type;
-        auto.Click += (_, _) => SetTrackSelection(capturedType, "auto", "自动");
+        auto.Click += (_, _) => SetTrackSelection(capturedType, "auto", Loc.T("menu.auto"));
         sub.Items.Add(auto);
 
-        var off = new MenuFlyoutItem { Text = "关闭" };
-        off.Click += (_, _) => SetTrackSelection(capturedType, "no", "关闭");
+        var off = new MenuFlyoutItem { Text = Loc.T("menu.off") };
+        off.Click += (_, _) => SetTrackSelection(capturedType, "no", Loc.T("menu.off"));
         sub.Items.Add(off);
 
         foreach (TrackInfo track in _trackList.Where(track => track.Type == capturedType))
@@ -189,7 +190,7 @@ public sealed partial class MainWindow
 
     private void AppendSecondarySubtitleItems(MenuFlyoutSubItem sub)
     {
-        var off = new MenuFlyoutItem { Text = "关闭" };
+        var off = new MenuFlyoutItem { Text = Loc.T("menu.off") };
         off.Click += (_, _) => SetSecondarySubtitle(null);
         sub.Items.Add(off);
         foreach (TrackInfo track in _trackList.Where(track => track.Type == TrackType.Subtitle))
@@ -211,15 +212,15 @@ public sealed partial class MainWindow
         var auto = new MenuFlyoutItem
         {
             Text = string.Equals(_settings.AudioDevice, "auto", StringComparison.OrdinalIgnoreCase)
-                ? "✓ 系统默认"
-                : "系统默认",
+                ? Loc.T("menu.systemDefaultChecked")
+                : Loc.T("menu.systemDefault"),
         };
         auto.Click += (_, _) =>
         {
             _settings.AudioDevice = "auto";
             ApplyMpvString("audio-device", "auto");
             SaveSettings();
-            ShowOsd("音频设备", "系统默认");
+            ShowOsd(Loc.T("menu.audioDevice"), Loc.T("menu.systemDefault"));
         };
         sub.Items.Add(auto);
 
@@ -237,7 +238,7 @@ public sealed partial class MainWindow
                 _settings.AudioDevice = captured.Name;
                 ApplyMpvString("audio-device", captured.Name);
                 SaveSettings();
-                ShowOsd("音频设备", captured.DisplayName);
+                ShowOsd(Loc.T("menu.audioDevice"), captured.DisplayName);
             };
             sub.Items.Add(item);
         }
@@ -287,7 +288,7 @@ public sealed partial class MainWindow
                 case MenuCommands.StopAndClear:
                     StopPlayback();
                     SendPlayerCommandAsync("playlist-clear");
-                    ShowOsd("已停止并清空播放列表");
+                    ShowOsd(Loc.T("menu.playlistCleared"));
                     break;
                 case MenuCommands.SeekBack5:
                     SeekRelative(-5);
@@ -395,7 +396,7 @@ public sealed partial class MainWindow
                 case MenuCommands.LockAspect:
                     _settings.LockAspectRatio = !_settings.LockAspectRatio;
                     SaveSettings();
-                    ShowOsd(_settings.LockAspectRatio ? "已锁定窗口宽高比" : "已取消宽高比锁定");
+                    ShowOsd(_settings.LockAspectRatio ? Loc.T("menu.aspectLocked") : Loc.T("menu.aspectUnlocked"));
                     break;
                 case MenuCommands.MusicMode:
                     RequestMode(_mode.Current == PlayerMode.Mini ? PlayerMode.Normal : PlayerMode.Mini);
@@ -406,7 +407,7 @@ public sealed partial class MainWindow
                         _settings.VideoAspect = QuickSettings.NormalizeAspect(argument);
                         ApplyMpvString("video-aspect-override", _settings.VideoAspect);
                         SaveSettings();
-                        ShowOsd("宽高比", _settings.VideoAspect == "no" ? "自动" : _settings.VideoAspect);
+                        ShowOsd(Loc.T("menu.aspect"), _settings.VideoAspect == "no" ? Loc.T("menu.auto") : _settings.VideoAspect);
                     }
 
                     break;
@@ -475,7 +476,7 @@ public sealed partial class MainWindow
                     _settings.AudioDelay = 0;
                     ApplyMpvString("audio-delay", "0");
                     SaveSettings();
-                    ShowOsd("音频延迟已归零");
+                    ShowOsd(Loc.T("menu.audioDelayReset"));
                     break;
 
                 case MenuCommands.SubtitleToggle:
@@ -509,7 +510,7 @@ public sealed partial class MainWindow
                     _settings.SubtitleScale = 1;
                     ApplyMpvString("sub-scale", "1");
                     SaveSettings();
-                    ShowOsd("字幕缩放已重置");
+                    ShowOsd(Loc.T("menu.subtitleScaleReset"));
                     break;
                 case MenuCommands.SubtitleFont:
                     _ = PickSubtitleFontAsync();
@@ -580,7 +581,7 @@ public sealed partial class MainWindow
                 case MenuCommands.ExportDebug:
                 {
                     string path = App.ExportDiagnostics();
-                    ShowOsd("调试信息已导出", path);
+                    ShowOsd(Loc.T("menu.debugExported"), path);
                     break;
                 }
 
@@ -596,7 +597,7 @@ public sealed partial class MainWindow
         catch (Exception ex)
         {
             Trace($"menu command failed ({command}): {ex}");
-            ShowOsd("操作失败", ex.Message);
+            ShowOsd(Loc.T("menu.operationFailed"), ex.Message);
         }
     }
 
@@ -623,13 +624,13 @@ public sealed partial class MainWindow
 
             if (added > 0)
             {
-                ShowOsd($"已添加 {added} 个文件到播放列表");
+                ShowOsd(Loc.F("menu.filesAdded", added));
             }
         }
         catch (Exception ex)
         {
             Trace("append files failed: " + ex);
-            ShowOsd("添加文件失败", ex.Message);
+            ShowOsd(Loc.T("menu.addFailed"), ex.Message);
         }
     }
     private async Task PickSubtitleFontAsync()
@@ -643,6 +644,6 @@ public sealed partial class MainWindow
         _settings.SubtitleFont = picked;
         ApplyMpvString("sub-font", picked);
         SaveSettings();
-        ShowOsd("字幕字体", picked);
+        ShowOsd(Loc.T("menu.subtitleFont"), picked);
     }
 }

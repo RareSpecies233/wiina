@@ -1,6 +1,7 @@
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Windows.ApplicationModel.DataTransfer;
+using Wiina.App.Localization;
 using Wiina.App.Services;
 using Wiina.Core.Models;
 using DispatcherQueueTimer = Microsoft.UI.Dispatching.DispatcherQueueTimer;
@@ -16,7 +17,7 @@ public sealed partial class LogViewerWindow : Window
     public LogViewerWindow()
     {
         InitializeComponent();
-        Title = "Wiina 日志";
+        Title = Loc.T("log.title");
         RootGrid.RequestedTheme = App.Settings.Theme switch
         {
             ThemeMode.Dark => ElementTheme.Dark,
@@ -32,7 +33,7 @@ public sealed partial class LogViewerWindow : Window
             minWidth: 520,
             minHeight: 360);
 
-        FilterBox.ItemsSource = new[] { "全部", "跟踪日志", "崩溃日志" };
+        FilterBox.ItemsSource = new[] { Loc.T("log.filterAll"), Loc.T("log.filterTrace"), Loc.T("log.filterCrash") };
         FilterBox.SelectedIndex = 0;
 
         _timer = DispatcherQueue.CreateTimer();
@@ -63,8 +64,8 @@ public sealed partial class LogViewerWindow : Window
         {
             1 => ReadTail(trace),
             2 => ReadTail(crash),
-            _ => $"== 跟踪日志：{trace} =={Environment.NewLine}{ReadTail(trace)}{Environment.NewLine}"
-                + $"== 崩溃日志：{crash} =={Environment.NewLine}{ReadTail(crash)}",
+            _ => Loc.F("log.traceHeader", trace) + $"{Environment.NewLine}{ReadTail(trace)}{Environment.NewLine}"
+                + Loc.F("log.crashHeader", crash) + $"{Environment.NewLine}{ReadTail(crash)}",
         };
 
         PathText.Text = FilterBox.SelectedIndex switch
@@ -87,7 +88,7 @@ public sealed partial class LogViewerWindow : Window
         {
             if (!File.Exists(path))
             {
-                return "（文件不存在）";
+                return Loc.T("log.missing");
             }
 
             using var stream = new FileStream(
@@ -99,11 +100,11 @@ public sealed partial class LogViewerWindow : Window
             stream.Seek(start, SeekOrigin.Begin);
             using var reader = new StreamReader(stream);
             string text = reader.ReadToEnd();
-            return start > 0 ? "…（已截断较早内容）\n" + text : text;
+            return start > 0 ? Loc.T("log.truncated") + "\n" + text : text;
         }
         catch (Exception ex)
         {
-            return "读取失败：" + ex.Message;
+            return Loc.F("log.readFailed", ex.Message);
         }
     }
 

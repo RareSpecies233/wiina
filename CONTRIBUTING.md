@@ -41,6 +41,22 @@ dotnet test
 - 一个 PR 只做一件事；阶段 PR 关联 `docs/acceptance/stage-N.md`。
 - PR 模板中的验收清单必须逐项确认。
 
+## Stage 11：本地化 / 无障碍 / 打包
+
+- 界面字符串：`src/Wiina.Core/Localization/UiStringCatalog.cs`（zh-Hans/en 成对）；
+  设置行、菜单、OSD 分别有 `SettingsLocalization.cs`、`MenuLocalization.cs`、`OsdMessage.cs` 覆盖。
+  两种语言必须同时补齐；缺英文或英文残留中文会让单元测试失败。XAML 用
+  `src/Wiina.App/Localization/Loc.cs` 的附加属性（`loc:Loc.Text`、`loc:Loc.AutomationName` 等），
+  不写死中文。
+- 例外：检查器字段名、编解码器/滤镜名、日志等深度技术字符串按设计不翻译，见
+  `docs/accessibility.md`。
+- 纯图标按钮必须有 `AutomationProperties.Name`；新动画必须同时尊重
+  `AnimationsEnabled` 和系统动画设置；播放器画面/OSC 固定从左到右。
+- 打包：`pwsh -File scripts/package.ps1`。修改清单时同步更新
+  `src/Wiina.Core/Release/PackageManifest.cs` 与脚本，`Stage11ReleaseTests` 会校验一致性。
+- **v1 范围**：Stage 9（插件）与 Stage 10（在线字幕/yt-dlp）明确跳过；不要提交只启用入口、
+  却没有完整功能的半成品。
+
 ## 许可证与来源
 
 - 新依赖：MIT/BSD/Apache-2.0 可直接用；GPL 兼容；禁止 CC-BY-NC/SSPL/BUSL/无许可证代码。

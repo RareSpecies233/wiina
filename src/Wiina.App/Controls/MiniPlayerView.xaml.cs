@@ -5,6 +5,7 @@ using Microsoft.UI.Xaml.Controls.Primitives;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media.Animation;
 using Wiina.Core.State;
+using Wiina.App.Localization;
 using Wiina.Core.Text;
 
 namespace Wiina.App.Controls;
@@ -121,7 +122,7 @@ public sealed partial class MiniPlayerView : UserControl
         {
             MuteButton.Content = muted ? "\uE74F" : "\uE767";
             BubbleMuteButton.Content = muted ? "\uE74F" : "\uE767";
-            VolumeText.Text = muted ? "静音" : $"{Math.Round(VolumeSlider.Value)}%";
+            VolumeText.Text = muted ? Loc.T("mini.muted") : $"{Math.Round(VolumeSlider.Value)}%";
         }
         finally
         {
@@ -136,7 +137,7 @@ public sealed partial class MiniPlayerView : UserControl
         try
         {
             VolumeSlider.Value = clamped;
-            VolumeText.Text = _muted ? "静音" : $"{Math.Round(clamped)}%";
+            VolumeText.Text = _muted ? Loc.T("mini.muted") : $"{Math.Round(clamped)}%";
             MuteButton.Content = _muted || clamped < 1 ? "\uE74F" : "\uE767";
         }
         finally

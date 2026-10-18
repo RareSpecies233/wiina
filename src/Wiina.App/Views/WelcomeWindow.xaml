@@ -2,7 +2,9 @@
 <Window
     x:Class="Wiina.App.Views.WelcomeWindow"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:loc="using:Wiina.App.Localization"
+>
 
     <Grid x:Name="RootGrid"
           Background="{ThemeResource AppBackgroundBrush}"
@@ -77,8 +79,8 @@
                         FontFamily="{StaticResource IconFont}"
                         Content="&#xE946;"
                         Click="OnAboutClick"
-                        ToolTipService.ToolTip="关于 Wiina"
-                        AutomationProperties.Name="关于 Wiina" />
+                        loc:Loc.ToolTip="ui.about"
+                        loc:Loc.AutomationName="ui.about" />
             </Grid>
 
             <!-- Primary actions -->
@@ -87,16 +89,16 @@
                         Spacing="12"
                         Margin="0,12,0,0"
                         HorizontalAlignment="Right">
-                <Button Content="打开文件…"
+                <Button loc:Loc.Content="ui.openFileEllipsis"
                         Width="150"
                         Height="36"
                         Click="OnOpenFileClick"
-                        AutomationProperties.Name="打开文件" />
-                <Button Content="打开 URL…"
+                        loc:Loc.AutomationName="ui.openFile" />
+                <Button loc:Loc.Content="ui.openUrl"
                         Width="150"
                         Height="36"
                         Click="OnOpenUrlClick"
-                        AutomationProperties.Name="打开 URL" />
+                        loc:Loc.AutomationName="ui.openUrlShort" />
             </StackPanel>
 
             <!-- Resume -->
@@ -134,12 +136,12 @@
 
             <!-- Recent header -->
             <Grid Grid.Row="3" Margin="0,12,0,2">
-                <TextBlock Text="最近播放"
+                <TextBlock loc:Loc.Text="ui.recent"
                            FontSize="12"
                            FontWeight="SemiBold"
                            VerticalAlignment="Center" />
                 <Button x:Name="ClearRecentButton"
-                        Content="清除"
+                        loc:Loc.Content="ui.clear"
                         HorizontalAlignment="Right"
                         Padding="8,2"
                         Background="Transparent"
@@ -175,7 +177,7 @@
                     </ListView.ItemTemplate>
                 </ListView>
                 <TextBlock x:Name="RecentEmpty"
-                           Text="还没有播放记录"
+                           loc:Loc.Text="ui.noHistory"
                            FontSize="12"
                            Opacity="0.55"
                            HorizontalAlignment="Center"
@@ -184,7 +186,7 @@
 
             <TextBlock Grid.Row="5"
                        Margin="0,6,0,0"
-                       Text="把文件、文件夹或 URL 拖到窗口中即可播放。"
+                       loc:Loc.Text="ui.dragHint"
                        FontSize="11"
                        Foreground="{ThemeResource SecondaryTextBrush}"
                        TextWrapping="Wrap" />
@@ -194,13 +196,13 @@
                         Spacing="4"
                         Margin="0,4,0,0"
                         HorizontalAlignment="Right">
-                <Button Content="设置…"
+                <Button loc:Loc.Content="ui.settingsEllipsis"
                         Padding="8,2"
                         Background="Transparent"
                         BorderThickness="0"
                         FontSize="11"
                         Click="OnSettingsClick" />
-                <Button Content="打开数据文件夹"
+                <Button loc:Loc.Content="ui.openDataFolder"
                         Padding="8,2"
                         Background="Transparent"
                         BorderThickness="0"
@@ -210,3 +212,5 @@
         </Grid>
     </Grid>
 </Window>
+
+

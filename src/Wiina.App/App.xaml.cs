@@ -5,6 +5,7 @@ using System.Text;
 using System.Text.Json;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
+using Wiina.App.Localization;
 using Wiina.App.Services;
 using Wiina.App.Views;
 using Wiina.Core;
@@ -64,9 +65,41 @@ public partial class App : Application
         StartupPaths = ParseStartupPaths(Environment.GetCommandLineArgs().Skip(1));
         IsFirstRun = !File.Exists(SettingsStore.Path);
         Settings = SettingsStore.Load();
+        Loc.Initialize(Settings.Language);
+        Loc.LanguageChanged += (_, _) => ApplyLanguageToOpenWindows();
         UnhandledException += OnUnhandledException;
         AppDomain.CurrentDomain.UnhandledException += (_, e) =>
             LogCrash(e.ExceptionObject as Exception);
+    }
+
+    /// <summary>
+    /// Walks every open window's live visual tree after a language switch. The
+    /// weak attached-property registry alone can miss controls whose element
+    /// instance was recreated while the language event was being raised.
+    /// </summary>
+    private static void ApplyLanguageToOpenWindows()
+    {
+        var seen = new HashSet<Window>();
+        foreach (MainWindow window in CurrentApp._windows.Values)
+        {
+            Apply(window);
+        }
+
+        Apply(ActiveWindow);
+        Apply(_settingsWindow);
+        Apply(_welcomeWindow);
+        Apply(_aboutWindow);
+        Apply(_logWindow);
+        Apply(_inspectorWindow);
+        Apply(_filtersWindow);
+
+        void Apply(Window? window)
+        {
+            if (window is { Content: DependencyObject root } && seen.Add(window))
+            {
+                Loc.ApplyToTree(root);
+            }
+        }
     }
 
     private static IReadOnlyList<string> ParseStartupPaths(IEnumerable<string> args)
@@ -189,6 +222,7 @@ public partial class App : Application
     {
         try
         {
+            Loc.ApplyPreference(Settings.Language);
             SettingsStore.Save(Settings);
             SettingsChanged?.Invoke();
         }
@@ -563,3 +597,4 @@ public partial class App : Application
         }
     }
 }
+

@@ -2,7 +2,9 @@
 <UserControl
     x:Class="Wiina.App.Controls.ChaptersView"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:loc="using:Wiina.App.Localization"
+>
 
     <Grid>
         <Grid.RowDefinitions>
@@ -11,11 +13,11 @@
         </Grid.RowDefinitions>
 
         <Grid Margin="16,10,16,4">
-            <TextBlock Text="章节" Style="{StaticResource SectionTitleStyle}" />
+            <TextBlock loc:Loc.Text="ui.chapters" Style="{StaticResource SectionTitleStyle}" />
             <TextBlock x:Name="CountText"
                        HorizontalAlignment="Right"
                        Style="{StaticResource CaptionTextStyle}"
-                       Text="0 个" />
+                       loc:Loc.Text="ui.zeroItems" />
         </Grid>
 
         <ListView x:Name="ChapterList"
@@ -60,7 +62,7 @@
         <TextBlock x:Name="EmptyHint"
                    Grid.Row="1"
                    Margin="24"
-                   Text="当前媒体没有章节。带章节的 MKV/MP4 会在这里列出。"
+                   loc:Loc.Text="ui.noChapters"
                    Style="{StaticResource CaptionTextStyle}"
                    TextWrapping="Wrap"
                    HorizontalAlignment="Center"
@@ -68,3 +70,5 @@
                    TextAlignment="Center" />
     </Grid>
 </UserControl>
+
+
