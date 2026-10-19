@@ -68,6 +68,6 @@ the release commit to `main` and building the archive:
    `artifacts/wiina-1.0.2-win-x64.zip`, and publish as the latest release.
 
 4. Verify the asset size and SHA-256 printed by `release.ps1`. The current
-   v1.0.2 archive is 145,557,551 bytes, SHA-256
-   `77308C036D50554AC7530A4377E18C59B342B7F08239172CCE1548EE799A63F2`.
+   v1.0.2 archive is 145,557,990 bytes, SHA-256
+   `14C1218C09C8EFDD4C98B80BE796902269788514FA085D925F01E2FD3583D8D3`.
 

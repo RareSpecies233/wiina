@@ -1,11 +1,11 @@
 # v1 polish 4 验收
 
 - 分支：`fix/v1-polish-3`
-- 提交：`a5edc5e`（功能修复）；版本提交见其后 release 提交
+- 提交：`a5edc5e`（功能修复）；`5fc8342`（文档/发布提交）
 - 日期：2026-10-19
 - Release：`artifacts/wiina-1.0.2-win-x64.zip`
-  - SHA256 `77308C036D50554AC7530A4377E18C59B342B7F08239172CCE1548EE799A63F2`
-  - 559 entries / 145,557,551 bytes
+  - SHA256 `14C1218C09C8EFDD4C98B80BE796902269788514FA085D925F01E2FD3583D8D3`
+  - 559 entries / 145,557,990 bytes
 - 测试：590/590 Core tests；Release build 0 warnings / 0 errors
 
 ## 修复范围
