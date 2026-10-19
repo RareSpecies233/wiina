@@ -1,6 +1,13 @@
 # 阶段验收
 
-每个阶段一个文件：`stage-N.md`。模板：
+每个阶段一个文件：`stage-N.md`；v1 修复轮次为 `v1-polish*.md`。当前记录：
+
+- Stage 0–8：`stage-0.md` … `stage-8.md`
+- Stage 11：`stage-11.md`
+- 修复轮次：[v1-polish](v1-polish.md) · [v1-polish2](v1-polish2.md) ·
+  [v1-polish3](v1-polish3.md) · [v1-polish4](v1-polish4.md)
+
+## 模板
 
 ```markdown
 # Stage N — <名称> 验收
