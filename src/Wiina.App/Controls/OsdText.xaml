@@ -65,21 +65,21 @@
                        TextWrapping="Wrap"
                        Visibility="Collapsed" />
 
-            <!-- A single 8 px rail keeps volume/seek OSD bars at the same
+            <!-- A single 4 px rail keeps volume/seek OSD bars at the same
                  thickness instead of inheriting the thin system ProgressBar
                  template, which reads as a squashed line over video. -->
             <Grid x:Name="OsdProgressHost"
-                  Height="8"
+                  Height="4"
                   Margin="0,4,0,0"
                   Visibility="Collapsed"
                   SizeChanged="OnProgressSizeChanged">
                 <Border Background="{ThemeResource OsdProgressTrackBrush}"
-                        CornerRadius="4" />
+                        CornerRadius="2" />
                 <Border x:Name="OsdProgressFill"
                         Width="0"
                         HorizontalAlignment="Left"
                         Background="{ThemeResource AccentBrush}"
-                        CornerRadius="4" />
+                        CornerRadius="2" />
             </Grid>
 
             <StackPanel x:Name="PersistentContent"

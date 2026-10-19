@@ -1,5 +1,7 @@
+using Microsoft.UI;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Media;
 using Wiina.App.Interop;
 
 namespace Wiina.App.Controls;
@@ -37,7 +39,10 @@ public sealed partial class OscFloatingView : UserControl
 
     private void OnFirstBlurFrame(object? sender, EventArgs e)
     {
-        DragArea.Background = null;
+        // A null Background also removes the hit-test surface, which makes the
+        // floating OSC impossible to drag. Transparent paint keeps the panel
+        // draggable while still letting the blurred frame show through.
+        DragArea.Background = new SolidColorBrush(Colors.Transparent);
         OscBlurTintLayer.Visibility = Visibility.Visible;
     }
 

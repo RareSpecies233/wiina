@@ -614,6 +614,10 @@ public sealed partial class MainWindow : Window
         }
 
         TimePreview.Visibility = Visibility.Visible;
+        // DesiredSize includes Margin. Zero it before measuring so the cached
+        // size is content-only; otherwise the card width grows by its previous
+        // left offset on every hover and the preview drifts across the video.
+        TimePreview.Margin = new Thickness(0);
         TimePreview.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
         PositionTimePreview();
 
@@ -645,8 +649,22 @@ public sealed partial class MainWindow : Window
 
         try
         {
-            double width = Math.Max(TimePreview.DesiredSize.Width, TimePreview.ActualWidth);
-            double height = Math.Max(TimePreview.DesiredSize.Height, TimePreview.ActualHeight);
+            // Measured with Margin reset in ShowTimePreview, so this is the
+            // content size rather than content + previous position.
+            double width = TimePreview.DesiredSize.Width;
+            double height = TimePreview.DesiredSize.Height;
+            if (width <= 0)
+            {
+                width = Math.Max(0, TimePreview.ActualWidth);
+            }
+
+            if (height <= 0)
+            {
+                height = Math.Max(0, TimePreview.ActualHeight);
+            }
+
+            _previewWidth = width;
+            _previewHeight = height;
             Point origin = _previewTimeline.TransformToVisual(OverlayLayer)
                 .TransformPoint(new Point(0, 0));
             double centerX = origin.X +

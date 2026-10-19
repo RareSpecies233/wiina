@@ -34,6 +34,11 @@ public sealed partial class MainWindow
     private double _previewRatio;
     private double _previewPointerX;
     private bool _previewAboveTimeline;
+    // Content size of TimePreview without its positioning margin. DesiredSize
+    // includes Margin in WinUI, so reusing it after moving the card made the
+    // width grow with the previous position and the preview drift.
+    private double _previewWidth;
+    private double _previewHeight;
     private bool _cacheBuffering;
     private double _cachePercent = 100;
     private double _cacheSpeed;
@@ -576,8 +581,12 @@ public sealed partial class MainWindow
                 : ThumbnailPeek.Height;
             double previewLeft = TimePreview.Margin.Left;
             double previewTop = TimePreview.Margin.Top;
-            double previewWidth = Math.Max(TimePreview.DesiredSize.Width, TimePreview.ActualWidth);
-            double previewHeight = Math.Max(TimePreview.DesiredSize.Height, TimePreview.ActualHeight);
+            double previewWidth = _previewWidth > 0
+                ? _previewWidth
+                : Math.Max(0, TimePreview.ActualWidth);
+            double previewHeight = _previewHeight > 0
+                ? _previewHeight
+                : Math.Max(0, TimePreview.ActualHeight);
             double centerX = previewLeft + previewWidth / 2;
             double left = Math.Clamp(
                 centerX - width / 2,
