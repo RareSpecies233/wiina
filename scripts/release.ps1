@@ -178,7 +178,7 @@ if (-not (Test-Path -LiteralPath $archivePath)) {
 
 # Verify the shipped binary reports the requested product version. Wiina.exe is
 # the apphost, so read the managed assembly next to it.
-$releaseRoot = Join-Path $root 'src\Wiina.App\bin\Release'
+$releaseRoot = Join-Path $root 'src\Wiina.App\bin\x64\Release'
 $assemblyVersion = Get-ManagedAssemblyVersion -ReleaseRoot $releaseRoot
 if ($assemblyVersion -ne [version]"$Version.0") {
     throw "Built assembly version $assemblyVersion does not match requested $Version."

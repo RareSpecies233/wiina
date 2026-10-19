@@ -24,7 +24,7 @@
 [CmdletBinding()]
 param(
     [string]$Configuration = 'Release',
-    [string]$Version = '1.0.1'
+    [string]$Version = '1.0.2'
 )
 
 $ErrorActionPreference = 'Stop'
@@ -64,8 +64,11 @@ try {
     New-Item -ItemType Directory -Path $payloadDir -Force | Out-Null
 
     Write-Host "Building $project ($Configuration, $runtime, self-contained)..."
+    # Build the exact x64 target we copy below. Without Platform=x64 the build
+    # lands in a different output tree than the TargetDir query, which can
+    # silently package a stale assembly under a new version number.
     & $dotnet build $project -c $Configuration -r $runtime --self-contained true `
-        -p:Version=$Version -p:DebugType=None -p:DebugSymbols=false
+        -p:Version=$Version -p:Platform=x64 -p:DebugType=None -p:DebugSymbols=false -t:Rebuild
     if ($LASTEXITCODE -ne 0) {
         throw "dotnet build failed with exit code $LASTEXITCODE"
     }
@@ -90,6 +93,15 @@ try {
     Copy-Item -LiteralPath $libmpvSource -Destination (Join-Path $payloadDir 'libmpv-2.dll') -Force
     foreach ($file in $requiredRootFiles) {
         Copy-Item -LiteralPath (Join-Path $root $file) -Destination (Join-Path $payloadDir $file) -Force
+    }
+
+    # Verify the payload we are about to zip, not a sibling build output: an
+    # incremental build can otherwise ship the previous version under the new
+    # archive name.
+    $payloadAssembly = Join-Path $payloadDir 'Wiina.dll'
+    $payloadVersion = [System.Reflection.AssemblyName]::GetAssemblyName($payloadAssembly).Version
+    if ($payloadVersion -ne [version]"$Version.0") {
+        throw "Payload Wiina.dll is $payloadVersion but the requested release is $Version."
     }
 
     # libmpv needs no separate FFmpeg DLLs; if a future libmpv build adds
