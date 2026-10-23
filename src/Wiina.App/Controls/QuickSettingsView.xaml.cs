@@ -30,6 +30,7 @@ public enum QuickSettingKey
     FullscreenBattery,
     FullscreenTitle,
     ThumbnailPreview,
+    MpvStats,
     SidebarSide,
     SidebarWidth,
     VideoTrack,
@@ -190,6 +191,7 @@ public sealed partial class QuickSettingsView : UserControl
             LayoutBox.SelectedIndex = settings.Layout == WindowLayoutMode.Docked ? 1 : 0;
             AlwaysOnTopSwitch.IsOn = settings.AlwaysOnTop;
             LockAspectSwitch.IsOn = settings.LockAspectRatio;
+            MpvStatsSwitch.IsOn = settings.ShowMpvStats;
             OscPositionBox.SelectedIndex = Math.Clamp((int)settings.OscPosition, 0, 2);
             OscAutoHideSwitch.IsOn = settings.OscAutoHide;
             OsdEnabledSwitch.IsOn = settings.OsdEnabled;
@@ -771,6 +773,9 @@ public sealed partial class QuickSettingsView : UserControl
                 break;
             case nameof(LockAspectSwitch):
                 Raise(QuickSettingKey.LockAspect, flag: LockAspectSwitch.IsOn);
+                break;
+            case nameof(MpvStatsSwitch):
+                Raise(QuickSettingKey.MpvStats, flag: MpvStatsSwitch.IsOn);
                 break;
             case nameof(OscAutoHideSwitch):
                 Raise(QuickSettingKey.OscAutoHide, flag: OscAutoHideSwitch.IsOn);

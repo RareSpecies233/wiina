@@ -499,6 +499,9 @@ public sealed partial class MainWindow
             case QuickSettingKey.LockAspect:
                 _settings.LockAspectRatio = e.Flag;
                 break;
+            case QuickSettingKey.MpvStats:
+                _settings.ShowMpvStats = e.Flag;
+                break;
             case QuickSettingKey.OscPosition:
                 SetOscPosition((OscPosition)Math.Clamp((int)e.Number, 0, 2));
                 break;

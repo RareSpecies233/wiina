@@ -4,6 +4,7 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Controls.Primitives;
 using Microsoft.UI.Xaml.Input;
+using Microsoft.UI.Xaml.Media;
 using Wiina.Core.Models;
 using Wiina.Core.Settings;
 using Wiina.Core.State;
@@ -38,7 +39,6 @@ public sealed partial class SidebarHost : UserControl
     private bool _dragging;
     private double _lastPointerX;
     private bool _hiding;
-    private bool _pageMode;
     private Action? _hideCompleted;
     private double _animFromOffset;
     private double _animToOffset;
@@ -177,23 +177,16 @@ public sealed partial class SidebarHost : UserControl
             ? Visibility.Visible
             : Visibility.Collapsed;
 
-        // Quick settings is an operating mode: selecting one of its seven
-        // destinations must never collapse back to the four-category row.
-        if (type == SidebarType.Settings)
-        {
-            _pageMode = true;
-        }
+        // There is only one navigator: all seven destinations are always
+        // visible. Playlist/chapters/plugins are pages of that same row, not a
+        // second four-item category layer.
+        CategoryTabs.Visibility = Visibility.Collapsed;
+        PageTabs.Visibility = Visibility.Visible;
+        SettingsTab.IsChecked = false;
+        PlaylistTab.IsChecked = false;
+        ChaptersTab.IsChecked = false;
+        PluginsTab.IsChecked = false;
 
-        bool pageMode = _pageMode;
-        CategoryTabs.Visibility = pageMode ? Visibility.Collapsed : Visibility.Visible;
-        PageTabs.Visibility = pageMode ? Visibility.Visible : Visibility.Collapsed;
-        SettingsTab.IsChecked = pageMode;
-        PlaylistTab.IsChecked = !pageMode && type == SidebarType.Playlist;
-        ChaptersTab.IsChecked = !pageMode && type == SidebarType.Chapters;
-        PluginsTab.IsChecked = !pageMode && type == SidebarType.Plugins;
-
-        // Clear every page check first. ToggleButtons keep their visual state
-        // until IsChecked changes, which left a stale underline behind.
         LayoutTab.IsChecked = false;
         VideoTab.IsChecked = false;
         AudioTab.IsChecked = false;
@@ -202,27 +195,14 @@ public sealed partial class SidebarHost : UserControl
         ChaptersPageTab.IsChecked = false;
         PluginsPageTab.IsChecked = false;
 
-        if (pageMode)
-        {
-            UpdatePageChecks(SettingsContent.CurrentPage, type ?? SidebarType.Settings);
-        }
-        else
-        {
-            UpdatePageLabels();
-        }
+        UpdatePageChecks(SettingsContent.CurrentPage, type ?? SidebarType.Settings);
     }
 
     public void SetPage(QuickSettingsPage page)
     {
         SettingsContent.ShowPage(page);
 
-        // Only refresh checks when the single-layer locator is the active mode.
-        // Forcing page mode here made a directly-opened playlist/chapters panel
-        // fall back to the 7-item row on every state refresh.
-        if (_pageMode)
-        {
-            UpdatePageChecks(page, _currentType ?? SidebarType.Settings);
-        }
+        UpdatePageChecks(page, _currentType ?? SidebarType.Settings);
     }
 
     private void UpdatePageChecks(QuickSettingsPage page, SidebarType type)
@@ -238,6 +218,45 @@ public sealed partial class SidebarHost : UserControl
         PluginsPageTab.IsChecked = type == SidebarType.Plugins;
 
         UpdatePageLabels();
+        RefreshPageUnderlines();
+    }
+
+    /// <summary>
+    /// WinUI's ToggleButton visual states occasionally keep the checked
+    /// underline after IsChecked flips to false (and therefore leave two
+    /// underlines visible). Drive the rail opacity explicitly so exactly one
+    /// item can ever show a rail.
+    /// </summary>
+    private void RefreshPageUnderlines()
+    {
+        ToggleButton[] tabs =
+        {
+            LayoutTab, VideoTab, AudioTab, SubtitlesTab,
+            PlaylistPageTab, ChaptersPageTab, PluginsPageTab,
+        };
+
+        foreach (ToggleButton tab in tabs)
+        {
+            tab.ApplyTemplate();
+            SetUnderlineOpacity(tab, tab.IsChecked == true ? 1 : 0);
+        }
+    }
+
+    private static void SetUnderlineOpacity(DependencyObject root, double opacity)
+    {
+        int count = VisualTreeHelper.GetChildrenCount(root);
+        for (int i = 0; i < count; i++)
+        {
+            DependencyObject child = VisualTreeHelper.GetChild(root, i);
+            if (child is Border border &&
+                string.Equals(border.Name, "NavUnderline", StringComparison.Ordinal))
+            {
+                border.Opacity = opacity;
+                return;
+            }
+
+            SetUnderlineOpacity(child, opacity);
+        }
     }
 
     /// <summary>
@@ -338,7 +357,6 @@ public sealed partial class SidebarHost : UserControl
         Visibility = Visibility.Collapsed;
         SlideTransform.TranslateX = 0;
         Opacity = 1;
-        _pageMode = false;
         LayoutTab.IsChecked = false;
         VideoTab.IsChecked = false;
         AudioTab.IsChecked = false;

@@ -307,6 +307,18 @@ public static class SettingsCatalog
             "open-video-quality",
             "quality profile scaler import export 画质 预设 管理"));
         rows.Add(BoolRow(
+            "video.mpv-stats", SettingsPageId.Video, "解码",
+            "mpv 统计信息", "在画面上显示 mpv 原始帧率、渲染与丢帧统计。",
+            settings => settings.ShowMpvStats,
+            (settings, value) => settings.ShowMpvStats = value,
+            "mpv stats 丢帧 帧率 渲染 statistics"));
+        rows.Add(BoolRow(
+            "video.frame-drop-osd", SettingsPageId.Video, "解码",
+            "丢帧提示", "丢帧计数增加时在 OSD 中提示。",
+            settings => settings.FrameDropOsd,
+            (settings, value) => settings.FrameDropOsd = value,
+            "drop frame 丢帧 检测 osd"));
+        rows.Add(BoolRow(
             "video.deinterlace", SettingsPageId.Video, "解码",
             "去隔行", "对隔行扫描素材启用 mpv 去隔行。",
             settings => settings.VideoDeinterlace,
@@ -751,7 +763,7 @@ public static class SettingsCatalog
         string[] keyProfiles = KeyBindingProfiles.All.ToArray();
         rows.Add(ChoiceRow(
             "control.key-profile", SettingsPageId.Control, "键盘",
-            "键盘方案", "默认、IINA 或自定义；IINA 使用常见 IINA/mpv 快捷键。",
+            "键盘方案", "默认或 IINA；在按键编辑器中修改会创建可命名的自定义方案。",
             keyProfiles,
             settings => IndexOf(settings.KeyBindingProfile, keyProfiles, 0),
             (settings, value) => settings.KeyBindingProfile =

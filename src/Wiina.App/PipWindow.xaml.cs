@@ -161,10 +161,6 @@ public sealed partial class PipWindow : Window
         ControlStrip.IsHitTestVisible = true;
         DragRegion.Opacity = 1;
         HintBadge.Opacity = 1;
-        if (!_pointerOverControls)
-        {
-            _hideTimer.Start();
-        }
     }
 
     private void HideControls(bool force = false)
@@ -224,7 +220,22 @@ public sealed partial class PipWindow : Window
 
         int pixelWidth = Math.Max(1, (int)Math.Round(width * dpi));
         int pixelHeight = Math.Max(1, (int)Math.Round(height * dpi));
-        VideoHost.SetBufferSize(pixelWidth, pixelHeight, dpi);
+
+        // Mini-player is intentionally a low-resolution compositor surface.
+        // Rendering a 4K/1080p frame into a ~500 px window wastes GPU time that
+        // a foreground game needs; cap the source buffer and let the compositor
+        // scale it. This is the closest safe equivalent of CanvasSwapChain's
+        // SourceSize without replacing mpv's render path.
+        const int maxRenderWidth = 640;
+        const int maxRenderHeight = 360;
+        int renderWidth = Math.Min(pixelWidth, maxRenderWidth);
+        int renderHeight = Math.Min(pixelHeight, maxRenderHeight);
+        if (pixelWidth > 0)
+        {
+            renderHeight = Math.Max(1, (int)Math.Round(renderWidth * (double)pixelHeight / pixelWidth));
+        }
+
+        VideoHost.SetBufferSize(renderWidth, renderHeight, dpi);
         VideoHost.Clip = new Microsoft.UI.Xaml.Media.RectangleGeometry
         {
             Rect = new Windows.Foundation.Rect(0, 0, width, height),
@@ -237,7 +248,7 @@ public sealed partial class PipWindow : Window
 
         _lastWidth = width;
         _lastHeight = height;
-        BufferSizeChanged?.Invoke(pixelWidth, pixelHeight, dpi);
+        BufferSizeChanged?.Invoke(renderWidth, renderHeight, dpi);
     }
 
     private void SnapToEdges()
@@ -268,7 +279,7 @@ public sealed partial class PipWindow : Window
 
         DisplayArea area = DisplayArea.GetFromWindowId(AppWindow.Id, DisplayAreaFallback.Nearest);
         RectInt32 work = area.WorkArea;
-        int threshold = (int)Math.Round(24 * Math.Max(1.0, _rasterizationScale));
+        int threshold = (int)Math.Round(10 * Math.Max(1.0, _rasterizationScale));
         int width = rect.Right - rect.Left;
         int height = rect.Bottom - rect.Top;
         int x = rect.Left;
@@ -349,10 +360,7 @@ public sealed partial class PipWindow : Window
     {
         _pointerInside = false;
         _pointerOverControls = false;
-        if (!_hideTimer.IsRunning)
-        {
-            _hideTimer.Start();
-        }
+        HideControls(force: true);
     }
 
     private void OnRootTapped(object sender, TappedRoutedEventArgs e) => ShowControls();

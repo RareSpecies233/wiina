@@ -27,8 +27,14 @@ public sealed partial class VideoQualityWindow : Window
     {
         InitializeComponent();
         Title = "画质预设";
+        RootGrid.RequestedTheme = _settings.Theme switch
+        {
+            ThemeMode.Dark => ElementTheme.Dark,
+            ThemeMode.Light => ElementTheme.Light,
+            _ => ElementTheme.Default,
+        };
         WindowShell.Prepare(this, 760, 520, resizable: true, dark: _settings.Theme != ThemeMode.Light,
-            minWidth: 620, minHeight: 420);
+            minWidth: 620, minHeight: 420, extendTitleBar: true, titleBar: DragRegion);
         ScaleBox.ItemsSource = Scalers;
         DscaleBox.ItemsSource = Scalers;
         CscaleBox.ItemsSource = Scalers;
@@ -97,7 +103,7 @@ public sealed partial class VideoQualityWindow : Window
             return;
         }
 
-        _profiles.Add(new VideoQualityProfile
+        _settings.UserQualityProfiles.Add(new VideoQualityProfile
         {
             Name = name,
             Scale = ScaleBox.SelectedItem as string ?? "bilinear",
@@ -105,8 +111,9 @@ public sealed partial class VideoQualityWindow : Window
             Cscale = CscaleBox.SelectedItem as string ?? "bilinear",
             Deband = DebandSwitch.IsOn,
         });
+        App.SaveSettings();
         BuildProfiles();
-        ProfileBox.SelectedIndex = _profiles.Count - 1;
+        ProfileBox.SelectedIndex = _profiles.FindIndex(profile => profile.Name == name);
         StatusText.Text = $"已创建“{name}”。";
     }
 
@@ -130,7 +137,19 @@ public sealed partial class VideoQualityWindow : Window
             return;
         }
 
-        _profiles[ProfileBox.SelectedIndex].Name = name;
+        VideoQualityProfile? saved = _settings.UserQualityProfiles.Find(profile =>
+            string.Equals(profile.Name, oldName, StringComparison.OrdinalIgnoreCase));
+        if (saved is not null)
+        {
+            saved.Name = name;
+        }
+
+        if (string.Equals(_settings.ActiveQualityProfile, oldName, StringComparison.OrdinalIgnoreCase))
+        {
+            _settings.ActiveQualityProfile = name;
+        }
+
+        App.SaveSettings();
         BuildProfiles();
         ProfileBox.SelectedIndex = _profiles.FindIndex(profile => profile.Name == name);
         StatusText.Text = $"已重命名为“{name}”。";
@@ -145,7 +164,15 @@ public sealed partial class VideoQualityWindow : Window
         }
 
         string name = _profiles[ProfileBox.SelectedIndex].Name;
-        _profiles.RemoveAt(ProfileBox.SelectedIndex);
+        _settings.UserQualityProfiles.RemoveAll(profile =>
+            string.Equals(profile.Name, name, StringComparison.OrdinalIgnoreCase));
+
+        if (string.Equals(_settings.ActiveQualityProfile, name, StringComparison.OrdinalIgnoreCase))
+        {
+            _settings.ActiveQualityProfile = string.Empty;
+        }
+
+        App.SaveSettings();
         BuildProfiles();
         StatusText.Text = $"已删除“{name}”。";
     }
@@ -173,11 +200,12 @@ public sealed partial class VideoQualityWindow : Window
 
             foreach (VideoQualityProfile profile in imported.Where(profile => !string.IsNullOrWhiteSpace(profile.Name)))
             {
-                _profiles.RemoveAll(existing =>
+                _settings.UserQualityProfiles.RemoveAll(existing =>
                     string.Equals(existing.Name, profile.Name, StringComparison.OrdinalIgnoreCase));
-                _profiles.Add(Clone(profile));
+                _settings.UserQualityProfiles.Add(Clone(profile));
             }
 
+            App.SaveSettings();
             BuildProfiles();
             StatusText.Text = $"已导入 {imported.Count} 个画质预设。";
         }

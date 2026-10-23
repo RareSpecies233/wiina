@@ -30,4 +30,10 @@ public sealed partial class AppSettings
 
     /// <summary>Video-frame capture strategy behind the floating chrome.</summary>
     public ChromeBlurMode ChromeBlurMode { get; set; } = ChromeBlurMode.Dynamic;
+
+    /// <summary>Show raw mpv playback statistics as an on-screen overlay.</summary>
+    public bool ShowMpvStats { get; set; }
+
+    /// <summary>Warn with an OSD message whenever dropped video frames increase.</summary>
+    public bool FrameDropOsd { get; set; } = true;
 }

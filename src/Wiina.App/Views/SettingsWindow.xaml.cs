@@ -703,7 +703,9 @@ public sealed partial class SettingsWindow : Window
         "open-keybindings" => Loc.T("settings.openKeyBindings"),
         "install-plugin" => Loc.T("settings.install"),
         "open-url-dialog" or "open-log-viewer" or "open-inspector" or "open-about" or
-            "open-video-filters" or "open-audio-filters" => Loc.T("settings.open"),
+            "open-video-filters" or "open-audio-filters" or "open-video-quality" or
+            "video.quality-editor" =>
+            Loc.T("settings.open"),
         "reset-equalizer" => Loc.T("settings.reset"),
         "toggle-technical-osd" => Loc.T("settings.toggle"),
         _ => Loc.T("settings.run"),

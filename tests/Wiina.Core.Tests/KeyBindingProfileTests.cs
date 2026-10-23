@@ -181,6 +181,6 @@ public sealed class KeyBindingProfileTests
         Assert.Equal("IINA", KeyBindingProfiles.Label(KeyBindingProfiles.Iina));
         Assert.Equal("IINA", KeyBindingProfiles.LabelEnglish(KeyBindingProfiles.Iina));
         Assert.False(string.IsNullOrWhiteSpace(KeyBindingProfiles.Label(KeyBindingProfiles.Custom)));
-        Assert.Equal(3, KeyBindingProfiles.All.Count);
+        Assert.Equal(2, KeyBindingProfiles.All.Count);
     }
 }

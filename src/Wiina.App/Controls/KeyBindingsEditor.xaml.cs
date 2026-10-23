@@ -462,7 +462,7 @@ public sealed partial class KeyBindingsEditor : UserControl
         }
 
         string profile = KeyBindingProfiles.Normalize(App.Settings.KeyBindingProfile);
-        SetProfile(KeyBindingProfiles.Custom, persist: false);
+        SwitchToCustom();
         _bindings = KeyBindings.CreateProfileDefaults(profile);
         Persist();
         Reload();
@@ -495,6 +495,7 @@ public sealed partial class KeyBindingsEditor : UserControl
         }
 
         _bindings = KeyBindings.Resolve(App.Settings.KeyBindings, App.Settings.KeyBindingProfile).ToList();
+        App.SaveSettings();
         BuildActionList();
         SelectAction(_selectedAction);
         StatusText.Text = Loc.F("keybindings.profileChanged", ProfileBox.Items[ProfileBox.SelectedIndex]);
@@ -604,12 +605,35 @@ public sealed partial class KeyBindingsEditor : UserControl
 
     private void SwitchToCustom()
     {
-        if (string.Equals(KeyBindingProfiles.Normalize(App.Settings.KeyBindingProfile), KeyBindingProfiles.Custom, StringComparison.Ordinal))
+        string current = KeyBindingProfiles.Normalize(App.Settings.KeyBindingProfile);
+        if (!string.Equals(current, KeyBindingProfiles.Default, StringComparison.Ordinal) &&
+            !string.Equals(current, KeyBindingProfiles.Iina, StringComparison.Ordinal))
         {
             return;
         }
 
-        SetProfile(KeyBindingProfiles.Custom, persist: false);
+        // Built-ins stay immutable. The first edit forks them into a real,
+        // renameable user profile instead of the old undeletable "Custom".
+        string name = "自定义";
+        int suffix = 2;
+        while (ProfileNames().Contains(name, StringComparer.OrdinalIgnoreCase))
+        {
+            name = $"自定义 {suffix++}";
+        }
+
+        var profile = new KeyBindingUserProfile
+        {
+            Name = name,
+            Bindings = _bindings
+                .Select(binding => new KeyBindingSetting(binding.Action, binding.Chord))
+                .ToList(),
+        };
+        App.Settings.UserKeyProfiles.Add(profile);
+        App.Settings.KeyBindingProfile = name;
+        App.Settings.KeyBindings = profile.Bindings.ToList();
+        BuildProfileChoices();
+        ProfileBox.SelectedIndex = IndexOfProfile(name);
+        App.SaveSettings();
     }
 
     private void SetProfile(string profile, bool persist)
@@ -681,7 +705,7 @@ public sealed partial class KeyBindingsEditor : UserControl
                 return;
             }
 
-            SetProfile(KeyBindingProfiles.Custom, persist: false);
+            SwitchToCustom();
             _bindings = imported.ToList();
             Persist();
             Reload();

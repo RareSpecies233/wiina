@@ -49,6 +49,8 @@ public static class SettingsLocalization
         ["video.deinterlace"] = new("Deinterlace", "Enable mpv deinterlacing for interlaced sources.", null),
         ["video.quality"] = new("Video quality preset", "mpv scaling and deband profile; Auto keeps IINA/libmpv defaults, High quality is sharper but uses more GPU.", new[] { "Auto (IINA default)", "Balanced", "High quality", "Performance" }),
         ["video.quality-editor"] = new("Manage quality presets…", "Create, rename, import, export, and edit named mpv scaling profiles, then apply them live.", null),
+        ["video.mpv-stats"] = new("mpv statistics overlay", "Show raw mpv frame, render, and playback statistics on screen; useful for diagnosing dropped frames.", null),
+        ["video.frame-drop-osd"] = new("Frame-drop OSD", "Show a short OSD message whenever the dropped-frame counter increases during playback.", null),
         ["video.tone-mapping"] = new("HDR tone mapping", "mpv tone-mapping algorithm used to show HDR content on SDR screens.", new[] { "Auto", "BT.2390", "ST2094-40", "ST2094-10", "Spline", "Hable", "Clip", "Gamma", "Reinhard", "Mobius" }),
         ["video.hdr-compute-peak"] = new("HDR peak detection", "Let libmpv compute peak brightness from content; off saves some performance.", new[] { "Auto", "On", "Off" }),
         ["video.target-peak"] = new("Target peak brightness", "Target brightness for tone mapping (nits); 0 means automatic.", null),
@@ -127,7 +129,7 @@ public static class SettingsLocalization
         ["subtitles.smart-autoload"] = new("Smart subtitles", "Automatically find sidecar subtitles next to the video and pick the preferred language.", null),
         ["subtitles.preferred-language"] = new("Preferred subtitle language", "Auto prefers Simplified Chinese, then Traditional Chinese, English, and Japanese.", new[] { "Auto", "Simplified Chinese", "Traditional Chinese", "English", "Japanese" }),
         ["audio.auto-external"] = new("Auto-load external audio", "Automatically load a same-name .mka next to the video; unrelated audio files are never loaded.", null),
-        ["control.key-profile"] = new("Keyboard profile", "Choose Default, IINA, or Custom. The IINA profile uses common IINA/mpv shortcuts.", new[] { "Default", "IINA", "Custom" }),
+        ["control.key-profile"] = new("Keyboard profile", "Choose Default, IINA, or Custom. The IINA profile uses common IINA/mpv shortcuts; edits fork a named custom profile.", new[] { "Default", "IINA" }),
     };
 
     private static readonly Dictionary<string, (string Title, string Summary)> EnglishPages = new(StringComparer.Ordinal)

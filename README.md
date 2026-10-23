@@ -7,7 +7,7 @@ Wiina 把 [IINA](https://iina.io/) 在 macOS 上的**界面逻辑**（窗口层�
 [mpv](https://mpv.io/) 作为播放内核。视觉上不照搬 AppKit，而是按 Windows 11 Fluent 规范重新设计：Segoe UI Variable、
 Segoe Fluent Icons、Mica/Acrylic、圆角与系统主题。
 
-## 状态（v1.2.1）
+## 状态（v1.2.2）
 
 - **Stage 0–8 已验收。** 播放管线、WinUI 标题栏、OSC、播放/轨道/字幕/章节/播放列表/历史、侧边栏与快速设置、
   OSD/缩略图、全屏/PiP/迷你模式/多窗口、11 页设置/搜索/快捷键/菜单/欢迎与辅助窗口、视频滤镜/10 段均衡器/
@@ -108,6 +108,19 @@ Segoe Fluent Icons、Mica/Acrylic、圆角与系统主题。
 - 设置标题栏搜索框右侧可拖动窗口；滤镜 / 均衡器窗口改用 WinUI 自定义标题栏与半透明背景。
 - 详细记录：[docs/acceptance/v1.2.1.md](docs/acceptance/v1.2.1.md)。
 
+### v1.2.2：快速设置、小窗与性能收尾
+
+- 快速设置固定显示 7 个页面图标，仅当前页显示文字；图标加大、间距收紧，切换页面时旧下划线可靠清除。
+- 小窗拖动条/提示/控件仅在窗口被选中且鼠标悬停时出现，隐藏时不再跑自动隐藏计时器。
+- 窗口吸附阈值收紧到 10 DIP 并在 `WM_MOVING` 拖动过程中实时贴边，不留可见空隙。
+- OSC 菜单在窗口失焦、鼠标离开或 OSC 隐藏时主动关闭，避免菜单残留。
+- 快捷键方案移除“自定义”假 profile；首次编辑会自动创建可重命名 / 删除的命名方案，允许多个用户 profile。
+- 画质预设新增管理窗口：新建 / 重命名 / 删除 / 导入导出 JSON 并立即应用；设置里的操作按钮显示“打开”。
+- 新增 **mpv 统计信息** 设置与快速设置开关；OSD 可显示 mpv 原始帧/丢帧统计。
+- 新增**无采集纯色**毛玻璃模式，按系统 accent 染色并完全关闭模糊采集，适合低性能设备。
+- 设置页与快速设置页切换动画保持一致；滤镜 / 均衡器与快捷键编辑器改用 WinUI 自定义标题栏/主题背景。
+- 详细记录：[docs/acceptance/v1.2.2.md](docs/acceptance/v1.2.2.md)。
+
 ### v1.1.2：原生音量条、单层导航与操作模式
 
 - 音量条改回**原生 WinUI 3 Slider**：85 DIP 轨道、左右 8 DIP 内边距，滑块使用系统 Fluent 圆点，
@@ -135,7 +148,7 @@ Segoe Fluent Icons、Mica/Acrylic、圆角与系统主题。
 
 发布包是免安装的绿色压缩包（无需单独安装 .NET 或 Windows App Runtime）：
 
-1. 获取 `artifacts/wiina-1.2.1-win-x64.zip`（由下方打包命令生成，或由维护者随 Release 提供）。
+1. 获取 `artifacts/wiina-1.2.2-win-x64.zip`（由下方打包命令生成，或由维护者随 Release 提供）。
 2. 解压到任意可写目录。
 3. 运行 `Wiina.exe`。设置、日志与插件目录位于 `%LOCALAPPDATA%\Wiina`。
 4. 首次启动可拖入文件/文件夹/URL，或使用欢迎窗口打开媒体。

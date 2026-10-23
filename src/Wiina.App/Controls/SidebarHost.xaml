@@ -14,7 +14,7 @@
         <Style x:Key="SidebarNavTabStyle" TargetType="ToggleButton">
             <Setter Property="Height" Value="30" />
             <Setter Property="MinWidth" Value="0" />
-            <Setter Property="Padding" Value="3,0" />
+            <Setter Property="Padding" Value="4,0" />
             <Setter Property="Background" Value="Transparent" />
             <Setter Property="BorderThickness" Value="0" />
             <Setter Property="UseSystemFocusVisuals" Value="True" />
@@ -132,6 +132,7 @@
                                 Orientation="Horizontal"
                                 Spacing="2"
                                 Margin="28,0,0,0"
+                                Visibility="Collapsed"
                                 HorizontalAlignment="Center"
                                 VerticalAlignment="Center">
                         <ToggleButton x:Name="SettingsTab"
@@ -140,7 +141,7 @@
                                       Click="OnTypeTabClick"
                                       loc:Loc.AutomationName="ui.quickSettings">
                             <StackPanel Orientation="Horizontal" Spacing="2">
-                                <TextBlock Text="&#xE713;" FontFamily="{StaticResource IconFont}" FontSize="14" VerticalAlignment="Center" />
+                                <TextBlock Text="&#xE713;" FontFamily="{StaticResource IconFont}" FontSize="15" VerticalAlignment="Center" />
                                 <TextBlock loc:Loc.Text="ui.settings" FontSize="10" VerticalAlignment="Center" />
                             </StackPanel>
                         </ToggleButton>
@@ -150,7 +151,7 @@
                                       Click="OnTypeTabClick"
                                       loc:Loc.AutomationName="ui.playlist">
                             <StackPanel Orientation="Horizontal" Spacing="2">
-                                <TextBlock Text="&#xE8FD;" FontFamily="{StaticResource IconFont}" FontSize="14" VerticalAlignment="Center" />
+                                <TextBlock Text="&#xE8FD;" FontFamily="{StaticResource IconFont}" FontSize="15" VerticalAlignment="Center" />
                                 <TextBlock x:Name="PlaylistLabel" loc:Loc.Text="ui.playlist" FontSize="10" VerticalAlignment="Center" />
                             </StackPanel>
                         </ToggleButton>
@@ -160,7 +161,7 @@
                                       Click="OnTypeTabClick"
                                       loc:Loc.AutomationName="ui.chapters">
                             <StackPanel Orientation="Horizontal" Spacing="2">
-                                <TextBlock Text="&#xE81C;" FontFamily="{StaticResource IconFont}" FontSize="14" VerticalAlignment="Center" />
+                                <TextBlock Text="&#xE81C;" FontFamily="{StaticResource IconFont}" FontSize="15" VerticalAlignment="Center" />
                                 <TextBlock x:Name="ChaptersLabel" loc:Loc.Text="ui.chapters" FontSize="10" VerticalAlignment="Center" />
                             </StackPanel>
                         </ToggleButton>
@@ -170,7 +171,7 @@
                                       Click="OnTypeTabClick"
                                       loc:Loc.AutomationName="ui.plugins">
                             <StackPanel Orientation="Horizontal" Spacing="2">
-                                <TextBlock Text="&#xEA86;" FontFamily="{StaticResource IconFont}" FontSize="14" VerticalAlignment="Center" />
+                                <TextBlock Text="&#xEA86;" FontFamily="{StaticResource IconFont}" FontSize="15" VerticalAlignment="Center" />
                                 <TextBlock x:Name="PluginsLabel" loc:Loc.Text="ui.plugins" FontSize="10" VerticalAlignment="Center" />
                             </StackPanel>
                         </ToggleButton>
@@ -180,17 +181,17 @@
                          four settings pages plus the three content panels. -->
                     <StackPanel x:Name="PageTabs"
                                 Orientation="Horizontal"
-                                Spacing="2"
-                                Margin="20,0,0,0"
+                                Spacing="6"
+                                Margin="12,0,0,0"
                                 HorizontalAlignment="Center"
                                 VerticalAlignment="Center"
-                                Visibility="Collapsed">
+                                Visibility="Visible">
                         <ToggleButton x:Name="LayoutTab"
                                       Style="{StaticResource SidebarNavTabStyle}"
                                       Tag="Layout"
                                       Click="OnPageTabClick">
                             <StackPanel Orientation="Horizontal" Spacing="2">
-                                <TextBlock Text="&#xE80F;" FontFamily="{StaticResource IconFont}" FontSize="14" VerticalAlignment="Center" />
+                                <TextBlock Text="&#xE80F;" FontFamily="{StaticResource IconFont}" FontSize="15" VerticalAlignment="Center" />
                                 <TextBlock x:Name="LayoutLabel" loc:Loc.Text="ui.layout" FontSize="10" VerticalAlignment="Center" />
                             </StackPanel>
                         </ToggleButton>
@@ -199,7 +200,7 @@
                                       Tag="Video"
                                       Click="OnPageTabClick">
                             <StackPanel Orientation="Horizontal" Spacing="2">
-                                <TextBlock Text="&#xE714;" FontFamily="{StaticResource IconFont}" FontSize="14" VerticalAlignment="Center" />
+                                <TextBlock Text="&#xE714;" FontFamily="{StaticResource IconFont}" FontSize="15" VerticalAlignment="Center" />
                                 <TextBlock x:Name="VideoLabel" loc:Loc.Text="osd.track.video" FontSize="10" VerticalAlignment="Center" />
                             </StackPanel>
                         </ToggleButton>
@@ -208,7 +209,7 @@
                                       Tag="Audio"
                                       Click="OnPageTabClick">
                             <StackPanel Orientation="Horizontal" Spacing="2">
-                                <TextBlock Text="&#xE8D6;" FontFamily="{StaticResource IconFont}" FontSize="14" VerticalAlignment="Center" />
+                                <TextBlock Text="&#xE8D6;" FontFamily="{StaticResource IconFont}" FontSize="15" VerticalAlignment="Center" />
                                 <TextBlock x:Name="AudioLabel" loc:Loc.Text="osd.track.audio" FontSize="10" VerticalAlignment="Center" />
                             </StackPanel>
                         </ToggleButton>
@@ -217,7 +218,7 @@
                                       Tag="Subtitles"
                                       Click="OnPageTabClick">
                             <StackPanel Orientation="Horizontal" Spacing="2">
-                                <TextBlock Text="&#xE8D8;" FontFamily="{StaticResource IconFont}" FontSize="14" VerticalAlignment="Center" />
+                                <TextBlock Text="&#xE8D8;" FontFamily="{StaticResource IconFont}" FontSize="15" VerticalAlignment="Center" />
                                 <TextBlock x:Name="SubtitlesLabel" loc:Loc.Text="osd.track.subtitle" FontSize="10" VerticalAlignment="Center" />
                             </StackPanel>
                         </ToggleButton>
@@ -226,7 +227,7 @@
                                       Tag="Playlist"
                                       Click="OnPageTabClick">
                             <StackPanel Orientation="Horizontal" Spacing="2">
-                                <TextBlock Text="&#xE8FD;" FontFamily="{StaticResource IconFont}" FontSize="14" VerticalAlignment="Center" />
+                                <TextBlock Text="&#xE8FD;" FontFamily="{StaticResource IconFont}" FontSize="15" VerticalAlignment="Center" />
                                 <TextBlock x:Name="PagePlaylistLabel" loc:Loc.Text="ui.playlist" FontSize="10" VerticalAlignment="Center" />
                             </StackPanel>
                         </ToggleButton>
@@ -235,7 +236,7 @@
                                       Tag="Chapters"
                                       Click="OnPageTabClick">
                             <StackPanel Orientation="Horizontal" Spacing="2">
-                                <TextBlock Text="&#xE81C;" FontFamily="{StaticResource IconFont}" FontSize="14" VerticalAlignment="Center" />
+                                <TextBlock Text="&#xE81C;" FontFamily="{StaticResource IconFont}" FontSize="15" VerticalAlignment="Center" />
                                 <TextBlock x:Name="PageChaptersLabel" loc:Loc.Text="ui.chapters" FontSize="10" VerticalAlignment="Center" />
                             </StackPanel>
                         </ToggleButton>
@@ -244,7 +245,7 @@
                                       Tag="Plugins"
                                       Click="OnPageTabClick">
                             <StackPanel Orientation="Horizontal" Spacing="2">
-                                <TextBlock Text="&#xEA86;" FontFamily="{StaticResource IconFont}" FontSize="14" VerticalAlignment="Center" />
+                                <TextBlock Text="&#xEA86;" FontFamily="{StaticResource IconFont}" FontSize="15" VerticalAlignment="Center" />
                                 <TextBlock x:Name="PagePluginsLabel" loc:Loc.Text="ui.plugins" FontSize="10" VerticalAlignment="Center" />
                             </StackPanel>
                         </ToggleButton>

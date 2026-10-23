@@ -109,6 +109,18 @@
                                               MinWidth="0"
                                               Toggled="OnToggleChanged" />
                             </Grid>
+
+                            <Grid ColumnSpacing="12">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock loc:Loc.Text="ui.mpvStats" Style="{StaticResource BodyTextStyle}" />
+                                <ToggleSwitch x:Name="MpvStatsSwitch"
+                                              Grid.Column="1"
+                                              MinWidth="0"
+                                              Toggled="OnToggleChanged" />
+                            </Grid>
                         </StackPanel>
                     </Border>
 

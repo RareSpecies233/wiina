@@ -130,7 +130,11 @@ public static class KeyBindingProfiles
     public const string Iina = "IINA";
     public const string Custom = "Custom";
 
-    public static IReadOnlyList<string> All { get; } = new[] { Default, Iina, Custom };
+    /// <summary>
+    /// Built-in profiles. "Custom" is intentionally absent: custom profiles are
+    /// named user records and can be renamed or deleted.
+    /// </summary>
+    public static IReadOnlyList<string> All { get; } = new[] { Default, Iina };
 
     /// <summary>Normalizes persisted/user values; unknown values fall back to Default.</summary>
     public static string Normalize(string? value)

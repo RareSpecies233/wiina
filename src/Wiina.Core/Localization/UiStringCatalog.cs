@@ -54,6 +54,7 @@ public static class UiStrings
     public const string ui_flipH = "ui.flipH";
     public const string ui_videoTrack = "ui.videoTrack";
     public const string ui_lockAspect = "ui.lockAspect";
+    public const string ui_mpvStats = "ui.mpvStats";
     public const string ui_videoFilters = "ui.videoFilters";
     public const string ui_pipPlaying = "ui.pipPlaying";
     public const string ui_videoPresetPlaceholder = "ui.videoPresetPlaceholder";
@@ -702,6 +703,7 @@ public static class UiStrings
         Add("ui.window", "窗口", "Window");
         Add("ui.windowSize", "窗口尺寸", "Window size");
         Add("ui.alwaysOnTop", "窗口置顶", "Always on top");
+        Add("ui.mpvStats", "mpv 统计信息", "mpv statistics");
         Add("ui.flipV", "垂直翻转", "Flip vertically");
         Add("ui.panY", "垂直平移", "Pan vertically");
         Add("ui.positionY", "垂直位置", "Vertical position");

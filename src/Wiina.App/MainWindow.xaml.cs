@@ -58,6 +58,8 @@ public sealed partial class MainWindow : Window
     private readonly SidebarState _sidebar = new();
     private AppSettings _settings;
     private MpvPlayer? _player;
+    private DispatcherQueueTimer? _statsTimer;
+    private long _lastDroppedFrames;
     private nint _swapChain;
     private bool _started;
     private bool _closed;
@@ -165,6 +167,12 @@ public sealed partial class MainWindow : Window
         _autoHideTimer.IsRepeating = false;
         _autoHideTimer.Tick += OnAutoHideTick;
 
+        _statsTimer = DispatcherQueue.CreateTimer();
+        _statsTimer.Interval = TimeSpan.FromSeconds(1);
+        _statsTimer.IsRepeating = true;
+        _statsTimer.Tick += OnStatsTick;
+        _statsTimer.Start();
+
         OscFloating.DataContext = _oscVm;
         OscBottom.DataContext = _oscVm;
         OscTop.DataContext = _oscVm;
@@ -188,8 +196,14 @@ public sealed partial class MainWindow : Window
         VideoFrame.SizeChanged += OnVideoFrameSizeChanged;
         RootGrid.SizeChanged += OnRootSizeChanged;
         RootGrid.Loaded += OnRootLoaded;
-        Activated += (_, _) =>
+        Activated += (_, args) =>
         {
+            if (args.WindowActivationState == WindowActivationState.Deactivated)
+            {
+                CloseApplicationMenu();
+                return;
+            }
+
             RootGrid.Focus(FocusState.Programmatic);
             App.ActivateWindow(this);
         };
@@ -388,13 +402,51 @@ public sealed partial class MainWindow : Window
         CloseApplicationMenu();
 
         // A visible sidebar is an explicit operating mode. Moving the pointer
-        // away must not tear down the titlebar/OSC underneath it.
-        if (HasVisibleSidebar || _oscState.IsSuppressed)
+        // away must not tear down the titlebar/OSC underneath it. Once the
+        // sidebar is closed, however, the normal auto-hide path must resume even
+        // if the suppression flag is still unwinding.
+        if (HasVisibleSidebar)
         {
             return;
         }
 
         HideChrome(force: true);
+    }
+
+    private void OnStatsTick(DispatcherQueueTimer sender, object args)
+    {
+        if (_player is not { IsRunning: true } player ||
+            (!_settings.ShowMpvStats && !_settings.FrameDropOsd))
+        {
+            return;
+        }
+
+        try
+        {
+            long dropped = player.GetPropertyInt64("vo-drop-frame-count");
+            if (_settings.FrameDropOsd && dropped > _lastDroppedFrames)
+            {
+                long delta = dropped - _lastDroppedFrames;
+                player.Command("show-text", $"Wiina · 丢帧 +{delta}（总计 {dropped}）", "1600");
+            }
+
+            _lastDroppedFrames = dropped;
+
+            if (_settings.ShowMpvStats)
+            {
+                long width = player.GetPropertyInt64("width");
+                long height = player.GetPropertyInt64("height");
+                double fps = player.GetPropertyDouble("estimated-vf-fps");
+                double avsync = player.GetPropertyDouble("avsync");
+                string stats =
+                    $"{width}x{height} · {fps:F2} fps · dropped {dropped} · avsync {avsync:F3}s";
+                player.Command("show-text", stats, "1100");
+            }
+        }
+        catch
+        {
+            // Tracks/decoders disappear while switching files; try again next tick.
+        }
     }
 
     private void OnAutoHideTick(DispatcherQueueTimer sender, object args)
@@ -1252,7 +1304,7 @@ public sealed partial class MainWindow : Window
         DisplayArea area = DisplayArea.GetFromWindowId(AppWindow.Id, DisplayAreaFallback.Nearest);
         RectInt32 work = area.WorkArea;
         double scale = RootGrid.XamlRoot?.RasterizationScale ?? 1.0;
-        int threshold = (int)Math.Round(24 * Math.Max(1.0, scale));
+        int threshold = (int)Math.Round(10 * Math.Max(1.0, scale));
         int width = rect.Right - rect.Left;
         int height = rect.Bottom - rect.Top;
         int left = rect.Left;
@@ -1693,6 +1745,7 @@ public sealed partial class MainWindow : Window
         App.SettingsChanged -= OnSharedSettingsChanged;
         _resizeTimer.Stop();
         _autoHideTimer.Stop();
+        _statsTimer?.Stop();
         _settingsSaveTimer?.Stop();
         _settings.SidebarWidth = _sidebar.Width;
         SidebarHost.Log = null;
