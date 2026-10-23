@@ -857,7 +857,7 @@ public sealed partial class MainWindow
                     ("ewa_lanczos", "bilinear", "bilinear", "yes"),
                 VideoQualityPreset.Performance =>
                     ("bilinear", "bilinear", "bilinear", "no"),
-                _ => ("bilinear", "bilinear", "bilinear", "no"),
+                _ => ("ewa_lanczos", "mitchell", "bilinear", "yes"),
             };
         ApplyMpvString("scale", preset.Scale);
         ApplyMpvString("dscale", preset.Downscale);

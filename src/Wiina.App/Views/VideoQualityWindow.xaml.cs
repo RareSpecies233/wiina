@@ -47,7 +47,7 @@ public sealed partial class VideoQualityWindow : Window
         _loading = true;
         _profiles = new List<VideoQualityProfile>
         {
-            new() { Name = "自动（IINA 默认）", Scale = "bilinear", Dscale = "bilinear", Cscale = "bilinear", Deband = false },
+            new() { Name = "自动（IINA 默认）", Scale = "ewa_lanczos", Dscale = "mitchell", Cscale = "bilinear", Deband = true },
             new() { Name = "均衡", Scale = "ewa_lanczos", Dscale = "bilinear", Cscale = "bilinear", Deband = true },
             new() { Name = "高质量", Scale = "ewa_lanczossharp", Dscale = "mitchell", Cscale = "bilinear", Deband = true },
             new() { Name = "性能优先", Scale = "bilinear", Dscale = "bilinear", Cscale = "bilinear", Deband = false },
