@@ -1,4 +1,4 @@
-# Known issues — Wiina v1.2.0
+# Known issues — Wiina v1.2.1
 
 Nothing here is hidden; these are known limitations of the v1 build.
 

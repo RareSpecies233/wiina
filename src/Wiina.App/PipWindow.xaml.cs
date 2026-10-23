@@ -23,6 +23,8 @@ public sealed partial class PipWindow : Window
     private readonly double _rasterizationScale;
     private bool _closedFromMain;
     private bool _pointerOverControls;
+    private bool _pointerInside;
+    private bool _isActive;
     private bool _isPinned = true;
     private double _lastWidth;
     private double _lastHeight;
@@ -81,7 +83,8 @@ public sealed partial class PipWindow : Window
             () => PipGeometry.AspectRatio,
             appCommand: null,
             windowResizeStarted: null,
-            windowMoveEnded: SnapToEdges);
+            windowMoveEnded: SnapToEdges,
+            windowMoving: SnapMovingRect);
 
         Root.SizeChanged += OnRootSizeChanged;
         Root.Loaded += (_, _) =>
@@ -91,6 +94,7 @@ public sealed partial class PipWindow : Window
                 xamlRoot.Changed += OnXamlRootChanged;
             }
         };
+        Activated += OnActivated;
         Closed += OnClosed;
 
         _hideTimer = DispatcherQueue.CreateTimer();
@@ -145,6 +149,13 @@ public sealed partial class PipWindow : Window
 
     public void ShowControls()
     {
+        // Controls belong to an active, hovered mini-player only. A hovered
+        // window that lost focus must stay chrome-free.
+        if (!_isActive || !_pointerInside)
+        {
+            return;
+        }
+
         _hideTimer.Stop();
         ControlStrip.Opacity = 1;
         ControlStrip.IsHitTestVisible = true;
@@ -156,13 +167,14 @@ public sealed partial class PipWindow : Window
         }
     }
 
-    private void HideControls()
+    private void HideControls(bool force = false)
     {
-        if (_pointerOverControls)
+        if (_pointerOverControls && !force)
         {
             return;
         }
 
+        _hideTimer.Stop();
         ControlStrip.IsHitTestVisible = false;
         if (!AnimationsEnabled())
         {
@@ -236,35 +248,50 @@ public sealed partial class PipWindow : Window
             return;
         }
 
-        DisplayArea area = DisplayArea.GetFromWindowId(AppWindow.Id, DisplayAreaFallback.Nearest);
-        RectInt32 work = area.WorkArea;
         PointInt32 position = AppWindow.Position;
         SizeInt32 size = AppWindow.Size;
+        WindowRect snapped = SnapMovingRect(new WindowRect(
+            position.X, position.Y, position.X + size.Width, position.Y + size.Height));
+        if (snapped.Left != position.X || snapped.Top != position.Y)
+        {
+            AppWindow.Move(new PointInt32(snapped.Left, snapped.Top));
+        }
+    }
+
+    private WindowRect SnapMovingRect(WindowRect rect)
+    {
+        if (!App.Settings.EdgeSnapping ||
+            AppWindow.Presenter is not OverlappedPresenter { State: OverlappedPresenterState.Restored })
+        {
+            return rect;
+        }
+
+        DisplayArea area = DisplayArea.GetFromWindowId(AppWindow.Id, DisplayAreaFallback.Nearest);
+        RectInt32 work = area.WorkArea;
         int threshold = (int)Math.Round(24 * Math.Max(1.0, _rasterizationScale));
-        int x = position.X;
-        int y = position.Y;
+        int width = rect.Right - rect.Left;
+        int height = rect.Bottom - rect.Top;
+        int x = rect.Left;
+        int y = rect.Top;
         if (Math.Abs(x - work.X) <= threshold)
         {
             x = work.X;
         }
-        else if (Math.Abs(x + size.Width - (work.X + work.Width)) <= threshold)
+        else if (Math.Abs(rect.Right - (work.X + work.Width)) <= threshold)
         {
-            x = work.X + work.Width - size.Width;
+            x = work.X + work.Width - width;
         }
 
         if (Math.Abs(y - work.Y) <= threshold)
         {
             y = work.Y;
         }
-        else if (Math.Abs(y + size.Height - (work.Y + work.Height)) <= threshold)
+        else if (Math.Abs(rect.Bottom - (work.Y + work.Height)) <= threshold)
         {
-            y = work.Y + work.Height - size.Height;
+            y = work.Y + work.Height - height;
         }
 
-        if (x != position.X || y != position.Y)
-        {
-            AppWindow.Move(new PointInt32(x, y));
-        }
+        return new WindowRect(x, y, x + width, y + height);
     }
 
     private static (int X, int Y) NudgeAwayFromMain(
@@ -295,14 +322,32 @@ public sealed partial class PipWindow : Window
     private void OnXamlRootChanged(XamlRoot sender, XamlRootChangedEventArgs args) =>
         UpdateSurface();
 
-    private void OnRootPointerEntered(object sender, PointerRoutedEventArgs e) =>
+    private void OnActivated(object sender, WindowActivatedEventArgs args)
+    {
+        _isActive = args.WindowActivationState != WindowActivationState.Deactivated;
+        if (!_isActive)
+        {
+            _pointerOverControls = false;
+            HideControls(force: true);
+        }
+        else if (_pointerInside)
+        {
+            ShowControls();
+        }
+    }
+
+    private void OnRootPointerEntered(object sender, PointerRoutedEventArgs e)
+    {
+        _pointerInside = true;
         ShowControls();
+    }
 
     private void OnRootPointerMoved(object sender, PointerRoutedEventArgs e) =>
         ShowControls();
 
     private void OnRootPointerExited(object sender, PointerRoutedEventArgs e)
     {
+        _pointerInside = false;
         _pointerOverControls = false;
         if (!_hideTimer.IsRunning)
         {
@@ -315,6 +360,11 @@ public sealed partial class PipWindow : Window
     private void OnControlStripPointerEntered(object sender, PointerRoutedEventArgs e)
     {
         _pointerOverControls = true;
+        if (!_isActive)
+        {
+            return;
+        }
+
         _hideTimer.Stop();
         ControlStrip.Opacity = 1;
         ControlStrip.IsHitTestVisible = true;

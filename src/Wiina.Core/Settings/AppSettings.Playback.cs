@@ -33,4 +33,10 @@ public sealed partial class AppSettings
 
     /// <summary>mpv scaling/deband profile; Auto keeps mpv/IINA defaults.</summary>
     public VideoQualityPreset VideoQualityPreset { get; set; } = VideoQualityPreset.Auto;
+
+    /// <summary>Selected named quality profile (built-in or user).</summary>
+    public string ActiveQualityProfile { get; set; } = "Auto";
+
+    /// <summary>User-created quality profiles imported or edited in the quality editor.</summary>
+    public List<VideoQualityProfile> UserQualityProfiles { get; set; } = new();
 }

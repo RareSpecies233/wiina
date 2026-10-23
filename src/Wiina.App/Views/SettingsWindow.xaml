@@ -69,6 +69,7 @@
 
             <Grid x:Name="DragRegion"
                   Grid.Column="0"
+                  Grid.ColumnSpan="3"
                   Background="Transparent">
                 <TextBlock loc:Loc.Text="ui.wiinaSettings"
                            Margin="16,0,0,0"
@@ -88,6 +89,17 @@
                      FontSize="12"
                      TextChanged="OnSearchChanged"
                      KeyDown="OnSearchKeyDown" />
+
+            <!-- The titlebar remains draggable to the right of the search box;
+                 a transparent strip receives the drag explicitly because the
+                 centered TextBox otherwise owns that pointer region. -->
+            <Border x:Name="TitleDragRight"
+                    Grid.Column="2"
+                    Background="Transparent"
+                    PointerPressed="OnTitleDragPressed"
+                    PointerMoved="OnTitleDragMoved"
+                    PointerReleased="OnTitleDragReleased"
+                    PointerCaptureLost="OnTitleDragCaptureLost" />
         </Grid>
 
         <Grid Grid.Row="1">

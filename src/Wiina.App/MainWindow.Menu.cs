@@ -26,7 +26,16 @@ public sealed partial class MainWindow
 {
     private void ShowApplicationMenu(FrameworkElement anchor)
     {
+        _applicationMenu?.Hide();
         var flyout = new MenuFlyout();
+        _applicationMenu = flyout;
+        flyout.Closed += (_, _) =>
+        {
+            if (ReferenceEquals(_applicationMenu, flyout))
+            {
+                _applicationMenu = null;
+            }
+        };
         MenuState state = BuildMenuState();
 
         // Quick window action: expanded OSC menus start with pin/unpin so the
@@ -137,6 +146,12 @@ public sealed partial class MainWindow
         }
 
         top.Items.Add(profiles);
+    }
+
+    private void CloseApplicationMenu()
+    {
+        _applicationMenu?.Hide();
+        _applicationMenu = null;
     }
 
     private static string ProfileMenuLabel(string profile) =>

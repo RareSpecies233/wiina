@@ -22,6 +22,7 @@
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="*" />
             </Grid.ColumnDefinitions>
             <TextBlock x:Name="ProfileLabel"
@@ -33,8 +34,13 @@
                 Grid.Column="1"
                 MinWidth="140"
                 SelectionChanged="OnProfileChanged" />
+            <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="2">
+                <Button Content="新建" Click="OnNewProfileClick" Style="{StaticResource SettingsEditorButtonStyle}" />
+                <Button Content="重命名" Click="OnRenameProfileClick" Style="{StaticResource SettingsEditorButtonStyle}" />
+                <Button loc:Loc.Content="ui.delete" Click="OnDeleteProfileClick" Style="{StaticResource SettingsEditorButtonStyle}" />
+            </StackPanel>
             <TextBlock x:Name="ProfileHintLabel"
-                Grid.Column="2"
+                Grid.Column="3"
                 Margin="4,0,0,0"
                 VerticalAlignment="Center"
                 FontSize="11"
@@ -66,7 +72,7 @@
             <Border
                 Grid.Column="1"
                 Padding="18,16"
-                Background="{ThemeResource SettingsCardWashBrush}"
+                Background="{ThemeResource DialogSurfaceBrush}"
                 BorderBrush="{ThemeResource PanelBorderBrush}"
                 BorderThickness="1"
                 CornerRadius="8">
@@ -96,7 +102,7 @@
                         Margin="0,16,0,0"
                         Padding="14,12"
                         Background="{ThemeResource KeyChordChipBrush}"
-                        BorderBrush="{ThemeResource PanelBorderBrush}"
+                        BorderBrush="{ThemeResource AccentBrush}"
                         BorderThickness="1"
                         CornerRadius="6">
                         <StackPanel Spacing="4">
@@ -107,6 +113,7 @@
                                 x:Name="ChordText"
                                 FontFamily="Cascadia Mono, Consolas"
                                 FontSize="18"
+                                Foreground="{ThemeResource AccentBrush}"
                                 TextWrapping="Wrap" />
                         </StackPanel>
                     </Border>

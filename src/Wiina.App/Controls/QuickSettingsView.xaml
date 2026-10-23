@@ -10,7 +10,10 @@
         <ScrollViewer Padding="16,4,16,16"
                       VerticalScrollBarVisibility="Auto"
                       HorizontalScrollBarVisibility="Disabled">
-            <Grid>
+            <Grid x:Name="PageContent">
+                <Grid.RenderTransform>
+                    <TranslateTransform x:Name="PageSlide" />
+                </Grid.RenderTransform>
                 <!-- ================================================== Layout -->
                 <StackPanel x:Name="LayoutPage" Spacing="14">
                     <Border Style="{StaticResource CardBorderStyle}" Padding="12">

@@ -209,6 +209,9 @@ public sealed partial class AppSettings
     /// <summary>User key bindings; empty means the documented defaults.</summary>
     public List<KeyBindingSetting> KeyBindings { get; set; } = new();
 
+    /// <summary>Named custom key-binding profiles (each owns its bindings).</summary>
+    public List<KeyBindingUserProfile> UserKeyProfiles { get; set; } = new();
+
     // ---- Stage 8: video filters, equalizer and advanced A/V ----
 
     /// <summary>Ordered user video filters (the editor list).</summary>

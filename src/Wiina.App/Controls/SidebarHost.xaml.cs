@@ -38,6 +38,7 @@ public sealed partial class SidebarHost : UserControl
     private bool _dragging;
     private double _lastPointerX;
     private bool _hiding;
+    private bool _pageMode;
     private Action? _hideCompleted;
     private double _animFromOffset;
     private double _animToOffset;
@@ -176,16 +177,34 @@ public sealed partial class SidebarHost : UserControl
             ? Visibility.Visible
             : Visibility.Collapsed;
 
-        bool settings = type == SidebarType.Settings;
-        CategoryTabs.Visibility = settings ? Visibility.Collapsed : Visibility.Visible;
-        PageTabs.Visibility = settings ? Visibility.Visible : Visibility.Collapsed;
-        SettingsTab.IsChecked = settings;
-        PlaylistTab.IsChecked = type == SidebarType.Playlist;
-        ChaptersTab.IsChecked = type == SidebarType.Chapters;
-        PluginsTab.IsChecked = type == SidebarType.Plugins;
-        if (settings)
+        // Quick settings is an operating mode: selecting one of its seven
+        // destinations must never collapse back to the four-category row.
+        if (type == SidebarType.Settings)
         {
-            UpdatePageChecks(SettingsContent.CurrentPage);
+            _pageMode = true;
+        }
+
+        bool pageMode = _pageMode;
+        CategoryTabs.Visibility = pageMode ? Visibility.Collapsed : Visibility.Visible;
+        PageTabs.Visibility = pageMode ? Visibility.Visible : Visibility.Collapsed;
+        SettingsTab.IsChecked = pageMode;
+        PlaylistTab.IsChecked = !pageMode && type == SidebarType.Playlist;
+        ChaptersTab.IsChecked = !pageMode && type == SidebarType.Chapters;
+        PluginsTab.IsChecked = !pageMode && type == SidebarType.Plugins;
+
+        // Clear every page check first. ToggleButtons keep their visual state
+        // until IsChecked changes, which left a stale underline behind.
+        LayoutTab.IsChecked = false;
+        VideoTab.IsChecked = false;
+        AudioTab.IsChecked = false;
+        SubtitlesTab.IsChecked = false;
+        PlaylistPageTab.IsChecked = false;
+        ChaptersPageTab.IsChecked = false;
+        PluginsPageTab.IsChecked = false;
+
+        if (pageMode)
+        {
+            UpdatePageChecks(SettingsContent.CurrentPage, type ?? SidebarType.Settings);
         }
         else
         {
@@ -196,22 +215,27 @@ public sealed partial class SidebarHost : UserControl
     public void SetPage(QuickSettingsPage page)
     {
         SettingsContent.ShowPage(page);
-        UpdatePageChecks(page);
+
+        // Only refresh checks when the single-layer locator is the active mode.
+        // Forcing page mode here made a directly-opened playlist/chapters panel
+        // fall back to the 7-item row on every state refresh.
+        if (_pageMode)
+        {
+            UpdatePageChecks(page, _currentType ?? SidebarType.Settings);
+        }
     }
 
-    private void UpdatePageChecks(QuickSettingsPage page)
+    private void UpdatePageChecks(QuickSettingsPage page, SidebarType type)
     {
-        LayoutTab.IsChecked = page == QuickSettingsPage.Layout;
-        VideoTab.IsChecked = page == QuickSettingsPage.Video;
-        AudioTab.IsChecked = page == QuickSettingsPage.Audio;
-        SubtitlesTab.IsChecked = page == QuickSettingsPage.Subtitles;
+        bool settings = type == SidebarType.Settings;
+        LayoutTab.IsChecked = settings && page == QuickSettingsPage.Layout;
+        VideoTab.IsChecked = settings && page == QuickSettingsPage.Video;
+        AudioTab.IsChecked = settings && page == QuickSettingsPage.Audio;
+        SubtitlesTab.IsChecked = settings && page == QuickSettingsPage.Subtitles;
 
-        // The last three entries are content sections, not settings pages.
-        // Clear them when returning to the settings page row so a previously
-        // selected section cannot leave a second underline/checked state.
-        PlaylistPageTab.IsChecked = false;
-        ChaptersPageTab.IsChecked = false;
-        PluginsPageTab.IsChecked = false;
+        PlaylistPageTab.IsChecked = type == SidebarType.Playlist;
+        ChaptersPageTab.IsChecked = type == SidebarType.Chapters;
+        PluginsPageTab.IsChecked = type == SidebarType.Plugins;
 
         UpdatePageLabels();
     }
@@ -314,6 +338,14 @@ public sealed partial class SidebarHost : UserControl
         Visibility = Visibility.Collapsed;
         SlideTransform.TranslateX = 0;
         Opacity = 1;
+        _pageMode = false;
+        LayoutTab.IsChecked = false;
+        VideoTab.IsChecked = false;
+        AudioTab.IsChecked = false;
+        SubtitlesTab.IsChecked = false;
+        PlaylistPageTab.IsChecked = false;
+        ChaptersPageTab.IsChecked = false;
+        PluginsPageTab.IsChecked = false;
     }
 
     private void StartAnimation()

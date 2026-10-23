@@ -141,10 +141,10 @@ public static class SettingsCatalog
             "ui.blur-mode", SettingsPageId.Ui, "窗口与 OSC",
             "毛玻璃性能模式",
             "固定：显示面板时取一帧后复用，最省电；动态：面板可见时持续更新；始终：面板隐藏时也计算。",
-            new[] { "固定（预渲染一帧）", "动态（默认）", "始终计算" },
+            new[] { "固定（预渲染一帧）", "动态（默认）", "始终计算", "无模糊（纯色）" },
             settings => (int)settings.ChromeBlurMode,
             (settings, value) => settings.ChromeBlurMode =
-                (ChromeBlurMode)Math.Clamp(value, 0, 2),
+                (ChromeBlurMode)Math.Clamp(value, 0, 3),
             "blur acrylic glass performance 毛玻璃 性能 固定 动态 始终"));
         rows.Add(BoolRow(
             "ui.always-on-top", SettingsPageId.Ui, "窗口与 OSC",
@@ -289,9 +289,23 @@ public static class SettingsCatalog
             "mpv 缩放与去色带 profile；自动保留 IINA/libmpv 默认，高质量更清晰但更耗 GPU。",
             new[] { "自动（IINA 默认）", "均衡", "高质量", "性能优先" },
             settings => (int)settings.VideoQualityPreset,
-            (settings, value) => settings.VideoQualityPreset =
-                (VideoQualityPreset)Math.Clamp(value, 0, 3),
+            (settings, value) =>
+            {
+                settings.VideoQualityPreset = (VideoQualityPreset)Math.Clamp(value, 0, 3);
+                settings.ActiveQualityProfile = settings.VideoQualityPreset switch
+                {
+                    VideoQualityPreset.Balanced => "均衡",
+                    VideoQualityPreset.HighQuality => "高质量",
+                    VideoQualityPreset.Performance => "性能优先",
+                    _ => "自动（IINA 默认）",
+                };
+            },
             "quality profile scaler mpv IINA 画质 缩放 性能 高质量 预设"));
+        rows.Add(ActionRow(
+            "video.quality-editor", SettingsPageId.Video, "解码",
+            "管理画质预设…", "创建、重命名、导入/导出带 profile 的缩放与去色带设置。",
+            "open-video-quality",
+            "quality profile scaler import export 画质 预设 管理"));
         rows.Add(BoolRow(
             "video.deinterlace", SettingsPageId.Video, "解码",
             "去隔行", "对隔行扫描素材启用 mpv 去隔行。",

@@ -11,4 +11,7 @@ public enum ChromeBlurMode
 
     /// <summary>Keep calculating even when no chrome is visible.</summary>
     Always = 2,
+
+    /// <summary>No capture or blur: a flat tinted panel, for low-end devices.</summary>
+    Solid = 3,
 }

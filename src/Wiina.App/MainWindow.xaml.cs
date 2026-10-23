@@ -70,6 +70,7 @@ public sealed partial class MainWindow : Window
     private bool _wasPlayingBeforeSeek;
     private bool _chromeShown = true;
     private bool _pointerOverChrome;
+    private MenuFlyout? _applicationMenu;
     private bool? _animationsEnabled;
     private DispatcherQueueTimer? _settingsSaveTimer;
     private Point _oscDragStart;
@@ -384,6 +385,7 @@ public sealed partial class MainWindow : Window
 
         _pointerOverChrome = false;
         _autoHideTimer.Stop();
+        CloseApplicationMenu();
 
         // A visible sidebar is an explicit operating mode. Moving the pointer
         // away must not tear down the titlebar/OSC underneath it.
@@ -1225,37 +1227,56 @@ public sealed partial class MainWindow : Window
             return;
         }
 
-        DisplayArea area = DisplayArea.GetFromWindowId(AppWindow.Id, DisplayAreaFallback.Nearest);
-        RectInt32 work = area.WorkArea;
         PointInt32 position = AppWindow.Position;
         SizeInt32 size = AppWindow.Size;
+        WindowRect snapped = SnapMovingRect(new WindowRect(
+            position.X, position.Y, position.X + size.Width, position.Y + size.Height));
+        if (snapped.Left != position.X || snapped.Top != position.Y)
+        {
+            AppWindow.Move(new PointInt32(snapped.Left, snapped.Top));
+        }
+    }
+
+    /// <summary>
+    /// Snaps the live WM_MOVING rectangle so edges feel magnetic while the user
+    /// is still dragging, not only after releasing the mouse.
+    /// </summary>
+    private WindowRect SnapMovingRect(WindowRect rect)
+    {
+        if (!_settings.EdgeSnapping ||
+            AppWindow.Presenter is not OverlappedPresenter { State: OverlappedPresenterState.Restored })
+        {
+            return rect;
+        }
+
+        DisplayArea area = DisplayArea.GetFromWindowId(AppWindow.Id, DisplayAreaFallback.Nearest);
+        RectInt32 work = area.WorkArea;
         double scale = RootGrid.XamlRoot?.RasterizationScale ?? 1.0;
         int threshold = (int)Math.Round(24 * Math.Max(1.0, scale));
+        int width = rect.Right - rect.Left;
+        int height = rect.Bottom - rect.Top;
+        int left = rect.Left;
+        int top = rect.Top;
 
-        int x = position.X;
-        int y = position.Y;
-        if (Math.Abs(x - work.X) <= threshold)
+        if (Math.Abs(left - work.X) <= threshold)
         {
-            x = work.X;
+            left = work.X;
         }
-        else if (Math.Abs(x + size.Width - (work.X + work.Width)) <= threshold)
+        else if (Math.Abs(rect.Right - (work.X + work.Width)) <= threshold)
         {
-            x = work.X + work.Width - size.Width;
-        }
-
-        if (Math.Abs(y - work.Y) <= threshold)
-        {
-            y = work.Y;
-        }
-        else if (Math.Abs(y + size.Height - (work.Y + work.Height)) <= threshold)
-        {
-            y = work.Y + work.Height - size.Height;
+            left = work.X + work.Width - width;
         }
 
-        if (x != position.X || y != position.Y)
+        if (Math.Abs(top - work.Y) <= threshold)
         {
-            AppWindow.Move(new PointInt32(x, y));
+            top = work.Y;
         }
+        else if (Math.Abs(rect.Bottom - (work.Y + work.Height)) <= threshold)
+        {
+            top = work.Y + work.Height - height;
+        }
+
+        return new WindowRect(left, top, left + width, top + height);
     }
 
     private void OnRootLoaded(object sender, RoutedEventArgs e)
@@ -1270,7 +1291,8 @@ public sealed partial class MainWindow : Window
             () => _videoAspect,
             OnAppCommand,
             () => _userResizedWindow = true,
-            SnapWindowToEdges);
+            SnapWindowToEdges,
+            SnapMovingRect);
 
         if (RootGrid.XamlRoot is { } xamlRoot)
         {

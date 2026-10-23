@@ -1,6 +1,7 @@
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Controls.Primitives;
+using Microsoft.UI.Xaml.Media.Animation;
 using Wiina.Core.Models;
 using Wiina.App.Localization;
 using Wiina.Core.Osd;
@@ -457,6 +458,43 @@ public sealed partial class QuickSettingsView : UserControl
             ? Visibility.Visible
             : Visibility.Collapsed;
 
+        AnimatePageChange();
+    }
+
+    /// <summary>Same compact vertical flow used by the settings window pages.</summary>
+    private void AnimatePageChange()
+    {
+        if (!App.Settings.AnimationsEnabled || PageContent.XamlRoot is null)
+        {
+            PageContent.Opacity = 1;
+            PageSlide.Y = 0;
+            return;
+        }
+
+        PageContent.Opacity = 0;
+        PageSlide.Y = 10;
+        var storyboard = new Storyboard();
+        var fade = new DoubleAnimation
+        {
+            From = 0,
+            To = 1,
+            Duration = new Duration(TimeSpan.FromMilliseconds(150)),
+            EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut },
+        };
+        Storyboard.SetTarget(fade, PageContent);
+        Storyboard.SetTargetProperty(fade, "Opacity");
+        var slide = new DoubleAnimation
+        {
+            From = 10,
+            To = 0,
+            Duration = new Duration(TimeSpan.FromMilliseconds(160)),
+            EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut },
+        };
+        Storyboard.SetTarget(slide, PageSlide);
+        Storyboard.SetTargetProperty(slide, "Y");
+        storyboard.Children.Add(fade);
+        storyboard.Children.Add(slide);
+        storyboard.Begin();
     }
 
     private void PopulateTrackBox(ComboBox box, TrackType type)

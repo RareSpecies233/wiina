@@ -74,6 +74,67 @@ internal sealed class ChromeBlur
         blur._mode = mode;
         blur._fixedCaptured = false;
         blur._active = true;
+        if (mode == ChromeBlurMode.Solid)
+        {
+            blur.ApplySolidToLayers();
+        }
+    }
+
+    /// <summary>Switches all attached surfaces to a flat accent-tinted panel.</summary>
+    private void ApplySolidToLayers()
+    {
+        List<ChromeBlurLayer> alive = SnapshotLayers();
+        foreach (ChromeBlurLayer layer in alive)
+        {
+            layer.ApplySolid(SolidTint(layer.ActualTheme));
+        }
+    }
+
+    private static Color SolidTint(ElementTheme theme)
+    {
+        Color accent;
+        try
+        {
+            accent = new Windows.UI.ViewManagement.UISettings()
+                .GetColorValue(Windows.UI.ViewManagement.UIColorType.Accent);
+        }
+        catch
+        {
+            accent = Color.FromArgb(255, 0, 103, 192);
+        }
+
+        // A little system accent keeps the flat panel from looking black or
+        // white; the alpha keeps text readable over any video frame.
+        Color baseColor = theme == ElementTheme.Light
+            ? Color.FromArgb(236, 246, 244, 241)
+            : Color.FromArgb(236, 27, 29, 35);
+        static byte Mix(byte from, byte to, double amount) =>
+            (byte)Math.Clamp(Math.Round(from + ((to - from) * amount)), 0, 255);
+        return Color.FromArgb(
+            baseColor.A,
+            Mix(baseColor.R, accent.R, 0.16),
+            Mix(baseColor.G, accent.G, 0.16),
+            Mix(baseColor.B, accent.B, 0.16));
+    }
+
+    private List<ChromeBlurLayer> SnapshotLayers()
+    {
+        var alive = new List<ChromeBlurLayer>();
+        lock (_gate)
+        {
+            for (int i = _layers.Count - 1; i >= 0; i--)
+            {
+                if (_layers[i].TryGetTarget(out ChromeBlurLayer? layer))
+                {
+                    alive.Add(layer);
+                }
+                else
+                {
+                    _layers.RemoveAt(i);
+                }
+            }
+        }
+        return alive;
     }
     private ChromeBlur()
     {
@@ -118,6 +179,10 @@ internal sealed class ChromeBlur
                 }
             }
             _layers.Add(new WeakReference<ChromeBlurLayer>(layer));
+        }
+        if (_mode == ChromeBlurMode.Solid)
+        {
+            layer.ApplySolid(SolidTint(layer.ActualTheme));
         }
         Start();
     }
@@ -170,7 +235,13 @@ internal sealed class ChromeBlur
                 continue;
             }
 
-            if (_mode == ChromeBlurMode.Fixed && _fixedCaptured)
+            if (_mode is ChromeBlurMode.Fixed && _fixedCaptured)
+            {
+                Thread.Sleep(FrameIntervalMs);
+                continue;
+            }
+
+            if (_mode == ChromeBlurMode.Solid)
             {
                 Thread.Sleep(FrameIntervalMs);
                 continue;
@@ -623,6 +694,14 @@ public sealed class ChromeBlurLayer : Canvas
             FirstFrame?.Invoke(this, EventArgs.Empty);
         }
     }
+    /// <summary>Flat no-capture mode: paint an accent-tinted opaque surface.</summary>
+    internal void ApplySolid(Color color)
+    {
+        _fill.Fill = new SolidColorBrush(color);
+        HasFrame = true;
+        RaiseFirstFrameIfReady();
+    }
+
     internal void Apply(WriteableBitmap bitmap)
     {
         FrameworkElement? root = XamlRoot?.Content as FrameworkElement;
@@ -659,6 +738,7 @@ public sealed class ChromeBlurLayer : Canvas
             {
             }
         }
+        _fill.Fill = _brush;
         _brush.ImageSource = bitmap;
         _transform.ScaleX = k;
         _transform.ScaleY = k;

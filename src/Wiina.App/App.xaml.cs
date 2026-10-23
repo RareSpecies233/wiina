@@ -34,6 +34,7 @@ public partial class App : Application
     private static LogViewerWindow? _logWindow;
     private static InspectorWindow? _inspectorWindow;
     private static FiltersWindow? _filtersWindow;
+    private static VideoQualityWindow? _qualityWindow;
     private readonly Dictionary<string, MainWindow> _windows = new();
 
     /// <summary>True when settings.json did not exist before this launch.</summary>
@@ -498,6 +499,27 @@ public partial class App : Application
         };
         window.Activate();
         window.SelectTab(audioTab);
+    }
+
+    /// <summary>Opens the named quality-profile manager/editor.</summary>
+    public static void ShowVideoQualityWindow()
+    {
+        if (_qualityWindow is { } existing)
+        {
+            WindowShell.BringToForeground(existing);
+            return;
+        }
+
+        var window = new VideoQualityWindow();
+        _qualityWindow = window;
+        window.Closed += (_, _) =>
+        {
+            if (ReferenceEquals(_qualityWindow, window))
+            {
+                _qualityWindow = null;
+            }
+        };
+        window.Activate();
     }
 
     /// <summary>Opens media in the active window or a new one (welcome/menu).</summary>

@@ -4,7 +4,7 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <Deterministic>true</Deterministic>
-    <Version>1.2.0</Version>
+    <Version>1.2.1</Version>
     <Company>Wiina contributors</Company>
     <Product>Wiina</Product>
     <Copyright>Copyright (C) 2026 Wiina contributors</Copyright>

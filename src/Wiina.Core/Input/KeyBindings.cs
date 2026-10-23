@@ -116,6 +116,14 @@ public static class PlayerActionCatalog
 }
 
 /// <summary>Picker/editor profiles for the key map.</summary>
+/// <summary>A named, user-editable key-binding profile.</summary>
+public sealed class KeyBindingUserProfile
+{
+    public string Name { get; set; } = string.Empty;
+
+    public List<KeyBindingSetting> Bindings { get; set; } = new();
+}
+
 public static class KeyBindingProfiles
 {
     public const string Default = "Default";
@@ -132,6 +140,11 @@ public static class KeyBindingProfiles
             return Default;
         }
 
+        if (string.Equals(value.Trim(), Default, StringComparison.OrdinalIgnoreCase))
+        {
+            return Default;
+        }
+
         if (string.Equals(value.Trim(), Iina, StringComparison.OrdinalIgnoreCase))
         {
             return Iina;
@@ -142,21 +155,19 @@ public static class KeyBindingProfiles
             return Custom;
         }
 
-        return Default;
+        // Any other non-empty name is a user-created profile.
+        return value.Trim();
     }
 
-    public static bool IsKnown(string? value) =>
-        value is not null &&
-        (string.Equals(value.Trim(), Default, StringComparison.OrdinalIgnoreCase) ||
-         string.Equals(value.Trim(), Iina, StringComparison.OrdinalIgnoreCase) ||
-         string.Equals(value.Trim(), Custom, StringComparison.OrdinalIgnoreCase));
+    public static bool IsKnown(string? value) => !string.IsNullOrWhiteSpace(value);
 
     public static string Label(string? value) =>
         Normalize(value) switch
         {
             Iina => "IINA",
             Custom => "自定义",
-            _ => "默认",
+            Default => "默认",
+            var custom => custom,
         };
 
     public static string LabelEnglish(string? value) =>
@@ -164,7 +175,8 @@ public static class KeyBindingProfiles
         {
             Iina => "IINA",
             Custom => "Custom",
-            _ => "Default",
+            Default => "Default",
+            var custom => custom,
         };
 }
 

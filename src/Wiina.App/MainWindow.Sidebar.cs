@@ -837,10 +837,16 @@ public sealed partial class MainWindow
 
     // ------------------------------------------------------------- mpv apply
 
+    /// <summary>Re-applies the active profile after the quality editor saves.</summary>
+    public void ApplyCurrentQualityProfile() => ApplyQualityPreset();
+
     private void ApplyQualityPreset()
     {
-        (string Scale, string Downscale, string Chroma, string Deband) preset =
-            _settings.VideoQualityPreset switch
+        VideoQualityProfile? custom = _settings.UserQualityProfiles.FirstOrDefault(profile =>
+            string.Equals(profile.Name, _settings.ActiveQualityProfile, StringComparison.OrdinalIgnoreCase));
+        (string Scale, string Downscale, string Chroma, string Deband) preset = custom is not null
+            ? (custom.Scale, custom.Dscale, custom.Cscale, custom.Deband ? "yes" : "no")
+            : _settings.VideoQualityPreset switch
             {
                 VideoQualityPreset.HighQuality =>
                     ("ewa_lanczossharp", "mitchell", "bilinear", "yes"),

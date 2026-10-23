@@ -163,11 +163,16 @@ public sealed class KeyBindingProfileTests
     [Theory]
     [InlineData(null)]
     [InlineData("")]
-    [InlineData("garbage")]
-    public void UnknownProfileFallsBackToDefault(string? value)
+    public void EmptyProfileFallsBackToDefault(string? value)
     {
         Assert.Equal(KeyBindingProfiles.Default, KeyBindingProfiles.Normalize(value));
-        Assert.False(KeyBindingProfiles.IsKnown(value));
+    }
+
+    [Fact]
+    public void CustomProfileNamesArePreserved()
+    {
+        Assert.Equal("garbage", KeyBindingProfiles.Normalize("  garbage  "));
+        Assert.True(KeyBindingProfiles.IsKnown("garbage"));
     }
 
     [Fact]

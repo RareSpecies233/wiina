@@ -45,7 +45,9 @@ public sealed partial class FiltersWindow : Window
             resizable: true,
             dark: _settings.Theme != ThemeMode.Light,
             minWidth: 720,
-            minHeight: 480);
+            minHeight: 480,
+            extendTitleBar: true,
+            titleBar: DragRegion);
 
         _saveTimer = DispatcherQueue.CreateTimer();
         _saveTimer.Interval = TimeSpan.FromMilliseconds(350);

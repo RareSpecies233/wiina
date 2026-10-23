@@ -6,6 +6,7 @@ using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 using Windows.Storage;
+using Windows.UI.ViewManagement;
 using Windows.Storage.Pickers;
 using Windows.System;
 using Windows.UI;
@@ -24,8 +25,20 @@ namespace Wiina.App.Controls;
 /// </summary>
 public sealed partial class KeyBindingsEditor : UserControl
 {
-    private static readonly Color AccentTint = Color.FromArgb(0x2E, 0x4C, 0xC2, 0xFF);
     private static readonly Color TransparentColor = Color.FromArgb(0x00, 0, 0, 0);
+    private static readonly UISettings SystemUiSettings = new();
+
+    private static Color AccentColor =>
+        SystemUiSettings.GetColorValue(UIColorType.Accent);
+
+    private static Color AccentTint
+    {
+        get
+        {
+            Color accent = AccentColor;
+            return Color.FromArgb(0x2E, accent.R, accent.G, accent.B);
+        }
+    }
 
     private readonly List<(string Action, Button Button)> _rows = new();
     private IReadOnlyList<KeyBindingSetting> _bindings = Array.Empty<KeyBindingSetting>();
@@ -78,7 +91,7 @@ public sealed partial class KeyBindingsEditor : UserControl
         {
             int selected = IndexOfProfile(App.Settings.KeyBindingProfile);
             ProfileBox.Items.Clear();
-            foreach (string profile in KeyBindingProfiles.All)
+            foreach (string profile in ProfileNames())
             {
                 ProfileBox.Items.Add(IsEnglish ? KeyBindingProfiles.LabelEnglish(profile) : KeyBindingProfiles.Label(profile));
             }
@@ -91,11 +104,28 @@ public sealed partial class KeyBindingsEditor : UserControl
         }
     }
 
+    private static List<string> ProfileNames()
+    {
+        var names = new List<string>(KeyBindingProfiles.All);
+        foreach (KeyBindingUserProfile profile in App.Settings.UserKeyProfiles)
+        {
+            string name = profile.Name.Trim();
+            if (name.Length > 0 && !names.Contains(name, StringComparer.OrdinalIgnoreCase))
+            {
+                names.Add(name);
+            }
+        }
+
+        return names;
+    }
+
     private static int IndexOfProfile(string? profile)
     {
-        for (int i = 0; i < KeyBindingProfiles.All.Count; i++)
+        List<string> names = ProfileNames();
+        string normalized = KeyBindingProfiles.Normalize(profile);
+        for (int i = 0; i < names.Count; i++)
         {
-            if (string.Equals(KeyBindingProfiles.All[i], KeyBindingProfiles.Normalize(profile), StringComparison.Ordinal))
+            if (string.Equals(names[i], normalized, StringComparison.Ordinal))
             {
                 return i;
             }
@@ -103,6 +133,10 @@ public sealed partial class KeyBindingsEditor : UserControl
 
         return 0;
     }
+
+    private static KeyBindingUserProfile? FindUserProfile(string? name) =>
+        App.Settings.UserKeyProfiles.FirstOrDefault(profile =>
+            string.Equals(profile.Name.Trim(), name?.Trim(), StringComparison.OrdinalIgnoreCase));
 
     private void Reload()
     {
@@ -148,18 +182,22 @@ public sealed partial class KeyBindingsEditor : UserControl
                 TextTrimming = TextTrimming.CharacterEllipsis,
                 VerticalAlignment = VerticalAlignment.Center,
             });
+            Color accent = AccentColor;
             var chordBlock = new TextBlock
             {
                 Text = chordText,
                 FontFamily = new FontFamily("Cascadia Mono"),
                 FontSize = 10,
-                Opacity = chords.Count == 0 ? 0.45 : 0.9,
+                Foreground = new SolidColorBrush(chords.Count == 0
+                    ? Color.FromArgb(0x88, accent.R, accent.G, accent.B)
+                    : accent),
+                Opacity = chords.Count == 0 ? 0.7 : 1,
                 VerticalAlignment = VerticalAlignment.Center,
             };
             var chordChip = new Border
             {
-                Background = new SolidColorBrush(Color.FromArgb(0x1A, 0x80, 0x80, 0x80)),
-                BorderBrush = new SolidColorBrush(Color.FromArgb(0x24, 0x80, 0x80, 0x80)),
+                Background = new SolidColorBrush(Color.FromArgb(0x22, accent.R, accent.G, accent.B)),
+                BorderBrush = new SolidColorBrush(Color.FromArgb(0x88, accent.R, accent.G, accent.B)),
                 BorderThickness = new Thickness(1),
                 CornerRadius = new CornerRadius(4),
                 Padding = new Thickness(6, 2, 6, 2),
@@ -438,18 +476,130 @@ public sealed partial class KeyBindingsEditor : UserControl
             return;
         }
 
-        string profile = KeyBindingProfiles.All[Math.Clamp(ProfileBox.SelectedIndex, 0, KeyBindingProfiles.All.Count - 1)];
+        List<string> names = ProfileNames();
+        string profile = names[Math.Clamp(ProfileBox.SelectedIndex, 0, names.Count - 1)];
         if (string.Equals(KeyBindingProfiles.Normalize(App.Settings.KeyBindingProfile), profile, StringComparison.Ordinal))
         {
             return;
         }
 
         StopRecording(clearStatus: false);
+        SaveCurrentUserProfile();
         SetProfile(profile, persist: true);
+        KeyBindingUserProfile? saved = FindUserProfile(profile);
+        if (saved is not null)
+        {
+            App.Settings.KeyBindings = saved.Bindings
+                .Select(binding => new KeyBindingSetting(binding.Action, binding.Chord))
+                .ToList();
+        }
+
         _bindings = KeyBindings.Resolve(App.Settings.KeyBindings, App.Settings.KeyBindingProfile).ToList();
         BuildActionList();
         SelectAction(_selectedAction);
         StatusText.Text = Loc.F("keybindings.profileChanged", ProfileBox.Items[ProfileBox.SelectedIndex]);
+    }
+
+    private async void OnNewProfileClick(object sender, RoutedEventArgs e)
+    {
+        string? name = await PromptProfileNameAsync("新建按键方案", "自定义方案");
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            return;
+        }
+
+        if (ProfileNames().Contains(name, StringComparer.OrdinalIgnoreCase))
+        {
+            StatusText.Text = "已存在同名方案。";
+            return;
+        }
+
+        var profile = new KeyBindingUserProfile
+        {
+            Name = name,
+            Bindings = _bindings
+                .Select(binding => new KeyBindingSetting(binding.Action, binding.Chord))
+                .ToList(),
+        };
+        App.Settings.UserKeyProfiles.Add(profile);
+        App.Settings.KeyBindingProfile = name;
+        App.Settings.KeyBindings = profile.Bindings.ToList();
+        App.SaveSettings();
+        BuildProfileChoices();
+        Reload();
+        ProfileBox.SelectedIndex = IndexOfProfile(name);
+        StatusText.Text = $"已创建方案“{name}”。";
+    }
+
+    private async void OnRenameProfileClick(object sender, RoutedEventArgs e)
+    {
+        string current = KeyBindingProfiles.Normalize(App.Settings.KeyBindingProfile);
+        KeyBindingUserProfile? saved = FindUserProfile(current);
+        if (saved is null)
+        {
+            StatusText.Text = "默认和 IINA 方案不能重命名；请先新建自定义方案。";
+            return;
+        }
+
+        string? name = await PromptProfileNameAsync("重命名按键方案", saved.Name);
+        if (string.IsNullOrWhiteSpace(name) ||
+            string.Equals(name, saved.Name, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        if (ProfileNames().Contains(name, StringComparer.OrdinalIgnoreCase))
+        {
+            StatusText.Text = "已存在同名方案。";
+            return;
+        }
+
+        saved.Name = name;
+        App.Settings.KeyBindingProfile = name;
+        App.SaveSettings();
+        BuildProfileChoices();
+        Reload();
+        ProfileBox.SelectedIndex = IndexOfProfile(name);
+        StatusText.Text = $"方案已重命名为“{name}”。";
+    }
+
+    private void OnDeleteProfileClick(object sender, RoutedEventArgs e)
+    {
+        string current = KeyBindingProfiles.Normalize(App.Settings.KeyBindingProfile);
+        KeyBindingUserProfile? saved = FindUserProfile(current);
+        if (saved is null)
+        {
+            StatusText.Text = "默认和 IINA 方案不能删除。";
+            return;
+        }
+
+        App.Settings.UserKeyProfiles.Remove(saved);
+        App.Settings.KeyBindingProfile = KeyBindingProfiles.Default;
+        App.Settings.KeyBindings.Clear();
+        App.SaveSettings();
+        BuildProfileChoices();
+        Reload();
+        StatusText.Text = $"已删除方案“{saved.Name}”。";
+    }
+
+    private async Task<string?> PromptProfileNameAsync(string title, string initial)
+    {
+        var box = new TextBox { Text = initial, MinWidth = 260 };
+        var dialog = new ContentDialog
+        {
+            XamlRoot = XamlRoot,
+            Title = title,
+            Content = box,
+            PrimaryButtonText = "确定",
+            CloseButtonText = "取消",
+            DefaultButton = ContentDialogButton.Primary,
+        };
+        if (await dialog.ShowAsync() != ContentDialogResult.Primary)
+        {
+            return null;
+        }
+
+        return box.Text.Trim();
     }
 
     private void SwitchToCustom()
@@ -486,7 +636,29 @@ public sealed partial class KeyBindingsEditor : UserControl
         App.Settings.KeyBindings = _bindings
             .Select(binding => new KeyBindingSetting(binding.Action, binding.Chord))
             .ToList();
+        SaveCurrentUserProfile();
         App.SaveSettings();
+    }
+
+    private void SaveCurrentUserProfile()
+    {
+        string current = KeyBindingProfiles.Normalize(App.Settings.KeyBindingProfile);
+        if (string.Equals(current, KeyBindingProfiles.Default, StringComparison.Ordinal) ||
+            string.Equals(current, KeyBindingProfiles.Iina, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        KeyBindingUserProfile? saved = FindUserProfile(current);
+        if (saved is null)
+        {
+            saved = new KeyBindingUserProfile { Name = current };
+            App.Settings.UserKeyProfiles.Add(saved);
+        }
+
+        saved.Bindings = _bindings
+            .Select(binding => new KeyBindingSetting(binding.Action, binding.Chord))
+            .ToList();
     }
 
     private async void OnImportClick(object sender, RoutedEventArgs e)

@@ -45,6 +45,10 @@ public sealed partial class SettingsWindow : Window
     private bool _loading;
     private bool _saving;
     private bool _applying;
+    private bool _titleDragging;
+    private PointInt32 _titleDragWindowStart;
+    private int _titleDragCursorStartX;
+    private int _titleDragCursorStartY;
 
     public SettingsWindow()
         : this(ParsePage(App.Settings.SettingsPage), null)
@@ -961,6 +965,10 @@ public sealed partial class SettingsWindow : Window
                     App.ShowFiltersWindow(audioTab: false);
                     break;
 
+                case "open-video-quality":
+                    App.ShowVideoQualityWindow();
+                    break;
+
                 case "open-audio-filters":
                     App.ShowFiltersWindow(audioTab: true);
                     break;
@@ -1166,4 +1174,57 @@ public sealed partial class SettingsWindow : Window
             // Fall back to the default placement.
         }
     }
+
+    private void OnTitleDragPressed(object sender, PointerRoutedEventArgs e)
+    {
+        if (!e.GetCurrentPoint((UIElement)sender).Properties.IsLeftButtonPressed ||
+            !WindowInterop.TryGetCursorPosition(out int x, out int y))
+        {
+            return;
+        }
+
+        _titleDragging = true;
+        _titleDragWindowStart = AppWindow.Position;
+        _titleDragCursorStartX = x;
+        _titleDragCursorStartY = y;
+        ((UIElement)sender).CapturePointer(e.Pointer);
+        e.Handled = true;
+    }
+
+    private void OnTitleDragMoved(object sender, PointerRoutedEventArgs e)
+    {
+        if (!_titleDragging ||
+            !WindowInterop.TryGetCursorPosition(out int x, out int y))
+        {
+            return;
+        }
+
+        AppWindow.Move(new PointInt32(
+            _titleDragWindowStart.X + (x - _titleDragCursorStartX),
+            _titleDragWindowStart.Y + (y - _titleDragCursorStartY)));
+        e.Handled = true;
+    }
+
+    private void OnTitleDragReleased(object sender, PointerRoutedEventArgs e)
+    {
+        if (!_titleDragging)
+        {
+            return;
+        }
+
+        _titleDragging = false;
+        try
+        {
+            ((UIElement)sender).ReleasePointerCapture(e.Pointer);
+        }
+        catch
+        {
+            // Pointer may already be gone.
+        }
+
+        e.Handled = true;
+    }
+
+    private void OnTitleDragCaptureLost(object sender, PointerRoutedEventArgs e) =>
+        _titleDragging = false;
 }

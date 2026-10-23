@@ -13,6 +13,7 @@ internal static class WindowInterop
     private const uint WM_GETMINMAXINFO = 0x0024;
     private const uint WM_SIZING = 0x0214;
     private const uint WM_EXITSIZEMOVE = 0x0232;
+    private const uint WM_MOVING = 0x0216;
     private const uint WM_NCHITTEST = 0x0084;
     private const uint WM_APPCOMMAND = 0x0319;
 
@@ -94,7 +95,8 @@ internal static class WindowInterop
         Func<double> aspect,
         Func<int, bool>? appCommand = null,
         Action? windowResizeStarted = null,
-        Action? windowMoveEnded = null)
+        Action? windowMoveEnded = null,
+        Func<WindowRect, WindowRect>? windowMoving = null)
     {
         nint hwnd = Microsoft.UI.Win32Interop.GetWindowFromWindowId(window.AppWindow.Id);
         if (Hooks.ContainsKey(hwnd))
@@ -110,7 +112,8 @@ internal static class WindowInterop
             aspect,
             appCommand,
             windowResizeStarted,
-            windowMoveEnded);
+            windowMoveEnded,
+            windowMoving);
         Hooks[hwnd] = hook;
         hook.Attach();
     }
@@ -215,6 +218,7 @@ internal static class WindowInterop
         private readonly Func<int, bool>? _appCommand;
         private readonly Action? _windowResizeStarted;
         private readonly Action? _windowMoveEnded;
+        private readonly Func<WindowRect, WindowRect>? _windowMoving;
         private readonly SubclassProc _proc;
         private bool _sizingGesture;
 
@@ -226,7 +230,8 @@ internal static class WindowInterop
             Func<double> aspect,
             Func<int, bool>? appCommand,
             Action? windowResizeStarted,
-            Action? windowMoveEnded)
+            Action? windowMoveEnded,
+            Func<WindowRect, WindowRect>? windowMoving)
         {
             _hwnd = hwnd;
             _minWidthDip = minWidthDip;
@@ -236,6 +241,7 @@ internal static class WindowInterop
             _appCommand = appCommand;
             _windowResizeStarted = windowResizeStarted;
             _windowMoveEnded = windowMoveEnded;
+            _windowMoving = windowMoving;
             _proc = WndProc;
         }
 
@@ -269,6 +275,19 @@ internal static class WindowInterop
                 info.ptMinTrackSize.Y = (int)Math.Round(_minHeightDip * scale);
                 Marshal.StructureToPtr(info, lParam, fDeleteOld: false);
                 return 0;
+            }
+
+            if (msg == WM_MOVING && _windowMoving is not null)
+            {
+                RECT moving = Marshal.PtrToStructure<RECT>(lParam);
+                WindowRect snapped = _windowMoving(
+                    new WindowRect(moving.Left, moving.Top, moving.Right, moving.Bottom));
+                moving.Left = snapped.Left;
+                moving.Top = snapped.Top;
+                moving.Right = snapped.Right;
+                moving.Bottom = snapped.Bottom;
+                Marshal.StructureToPtr(moving, lParam, fDeleteOld: false);
+                return 1;
             }
 
             if (msg == WM_SIZING && !_sizingGesture)

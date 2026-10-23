@@ -42,6 +42,7 @@
             <SolidColorBrush x:Key="SettingsCardWashBrush" Color="#14FFFFFF" />
             <SolidColorBrush x:Key="KeyChordChipBrush" Color="#12FFFFFF" />
             <SolidColorBrush x:Key="WindowTintBrush" Color="#66101114" />
+            <SolidColorBrush x:Key="DialogSurfaceBrush" Color="#F51A1B20" />
             <SolidColorBrush x:Key="CaptionButtonHoverBrush" Color="#1AFFFFFF" />
             <SolidColorBrush x:Key="CaptionButtonPressedBrush" Color="#26FFFFFF" />
             <SolidColorBrush x:Key="CaptionCloseHoverBrush" Color="#FFC42B1C" />
@@ -105,6 +106,7 @@
             <SolidColorBrush x:Key="SettingsCardWashBrush" Color="#14000000" />
             <SolidColorBrush x:Key="KeyChordChipBrush" Color="#08000000" />
             <SolidColorBrush x:Key="WindowTintBrush" Color="#66F3F3F3" />
+            <SolidColorBrush x:Key="DialogSurfaceBrush" Color="#F5FAF9F6" />
             <SolidColorBrush x:Key="CaptionButtonHoverBrush" Color="#14000000" />
             <SolidColorBrush x:Key="CaptionButtonPressedBrush" Color="#26000000" />
             <SolidColorBrush x:Key="CaptionCloseHoverBrush" Color="#FFC42B1C" />
@@ -158,6 +160,7 @@
             <SolidColorBrush x:Key="CaptionCloseHoverBrush" Color="{ThemeResource SystemColorHighlightColor}" />
             <SolidColorBrush x:Key="CaptionClosePressedBrush" Color="{ThemeResource SystemColorButtonFaceColor}" />
             <SolidColorBrush x:Key="WindowTintBrush" Color="{ThemeResource SystemColorWindowColor}" />
+            <SolidColorBrush x:Key="DialogSurfaceBrush" Color="{ThemeResource SystemColorWindowColor}" />
             <SolidColorBrush x:Key="CardBrush" Color="{ThemeResource SystemColorWindowColor}" />
             <SolidColorBrush x:Key="CardBorderBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
             <SolidColorBrush x:Key="BrandTileBrush" Color="{ThemeResource SystemColorWindowColor}" />
