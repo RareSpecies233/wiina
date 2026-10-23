@@ -7,7 +7,7 @@ Wiina 把 [IINA](https://iina.io/) 在 macOS 上的**界面逻辑**（窗口层�
 [mpv](https://mpv.io/) 作为播放内核。视觉上不照搬 AppKit，而是按 Windows 11 Fluent 规范重新设计：Segoe UI Variable、
 Segoe Fluent Icons、Mica/Acrylic、圆角与系统主题。
 
-## 状态（v1.1.2）
+## 状态（v1.2.0）
 
 - **Stage 0–8 已验收。** 播放管线、WinUI 标题栏、OSC、播放/轨道/字幕/章节/播放列表/历史、侧边栏与快速设置、
   OSD/缩略图、全屏/PiP/迷你模式/多窗口、11 页设置/搜索/快捷键/菜单/欢迎与辅助窗口、视频滤镜/10 段均衡器/
@@ -82,6 +82,17 @@ Segoe Fluent Icons、Mica/Acrylic、圆角与系统主题。
 - 置顶时标题栏文件名前显示图钉；标题栏 caption 按钮 hover 覆盖完整 40 DIP。
 - 详细记录：[docs/acceptance/v1.1.1.md](docs/acceptance/v1.1.1.md)。
 
+### v1.2.0：窗口手感、智能字幕与画质分级
+
+- PiP 的拖动条、双击提示和播放条仅在鼠标移入时显示；关闭按钮保留，返回按钮改为**置顶切换**，
+  播放/暂停图标随真实状态同步。
+- 拖动窗口靠近屏幕边缘时自动吸附；设置中可关闭该行为。
+- 智能字幕升级为 IINA 风格的**宽松匹配**：忽略 1080p/x265 等发布标签，仍避免跨集误匹配。
+- 视频设置新增 **mpv 画质预设**（自动 / 均衡 / 高质量 / 性能优先），OSC 更多菜单可直接切换。
+- 毛玻璃新增**性能模式**：固定帧 / 动态（默认）/ 始终计算；动态模式只在 titlebar/OSC 可见时采集。
+- 设置页面切换加入轻微上滑淡入动画；快捷键编辑器使用 WinUI 键位胶囊显示。
+- 详细记录：[docs/acceptance/v1.2.0.md](docs/acceptance/v1.2.0.md)。
+
 ### v1.1.2：原生音量条、单层导航与操作模式
 
 - 音量条改回**原生 WinUI 3 Slider**：85 DIP 轨道、左右 8 DIP 内边距，滑块使用系统 Fluent 圆点，
@@ -109,7 +120,7 @@ Segoe Fluent Icons、Mica/Acrylic、圆角与系统主题。
 
 发布包是免安装的绿色压缩包（无需单独安装 .NET 或 Windows App Runtime）：
 
-1. 获取 `artifacts/wiina-1.1.2-win-x64.zip`（由下方打包命令生成，或由维护者随 Release 提供）。
+1. 获取 `artifacts/wiina-1.2.0-win-x64.zip`（由下方打包命令生成，或由维护者随 Release 提供）。
 2. 解压到任意可写目录。
 3. 运行 `Wiina.exe`。设置、日志与插件目录位于 `%LOCALAPPDATA%\Wiina`。
 4. 首次启动可拖入文件/文件夹/URL，或使用欢迎窗口打开媒体。
@@ -159,7 +170,7 @@ pwsh -File scripts/package.ps1
 构建到 `src/Wiina.App/bin/x64/Release/...`（不使用 `dotnet publish`，避免 WinUI 3 unpackaged
 应用出现 XBF parse 失败）→ 复制构建输出、`third_party/libmpv/libmpv-2.dll`、`LICENSE`、
 `NOTICE`、`README.md` 并生成 `SOURCE.txt`（源码地址 + 提交 + 构建时间）→ 校验必需文件与
-**待打包 `Wiina.dll` 的版本** → 生成 `artifacts/wiina-1.1.2-win-x64.zip`。`artifacts/` 与
+**待打包 `Wiina.dll` 的版本** → 生成 `artifacts/wiina-1.2.0-win-x64.zip`。`artifacts/` 与
 `third_party/libmpv/` 均被 gitignore，仓库不提交二进制。缺少任一必需文件或版本不匹配时脚本直接失败。
 
 ## 本地化与无障碍
