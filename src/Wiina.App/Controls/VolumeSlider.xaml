@@ -12,26 +12,53 @@
                 Command="{Binding MuteCommand}"
                 loc:Loc.ToolTip="ui.muteShortcut"
                 loc:Loc.AutomationName="osd.mute" />
-        <!-- 12 px inset each side keeps the 20 px thumb inside the host at 0%
-             and 100% (WinUI's default template otherwise clips half of it at
-             the maximum on high-DPI displays). -->
+        <!-- Compact custom track. A native Slider needs a 32 px high template and
+             reserves thumb overhang at both ends; its default chrome therefore
+             clips at fixed heights and fixed widths, especially under 200% DPI.
+             This track owns its geometry so the 16 px thumb always stays inside,
+             at any scale and at both 0% and 100%. -->
         <Grid x:Name="SliderHost"
               Width="94"
               Height="28"
               VerticalAlignment="Center"
-              ToolTipService.ToolTip="{Binding VolumeText}">
+              Background="Transparent"
+              ToolTipService.ToolTip="{Binding VolumeText}"
+              loc:Loc.AutomationName="ui.volume"
+              PointerPressed="OnSliderPointerPressed"
+              PointerMoved="OnSliderPointerMoved"
+              PointerReleased="OnSliderPointerReleased"
+              PointerCaptureLost="OnSliderPointerCaptureLost"
+              PointerWheelChanged="OnSliderWheelChanged"
+              SizeChanged="OnSliderSizeChanged"
+              Loaded="OnSliderLoaded">
+            <Border x:Name="Track"
+                    Height="4"
+                    CornerRadius="2"
+                    VerticalAlignment="Center"
+                    Background="{ThemeResource SliderTrackFill}" />
+            <Border x:Name="Fill"
+                    Height="4"
+                    CornerRadius="2"
+                    HorizontalAlignment="Left"
+                    VerticalAlignment="Center"
+                    Background="{ThemeResource AccentBrush}" />
+            <Ellipse x:Name="Thumb"
+                     Width="16"
+                     Height="16"
+                     HorizontalAlignment="Left"
+                     VerticalAlignment="Center"
+                     Fill="{ThemeResource AccentBrush}"
+                     Stroke="{ThemeResource SliderThumbBorderBrush}"
+                     StrokeThickness="2" />
+            <!-- Value relay for the existing TwoWay binding. It is not rendered,
+                 but still raises ValueChanged for the custom visuals. -->
             <Slider x:Name="VolumeInput"
                     Minimum="0"
                     Maximum="100"
                     StepFrequency="1"
                     Value="{Binding VolumeUi, Mode=TwoWay}"
-                    IsThumbToolTipEnabled="False"
-                    Margin="12,0"
-                    VerticalAlignment="Center"
-                    PointerWheelChanged="OnSliderWheelChanged"
-                    loc:Loc.AutomationName="ui.volume" />
+                    Visibility="Collapsed"
+                    ValueChanged="OnVolumeValueChanged" />
         </Grid>
     </StackPanel>
 </UserControl>
-
-

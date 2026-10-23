@@ -13,7 +13,9 @@
           PointerMoved="OnRootPointerMoved"
           PointerExited="OnRootPointerExited">
         <Grid.KeyboardAccelerators>
-            <KeyboardAccelerator Key="F11" Invoked="OnToggleFullscreen" />
+            <!-- F11 is handled by the configurable key map in OnRootKeyDown.
+                 A second KeyboardAccelerator here lets WinUI show its own
+                 "F11" accelerator tooltip over the video. -->
             <KeyboardAccelerator Key="Escape" Invoked="OnEscape" />
         </Grid.KeyboardAccelerators>
         <Grid.RowDefinitions>

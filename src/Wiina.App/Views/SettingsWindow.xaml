@@ -64,7 +64,7 @@
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" />
-                <ColumnDefinition Width="140" />
+                <ColumnDefinition Width="*" />
             </Grid.ColumnDefinitions>
 
             <Grid x:Name="DragRegion"
@@ -79,10 +79,10 @@
             </Grid>
 
             <TextBox x:Name="SearchBox"
-                     Grid.Column="1"
+                     Grid.ColumnSpan="3"
                      Width="280"
                      Height="32"
-                     Margin="0,0,12,0"
+                     HorizontalAlignment="Center"
                      VerticalAlignment="Center"
                      loc:Loc.Placeholder="ui.searchSettings"
                      FontSize="12"
@@ -144,8 +144,8 @@
                 Grid.RowSpan="2"
                 Width="280"
                 MaxHeight="320"
-                Margin="0,52,152,0"
-                HorizontalAlignment="Right"
+                Margin="0,52,0,0"
+                HorizontalAlignment="Center"
                 VerticalAlignment="Top"
                 Padding="4"
                 Visibility="Collapsed"

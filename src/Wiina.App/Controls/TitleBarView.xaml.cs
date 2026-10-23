@@ -109,7 +109,11 @@ public sealed partial class TitleBarView : UserControl
 
     public bool IsPinned
     {
-        set => PinButton.Content = value ? "\uE77A" : "\uE718";
+        set
+        {
+            PinButton.Content = value ? "\uE77A" : "\uE718";
+            PinIndicator.Visibility = value ? Visibility.Visible : Visibility.Collapsed;
+        }
     }
 
     public TimelineControl TopTimeline => TopTimelineControl;

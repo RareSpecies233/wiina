@@ -18,15 +18,11 @@
                 Command="{Binding PlaylistCommand}"
                 loc:Loc.ToolTip="ui.playlistShortcut"
                 loc:Loc.AutomationName="ui.playlist" />
-        <Button Style="{StaticResource OscIconButtonStyle}"
-                Content="&#xE713;"
-                Command="{Binding SettingsCommand}"
-                loc:Loc.ToolTip="ui.quickSettings"
-                loc:Loc.AutomationName="ui.settings" />
         <Button x:Name="FullscreenButton"
                 Style="{StaticResource OscIconButtonStyle}"
                 Content="&#xE740;"
                 Command="{Binding FullscreenCommand}"
+                loc:Loc.ToolTip="ui.fullscreen"
                 loc:Loc.AutomationName="ui.fullscreen" />
         <Button x:Name="MoreButton"
                 Style="{StaticResource OscIconButtonStyle}"

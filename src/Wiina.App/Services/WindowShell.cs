@@ -79,6 +79,34 @@ internal static class WindowShell
 
     public static nint Handle(Window window) => WindowNative.GetWindowHandle(window);
 
+    /// <summary>
+    /// Restores a secondary window from minimize and raises it above the
+    /// player. <see cref="Window.Activate"/> alone is a no-op when the window
+    /// already exists but is behind another foreground window.
+    /// </summary>
+    public static void BringToForeground(Window window)
+    {
+        try
+        {
+            nint hwnd = Handle(window);
+            ShowWindow(hwnd, SW_RESTORE);
+            window.Activate();
+            SetForegroundWindow(hwnd);
+        }
+        catch
+        {
+            // Window may be closing; activation is best effort.
+        }
+    }
+
+    private const int SW_RESTORE = 9;
+
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    private static extern bool ShowWindow(nint hWnd, int nCmdShow);
+
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    private static extern bool SetForegroundWindow(nint hWnd);
+
     public static void InitializePicker(Window window, object picker) =>
         InitializeWithWindow.Initialize(picker, Handle(window));
 

@@ -7,14 +7,13 @@
     xmlns:controls="using:Wiina.App.Controls">
 
     <UserControl.Resources>
-        <!-- Compact WinUI-style tab (TabView/Pivot underline) for the quick
-             settings page tabs: no filled chrome, secondary text when idle,
-             accent text plus a 2px accent underline when checked, and only a
-             small foreground shift on hover. -->
+        <!-- Boxed Fluent tab for the quick settings page tabs. This mirrors
+             the native WinUI selection chrome (rounded control fill + outline)
+             instead of painting a custom underline that only mimics TabView. -->
         <Style x:Key="QuickPageTabStyle" TargetType="ToggleButton">
             <Setter Property="Height" Value="30" />
-            <Setter Property="MinWidth" Value="56" />
-            <Setter Property="Padding" Value="10,0" />
+            <Setter Property="MinWidth" Value="64" />
+            <Setter Property="Padding" Value="12,0" />
             <Setter Property="Background" Value="Transparent" />
             <Setter Property="BorderThickness" Value="0" />
             <Setter Property="UseSystemFocusVisuals" Value="True" />
@@ -30,6 +29,7 @@
                                     <VisualState x:Name="Normal" />
                                     <VisualState x:Name="PointerOver">
                                         <VisualState.Setters>
+                                            <Setter Target="TabBox.Background" Value="{ThemeResource SidebarTabHoverBrush}" />
                                             <Setter Target="TabContent.Foreground" Value="{ThemeResource PrimaryTextBrush}" />
                                         </VisualState.Setters>
                                     </VisualState>
@@ -47,33 +47,30 @@
                                 <VisualStateGroup x:Name="CheckStates">
                                     <VisualState x:Name="Checked">
                                         <VisualState.Setters>
+                                            <Setter Target="TabBox.Background" Value="{ThemeResource SidebarTabSelectedBrush}" />
+                                            <Setter Target="TabBox.BorderBrush" Value="{ThemeResource PanelBorderBrush}" />
                                             <Setter Target="TabContent.Foreground" Value="{ThemeResource AccentBrush}" />
-                                            <Setter Target="TabUnderline.Background" Value="{ThemeResource AccentBrush}" />
                                         </VisualState.Setters>
                                     </VisualState>
                                     <VisualState x:Name="Unchecked" />
                                     <VisualState x:Name="Indeterminate" />
                                 </VisualStateGroup>
                             </VisualStateManager.VisualStateGroups>
-                            <Grid.RowDefinitions>
-                                <RowDefinition Height="*" />
-                                <RowDefinition Height="2" />
-                            </Grid.RowDefinitions>
-                            <ContentPresenter x:Name="TabContent"
-                                              Grid.Row="0"
-                                              Margin="{TemplateBinding Padding}"
-                                              HorizontalAlignment="Center"
-                                              VerticalAlignment="Center"
-                                              Content="{TemplateBinding Content}"
-                                              ContentTemplate="{TemplateBinding ContentTemplate}"
-                                              FontFamily="{TemplateBinding FontFamily}"
-                                              FontSize="{TemplateBinding FontSize}"
-                                              Foreground="{TemplateBinding Foreground}" />
-                            <Border x:Name="TabUnderline"
-                                    Grid.Row="1"
-                                    Height="2"
-                                    CornerRadius="1"
-                                    Background="Transparent" />
+                            <Border x:Name="TabBox"
+                                    Background="Transparent"
+                                    BorderBrush="Transparent"
+                                    BorderThickness="1"
+                                    CornerRadius="4">
+                                <ContentPresenter x:Name="TabContent"
+                                                  Margin="{TemplateBinding Padding}"
+                                                  HorizontalAlignment="Center"
+                                                  VerticalAlignment="Center"
+                                                  Content="{TemplateBinding Content}"
+                                                  ContentTemplate="{TemplateBinding ContentTemplate}"
+                                                  FontFamily="{TemplateBinding FontFamily}"
+                                                  FontSize="{TemplateBinding FontSize}"
+                                                  Foreground="{TemplateBinding Foreground}" />
+                            </Border>
                         </Grid>
                     </ControlTemplate>
                 </Setter.Value>

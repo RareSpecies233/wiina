@@ -61,6 +61,14 @@
                            Width="20"
                            Height="20"
                            Stretch="Uniform" />
+                    <FontIcon x:Name="PinIndicator"
+                              Glyph="&#xE718;"
+                              FontSize="12"
+                              Foreground="{ThemeResource AccentBrush}"
+                              Margin="4,0,0,0"
+                              VerticalAlignment="Center"
+                              Visibility="Collapsed"
+                              loc:Loc.ToolTip="ui.alwaysOnTop" />
                     <TextBlock x:Name="TitleText"
                                Text="Wiina"
                                Style="{StaticResource TitleTextStyle}"

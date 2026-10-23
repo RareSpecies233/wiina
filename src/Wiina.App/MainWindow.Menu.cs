@@ -51,6 +51,14 @@ public sealed partial class MainWindow
             flyout.Items.Add(top);
         }
 
+        // Settings is a frequent destination but not a player command, so it
+        // lives at the bottom of the overflow menu rather than as a permanent
+        // gear button crowding the OSC transport row.
+        flyout.Items.Add(new MenuFlyoutSeparator());
+        var settings = new MenuFlyoutItem { Text = Loc.T("ui.settings") };
+        settings.Click += (_, _) => App.ShowSettingsWindow();
+        flyout.Items.Add(settings);
+
         flyout.ShowAt(anchor);
     }
 

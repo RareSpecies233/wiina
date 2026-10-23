@@ -1559,12 +1559,6 @@ public sealed partial class MainWindow : Window
             height));
     }
 
-    private void OnToggleFullscreen(KeyboardAccelerator sender, KeyboardAcceleratorInvokedEventArgs args)
-    {
-        args.Handled = true;
-        ToggleFullscreen();
-    }
-
     private void OnEscape(KeyboardAccelerator sender, KeyboardAcceleratorInvokedEventArgs args)
     {
         if (_mode.Current != PlayerMode.Normal)

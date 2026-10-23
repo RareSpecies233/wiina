@@ -335,6 +335,7 @@ public partial class App : Application
         if (_settingsWindow is { } existing)
         {
             existing.NavigateTo(page, rowId);
+            WindowShell.BringToForeground(existing);
             return;
         }
 
@@ -354,7 +355,7 @@ public partial class App : Application
     {
         if (_keyBindingWindow is { } existing)
         {
-            existing.Activate();
+            WindowShell.BringToForeground(existing);
             return;
         }
 

@@ -380,17 +380,24 @@ internal sealed class ChromeBlur
         {
             return;
         }
-        Color tintColor = osd.ActualTheme == ElementTheme.Light
-            ? Color.FromArgb(0xB3, 0xF3, 0xF3, 0xF3)
-            : Color.FromArgb(0xB3, 0x10, 0x11, 0x14);
+        var tintBrush = new SolidColorBrush(OsdTintColor(osd.ActualTheme));
         var grid = new Grid();
         var layer = new ChromeBlurLayer(border.CornerRadius.TopLeft);
         var tint = new Border
         {
-            Background = new SolidColorBrush(tintColor),
+            Background = tintBrush,
             CornerRadius = border.CornerRadius,
             IsHitTestVisible = false,
         };
+        // The settings window can switch the app theme while this OSD lives on.
+        // Recolour the injected tint instead of freezing the startup theme.
+        osd.ActualThemeChanged += (_, _) =>
+            tintBrush.Color = OsdTintColor(root.ActualTheme);
+        // The OSD can be reparented/skinned independently of the window root;
+        // follow the root as well so a Settings theme switch never leaves a
+        // light OSD on a dark player (or vice versa) until restart.
+        root.ActualThemeChanged += (_, _) =>
+            tintBrush.Color = OsdTintColor(root.ActualTheme);
         grid.Children.Add(layer);
         grid.Children.Add(tint);
         // The OSD control re-applies its border padding whenever a message is
@@ -433,6 +440,11 @@ internal sealed class ChromeBlur
         };
         _osdInjected = true;
     }
+
+    private static Color OsdTintColor(ElementTheme theme) =>
+        theme == ElementTheme.Light
+            ? Color.FromArgb(0xB3, 0xF3, 0xF3, 0xF3)
+            : Color.FromArgb(0xB3, 0x10, 0x11, 0x14);
 
     private static OsdText? FindOsd(DependencyObject node)
     {
