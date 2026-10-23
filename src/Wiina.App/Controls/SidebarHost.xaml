@@ -8,46 +8,48 @@
     Width="360">
 
     <UserControl.Resources>
-        <!-- WinUI underline tab for the sidebar's icon row. Keeps the same
-             40x44 hit target and shows a 2px accent bar under the active page
-             instead of a filled pill, matching the page tabs below. -->
-        <Style x:Key="SidebarTypeTabStyle" TargetType="ToggleButton">
-            <Setter Property="Width" Value="40" />
-            <Setter Property="Height" Value="44" />
-            <Setter Property="Padding" Value="0" />
+        <!-- Compact settings-style locator: icon + label, with a two pixel
+             accent rail under the current item. It replaces the old double
+             layer (icon-only type row + boxed page tabs) with one navigator. -->
+        <Style x:Key="SidebarNavTabStyle" TargetType="ToggleButton">
+            <Setter Property="Height" Value="30" />
+            <Setter Property="MinWidth" Value="0" />
+            <Setter Property="Padding" Value="2,0" />
             <Setter Property="Background" Value="Transparent" />
             <Setter Property="BorderThickness" Value="0" />
-            <Setter Property="FontFamily" Value="{StaticResource IconFont}" />
-            <Setter Property="FontSize" Value="15" />
+            <Setter Property="UseSystemFocusVisuals" Value="True" />
+            <Setter Property="FontFamily" Value="{StaticResource AppFont}" />
+            <Setter Property="FontSize" Value="10" />
             <Setter Property="Foreground" Value="{ThemeResource SecondaryTextBrush}" />
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="ToggleButton">
-                        <Grid x:Name="TypeTabRoot" Background="Transparent">
+                        <Grid x:Name="NavRoot" Background="Transparent">
                             <VisualStateManager.VisualStateGroups>
                                 <VisualStateGroup x:Name="CommonStates">
                                     <VisualState x:Name="Normal" />
                                     <VisualState x:Name="PointerOver">
                                         <VisualState.Setters>
-                                            <Setter Target="TypeTabPresenter.Foreground" Value="{ThemeResource PrimaryTextBrush}" />
+                                            <Setter Target="NavBox.Background" Value="{ThemeResource SidebarTabHoverBrush}" />
+                                            <Setter Target="NavPresenter.Foreground" Value="{ThemeResource PrimaryTextBrush}" />
                                         </VisualState.Setters>
                                     </VisualState>
                                     <VisualState x:Name="Pressed">
                                         <VisualState.Setters>
-                                            <Setter Target="TypeTabPresenter.Opacity" Value="0.7" />
+                                            <Setter Target="NavPresenter.Opacity" Value="0.7" />
                                         </VisualState.Setters>
                                     </VisualState>
                                     <VisualState x:Name="Disabled">
                                         <VisualState.Setters>
-                                            <Setter Target="TypeTabPresenter.Opacity" Value="0.4" />
+                                            <Setter Target="NavPresenter.Opacity" Value="0.4" />
                                         </VisualState.Setters>
                                     </VisualState>
                                 </VisualStateGroup>
                                 <VisualStateGroup x:Name="CheckStates">
                                     <VisualState x:Name="Checked">
                                         <VisualState.Setters>
-                                            <Setter Target="TypeTabPresenter.Foreground" Value="{ThemeResource AccentBrush}" />
-                                            <Setter Target="TypeTabUnderline.Background" Value="{ThemeResource AccentBrush}" />
+                                            <Setter Target="NavPresenter.Foreground" Value="{ThemeResource PrimaryTextBrush}" />
+                                            <Setter Target="NavUnderline.Background" Value="{ThemeResource AccentBrush}" />
                                         </VisualState.Setters>
                                     </VisualState>
                                     <VisualState x:Name="Unchecked" />
@@ -58,15 +60,18 @@
                                 <RowDefinition Height="*" />
                                 <RowDefinition Height="2" />
                             </Grid.RowDefinitions>
-                            <ContentPresenter x:Name="TypeTabPresenter"
-                                              Grid.Row="0"
-                                              HorizontalAlignment="Center"
-                                              VerticalAlignment="Center"
-                                              Content="{TemplateBinding Content}"
-                                              FontFamily="{TemplateBinding FontFamily}"
-                                              FontSize="{TemplateBinding FontSize}"
-                                              Foreground="{TemplateBinding Foreground}" />
-                            <Border x:Name="TypeTabUnderline"
+                            <Border x:Name="NavBox"
+                                    Background="Transparent"
+                                    CornerRadius="4">
+                                <ContentPresenter x:Name="NavPresenter"
+                                                  Margin="{TemplateBinding Padding}"
+                                                  HorizontalAlignment="Center"
+                                                  VerticalAlignment="Center"
+                                                  Content="{TemplateBinding Content}"
+                                                  ContentTemplate="{TemplateBinding ContentTemplate}"
+                                                  Foreground="{TemplateBinding Foreground}" />
+                            </Border>
+                            <Border x:Name="NavUnderline"
                                     Grid.Row="1"
                                     Height="2"
                                     CornerRadius="1"
@@ -97,55 +102,148 @@
                 BorderThickness="1,0,0,0">
             <Grid>
                 <Grid.RowDefinitions>
-                    <RowDefinition Height="52" />
+                    <RowDefinition Height="46" />
                     <RowDefinition Height="*" />
                 </Grid.RowDefinitions>
 
                 <Grid x:Name="TabStrip"
                       Grid.Row="0"
-                      Margin="10,0"
+                      Margin="6,0"
                       Background="Transparent">
-                    <StackPanel x:Name="TypeTabs"
-                                Orientation="Horizontal"
-                                Spacing="2"
-                                VerticalAlignment="Center">
-                        <ToggleButton x:Name="SettingsTab"
-                                      Style="{StaticResource SidebarTypeTabStyle}"
-                                      Content="&#xE713;"
-                                      Tag="Settings"
-                                      Click="OnTypeTabClick"
-                                      loc:Loc.ToolTip="ui.quickSettings"
-                                      loc:Loc.AutomationName="ui.quickSettings" />
-                        <ToggleButton x:Name="PlaylistTab"
-                                      Style="{StaticResource SidebarTypeTabStyle}"
-                                      Content="&#xE8FD;"
-                                      Tag="Playlist"
-                                      Click="OnTypeTabClick"
-                                      loc:Loc.ToolTip="ui.playlist"
-                                      loc:Loc.AutomationName="ui.playlist" />
-                        <ToggleButton x:Name="ChaptersTab"
-                                      Style="{StaticResource SidebarTypeTabStyle}"
-                                      Content="&#xE81C;"
-                                      Tag="Chapters"
-                                      Click="OnTypeTabClick"
-                                      loc:Loc.ToolTip="ui.chapters"
-                                      loc:Loc.AutomationName="ui.chapters" />
-                        <ToggleButton x:Name="PluginsTab"
-                                      Style="{StaticResource SidebarTypeTabStyle}"
-                                      Content="&#xEA86;"
-                                      Tag="Plugins"
-                                      Click="OnTypeTabClick"
-                                      loc:Loc.ToolTip="ui.pluginsStage9"
-                                      loc:Loc.AutomationName="ui.plugins" />
-                    </StackPanel>
-
                     <Button x:Name="CloseButton"
+                            Width="24"
+                            Height="24"
+                            Padding="0"
                             Style="{StaticResource OscIconButtonStyle}"
                             Content="&#xE76B;"
-                            HorizontalAlignment="Right"
+                            HorizontalAlignment="Left"
+                            VerticalAlignment="Center"
                             Click="OnCloseClick"
                             loc:Loc.ToolTip="ui.closeSidebar"
                             loc:Loc.AutomationName="ui.closeSidebar" />
+
+                    <!-- Playlist / chapters / plugins mode: four category targets. -->
+                    <StackPanel x:Name="CategoryTabs"
+                                Orientation="Horizontal"
+                                Spacing="2"
+                                Margin="28,0,0,0"
+                                HorizontalAlignment="Center"
+                                VerticalAlignment="Center">
+                        <ToggleButton x:Name="SettingsTab"
+                                      Style="{StaticResource SidebarNavTabStyle}"
+                                      Tag="Settings"
+                                      Click="OnTypeTabClick"
+                                      loc:Loc.AutomationName="ui.quickSettings">
+                            <StackPanel Orientation="Horizontal" Spacing="2">
+                                <TextBlock Text="&#xE713;" FontFamily="{StaticResource IconFont}" FontSize="10" VerticalAlignment="Center" />
+                                <TextBlock loc:Loc.Text="ui.settings" FontSize="10" VerticalAlignment="Center" />
+                            </StackPanel>
+                        </ToggleButton>
+                        <ToggleButton x:Name="PlaylistTab"
+                                      Style="{StaticResource SidebarNavTabStyle}"
+                                      Tag="Playlist"
+                                      Click="OnTypeTabClick"
+                                      loc:Loc.AutomationName="ui.playlist">
+                            <StackPanel Orientation="Horizontal" Spacing="2">
+                                <TextBlock Text="&#xE8FD;" FontFamily="{StaticResource IconFont}" FontSize="10" VerticalAlignment="Center" />
+                                <TextBlock loc:Loc.Text="ui.playlist" FontSize="10" VerticalAlignment="Center" />
+                            </StackPanel>
+                        </ToggleButton>
+                        <ToggleButton x:Name="ChaptersTab"
+                                      Style="{StaticResource SidebarNavTabStyle}"
+                                      Tag="Chapters"
+                                      Click="OnTypeTabClick"
+                                      loc:Loc.AutomationName="ui.chapters">
+                            <StackPanel Orientation="Horizontal" Spacing="2">
+                                <TextBlock Text="&#xE81C;" FontFamily="{StaticResource IconFont}" FontSize="10" VerticalAlignment="Center" />
+                                <TextBlock loc:Loc.Text="ui.chapters" FontSize="10" VerticalAlignment="Center" />
+                            </StackPanel>
+                        </ToggleButton>
+                        <ToggleButton x:Name="PluginsTab"
+                                      Style="{StaticResource SidebarNavTabStyle}"
+                                      Tag="Plugins"
+                                      Click="OnTypeTabClick"
+                                      loc:Loc.AutomationName="ui.plugins">
+                            <StackPanel Orientation="Horizontal" Spacing="2">
+                                <TextBlock Text="&#xEA86;" FontFamily="{StaticResource IconFont}" FontSize="10" VerticalAlignment="Center" />
+                                <TextBlock loc:Loc.Text="ui.plugins" FontSize="10" VerticalAlignment="Center" />
+                            </StackPanel>
+                        </ToggleButton>
+                    </StackPanel>
+
+                    <!-- Quick settings mode: the category row expands into the
+                         four settings pages plus the three content panels. -->
+                    <StackPanel x:Name="PageTabs"
+                                Orientation="Horizontal"
+                                Spacing="1"
+                                Margin="28,0,0,0"
+                                HorizontalAlignment="Center"
+                                VerticalAlignment="Center"
+                                Visibility="Collapsed">
+                        <ToggleButton x:Name="LayoutTab"
+                                      Style="{StaticResource SidebarNavTabStyle}"
+                                      Tag="Layout"
+                                      Click="OnPageTabClick">
+                            <StackPanel Orientation="Horizontal" Spacing="2">
+                                <TextBlock Text="&#xE80F;" FontFamily="{StaticResource IconFont}" FontSize="10" VerticalAlignment="Center" />
+                                <TextBlock loc:Loc.Text="ui.layout" FontSize="10" VerticalAlignment="Center" />
+                            </StackPanel>
+                        </ToggleButton>
+                        <ToggleButton x:Name="VideoTab"
+                                      Style="{StaticResource SidebarNavTabStyle}"
+                                      Tag="Video"
+                                      Click="OnPageTabClick">
+                            <StackPanel Orientation="Horizontal" Spacing="2">
+                                <TextBlock Text="&#xE714;" FontFamily="{StaticResource IconFont}" FontSize="10" VerticalAlignment="Center" />
+                                <TextBlock loc:Loc.Text="osd.track.video" FontSize="10" VerticalAlignment="Center" />
+                            </StackPanel>
+                        </ToggleButton>
+                        <ToggleButton x:Name="AudioTab"
+                                      Style="{StaticResource SidebarNavTabStyle}"
+                                      Tag="Audio"
+                                      Click="OnPageTabClick">
+                            <StackPanel Orientation="Horizontal" Spacing="2">
+                                <TextBlock Text="&#xE8D6;" FontFamily="{StaticResource IconFont}" FontSize="10" VerticalAlignment="Center" />
+                                <TextBlock loc:Loc.Text="osd.track.audio" FontSize="10" VerticalAlignment="Center" />
+                            </StackPanel>
+                        </ToggleButton>
+                        <ToggleButton x:Name="SubtitlesTab"
+                                      Style="{StaticResource SidebarNavTabStyle}"
+                                      Tag="Subtitles"
+                                      Click="OnPageTabClick">
+                            <StackPanel Orientation="Horizontal" Spacing="2">
+                                <TextBlock Text="&#xE8D8;" FontFamily="{StaticResource IconFont}" FontSize="10" VerticalAlignment="Center" />
+                                <TextBlock loc:Loc.Text="osd.track.subtitle" FontSize="10" VerticalAlignment="Center" />
+                            </StackPanel>
+                        </ToggleButton>
+                        <ToggleButton x:Name="PlaylistPageTab"
+                                      Style="{StaticResource SidebarNavTabStyle}"
+                                      Tag="Playlist"
+                                      Click="OnPageTabClick">
+                            <StackPanel Orientation="Horizontal" Spacing="2">
+                                <TextBlock Text="&#xE8FD;" FontFamily="{StaticResource IconFont}" FontSize="10" VerticalAlignment="Center" />
+                                <TextBlock loc:Loc.Text="ui.playlist" FontSize="10" VerticalAlignment="Center" />
+                            </StackPanel>
+                        </ToggleButton>
+                        <ToggleButton x:Name="ChaptersPageTab"
+                                      Style="{StaticResource SidebarNavTabStyle}"
+                                      Tag="Chapters"
+                                      Click="OnPageTabClick">
+                            <StackPanel Orientation="Horizontal" Spacing="2">
+                                <TextBlock Text="&#xE81C;" FontFamily="{StaticResource IconFont}" FontSize="10" VerticalAlignment="Center" />
+                                <TextBlock loc:Loc.Text="ui.chapters" FontSize="10" VerticalAlignment="Center" />
+                            </StackPanel>
+                        </ToggleButton>
+                        <ToggleButton x:Name="PluginsPageTab"
+                                      Style="{StaticResource SidebarNavTabStyle}"
+                                      Tag="Plugins"
+                                      Click="OnPageTabClick">
+                            <StackPanel Orientation="Horizontal" Spacing="2">
+                                <TextBlock Text="&#xEA86;" FontFamily="{StaticResource IconFont}" FontSize="10" VerticalAlignment="Center" />
+                                <TextBlock loc:Loc.Text="ui.plugins" FontSize="10" VerticalAlignment="Center" />
+                            </StackPanel>
+                        </ToggleButton>
+                    </StackPanel>
                 </Grid>
 
                 <Grid Grid.Row="1">
@@ -165,5 +263,3 @@
                 loc:Loc.ToolTip="ui.resizeSidebar" />
     </Grid>
 </UserControl>
-
-

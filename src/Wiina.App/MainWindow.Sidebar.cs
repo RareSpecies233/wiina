@@ -44,6 +44,12 @@ public sealed partial class MainWindow
     {
         host.CloseClicked += (_, _) => HideSidebar();
         host.TabRequested += OnSidebarTabRequested;
+        host.PageRequested += (_, page) =>
+        {
+            _settings.QuickSettingsPage = page;
+            SyncQuickSettingsPage(page);
+            ScheduleSettingsSave();
+        };
         host.WidthRequested += OnSidebarWidthRequested;
         host.WidthChangeCompleted += (_, _) =>
         {
@@ -54,12 +60,6 @@ public sealed partial class MainWindow
         };
 
         host.QuickSettings.SettingChanged += OnQuickSettingChanged;
-        host.QuickSettings.PageChanged += (_, page) =>
-        {
-            _settings.QuickSettingsPage = page;
-            SyncQuickSettingsPage(page);
-            ScheduleSettingsSave();
-        };
 
         host.Playlist.AddRequested += (_, _) => _ = AddFilesToPlaylistAsync();
         host.Playlist.SaveRequested += (_, _) => _ = SavePlaylistPickerAsync();
@@ -146,13 +146,11 @@ public sealed partial class MainWindow
             return;
         }
 
-        SidebarToggleResult result = _sidebar.Toggle(host.Side, e.Type);
-        if (result != SidebarToggleResult.Hidden)
-        {
-            _settings.SidebarSide = host.Side;
-            _settings.SidebarType = e.Type;
-        }
-
+        // The locator is a mode switch, not a close toggle: choosing another
+        // section while quick settings is open keeps the panel visible.
+        _sidebar.Show(host.Side, e.Type);
+        _settings.SidebarSide = host.Side;
+        _settings.SidebarType = e.Type;
         ApplySidebarState(animate: true);
         SaveSidebarSettings();
     }
@@ -411,8 +409,8 @@ public sealed partial class MainWindow
 
     private void SyncQuickSettingsPage(QuickSettingsPage page)
     {
-        SidebarLeading.QuickSettings.ShowPage(page);
-        SidebarTrailing.QuickSettings.ShowPage(page);
+        SidebarLeading.SetPage(page);
+        SidebarTrailing.SetPage(page);
     }
 
     private void SyncQuickSettingsValues()

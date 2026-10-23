@@ -107,8 +107,6 @@ public sealed partial class QuickSettingsView : UserControl
 
     public event EventHandler<QuickSettingChangedEventArgs>? SettingChanged;
 
-    public event EventHandler<QuickSettingsPage>? PageChanged;
-
     public QuickSettingsPage CurrentPage => _page;
 
     private void SetupStaticOptions()
@@ -459,10 +457,6 @@ public sealed partial class QuickSettingsView : UserControl
             ? Visibility.Visible
             : Visibility.Collapsed;
 
-        LayoutPageButton.IsChecked = page == QuickSettingsPage.Layout;
-        VideoPageButton.IsChecked = page == QuickSettingsPage.Video;
-        AudioPageButton.IsChecked = page == QuickSettingsPage.Audio;
-        SubtitlePageButton.IsChecked = page == QuickSettingsPage.Subtitles;
     }
 
     private void PopulateTrackBox(ComboBox box, TrackType type)
@@ -624,16 +618,6 @@ public sealed partial class QuickSettingsView : UserControl
         }
 
         return 0;
-    }
-
-    private void OnPageButtonClick(object sender, RoutedEventArgs e)
-    {
-        if (sender is ToggleButton { Tag: string tag } &&
-            Enum.TryParse(tag, out QuickSettingsPage page))
-        {
-            ShowPage(page);
-            PageChanged?.Invoke(this, page);
-        }
     }
 
     private void OnComboChanged(object sender, SelectionChangedEventArgs e)

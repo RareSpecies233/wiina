@@ -6,7 +6,8 @@
 - Stage 11：`stage-11.md`
 - 修复轮次：[v1-polish](v1-polish.md) · [v1-polish2](v1-polish2.md) ·
   [v1-polish3](v1-polish3.md) · [v1-polish4](v1-polish4.md)
-- 1.1.0：[v1.1.0](v1.1.0.md) · 1.1.1：[v1.1.1](v1.1.1.md)
+- 1.1.0：[v1.1.0](v1.1.0.md) · 1.1.1：[v1.1.1](v1.1.1.md) ·
+  1.1.2：[v1.1.2](v1.1.2.md)
 
 ## 模板
 

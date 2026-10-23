@@ -53,7 +53,10 @@
             <SolidColorBrush x:Key="PrimaryTextBrush" Color="#FFFFFFFF" />
             <SolidColorBrush x:Key="SecondaryTextBrush" Color="#B3FFFFFF" />
             <SolidColorBrush x:Key="TertiaryTextBrush" Color="#80FFFFFF" />
-            <SolidColorBrush x:Key="AccentBrush" Color="#FF4CC2FF" />
+            <!-- Follow the Windows accent color instead of a hard-coded cyan;
+                 this drives OSD rails, locator underlines, pins and the native
+                 slider value fill. -->
+            <SolidColorBrush x:Key="AccentBrush" Color="{ThemeResource SystemAccentColor}" />
             <SolidColorBrush x:Key="HoverBrush" Color="#1FFFFFFF" />
             <SolidColorBrush x:Key="PressedBrush" Color="#33FFFFFF" />
             <SolidColorBrush x:Key="SubtleBrush" Color="#0DFFFFFF" />
@@ -64,7 +67,7 @@
             <SolidColorBrush x:Key="SidebarTabSelectedBrush" Color="#26FFFFFF" />
             <SolidColorBrush x:Key="SidebarTabSelectedBorderBrush" Color="#4DFFFFFF" />
             <SolidColorBrush x:Key="SidebarTabHoverBrush" Color="#14FFFFFF" />
-            <SolidColorBrush x:Key="SidebarRowCurrentBrush" Color="#1F4CC2FF" />
+            <SolidColorBrush x:Key="SidebarRowCurrentBrush" Color="{ThemeResource SystemAccentColor}" Opacity="0.12" />
             <SolidColorBrush x:Key="SidebarRowHoverBrush" Color="#0DFFFFFF" />
         </ResourceDictionary>
 
@@ -112,7 +115,7 @@
             <SolidColorBrush x:Key="PrimaryTextBrush" Color="#E4000000" />
             <SolidColorBrush x:Key="SecondaryTextBrush" Color="#99000000" />
             <SolidColorBrush x:Key="TertiaryTextBrush" Color="#66000000" />
-            <SolidColorBrush x:Key="AccentBrush" Color="#FF005FB8" />
+            <SolidColorBrush x:Key="AccentBrush" Color="{ThemeResource SystemAccentColor}" />
             <SolidColorBrush x:Key="HoverBrush" Color="#0F000000" />
             <SolidColorBrush x:Key="PressedBrush" Color="#1F000000" />
             <SolidColorBrush x:Key="SubtleBrush" Color="#08000000" />
@@ -123,7 +126,7 @@
             <SolidColorBrush x:Key="SidebarTabSelectedBrush" Color="#14000000" />
             <SolidColorBrush x:Key="SidebarTabSelectedBorderBrush" Color="#33000000" />
             <SolidColorBrush x:Key="SidebarTabHoverBrush" Color="#0A000000" />
-            <SolidColorBrush x:Key="SidebarRowCurrentBrush" Color="#1F005FB8" />
+            <SolidColorBrush x:Key="SidebarRowCurrentBrush" Color="{ThemeResource SystemAccentColor}" Opacity="0.12" />
             <SolidColorBrush x:Key="SidebarRowHoverBrush" Color="#08000000" />
         </ResourceDictionary>
 

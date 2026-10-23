@@ -13,7 +13,7 @@
 ; It intentionally ships the same payload as the portable zip and nothing else.
 
 #define MyAppName "Wiina"
-#define MyAppVersion "1.1.1"
+#define MyAppVersion "1.1.2"
 #define MyAppPublisher "Wiina contributors"
 #define MyAppUrl "https://github.com/RareSpecies233/wiina"
 #define MyAppExeName "Wiina.exe"

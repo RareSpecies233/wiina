@@ -117,6 +117,9 @@ public sealed partial class SidebarHost : UserControl
 
     public event EventHandler<SidebarTabRequestedEventArgs>? TabRequested;
 
+    /// <summary>Raised when the quick-settings page locator changes page.</summary>
+    public event EventHandler<QuickSettingsPage>? PageRequested;
+
     /// <summary>Raised continuously while the grip is dragged (unclamped DIP).</summary>
     public event EventHandler<SidebarWidthRequestedEventArgs>? WidthRequested;
 
@@ -152,9 +155,6 @@ public sealed partial class SidebarHost : UserControl
             ? HorizontalAlignment.Left
             : HorizontalAlignment.Right;
         CloseButton.Content = trailing ? "\uE76B" : "\uE76C";
-        TypeTabs.HorizontalAlignment = trailing
-            ? HorizontalAlignment.Right
-            : HorizontalAlignment.Left;
         ToolTipService.SetToolTip(CloseButton, Loc.T("sidebar.close"));
     }
 
@@ -176,13 +176,39 @@ public sealed partial class SidebarHost : UserControl
             ? Visibility.Visible
             : Visibility.Collapsed;
 
-        SettingsTab.IsChecked = type == SidebarType.Settings;
+        bool settings = type == SidebarType.Settings;
+        CategoryTabs.Visibility = settings ? Visibility.Collapsed : Visibility.Visible;
+        PageTabs.Visibility = settings ? Visibility.Visible : Visibility.Collapsed;
+        SettingsTab.IsChecked = settings;
         PlaylistTab.IsChecked = type == SidebarType.Playlist;
         ChaptersTab.IsChecked = type == SidebarType.Chapters;
         PluginsTab.IsChecked = type == SidebarType.Plugins;
+        if (settings)
+        {
+            UpdatePageChecks(SettingsContent.CurrentPage);
+        }
     }
 
-    public void SetPage(QuickSettingsPage page) => SettingsContent.ShowPage(page);
+    public void SetPage(QuickSettingsPage page)
+    {
+        SettingsContent.ShowPage(page);
+        UpdatePageChecks(page);
+    }
+
+    private void UpdatePageChecks(QuickSettingsPage page)
+    {
+        LayoutTab.IsChecked = page == QuickSettingsPage.Layout;
+        VideoTab.IsChecked = page == QuickSettingsPage.Video;
+        AudioTab.IsChecked = page == QuickSettingsPage.Audio;
+        SubtitlesTab.IsChecked = page == QuickSettingsPage.Subtitles;
+
+        // The last three entries are content sections, not settings pages.
+        // Clear them when returning to the settings page row so a previously
+        // selected section cannot leave a second underline/checked state.
+        PlaylistPageTab.IsChecked = false;
+        ChaptersPageTab.IsChecked = false;
+        PluginsPageTab.IsChecked = false;
+    }
 
     public void ShowInstant()
     {
@@ -296,6 +322,26 @@ public sealed partial class SidebarHost : UserControl
     {
         if (sender is ToggleButton { Tag: string tag } &&
             Enum.TryParse(tag, out SidebarType type))
+        {
+            TabRequested?.Invoke(this, new SidebarTabRequestedEventArgs(type));
+        }
+    }
+
+    private void OnPageTabClick(object sender, RoutedEventArgs e)
+    {
+        if (sender is not ToggleButton { Tag: string tag })
+        {
+            return;
+        }
+
+        if (Enum.TryParse(tag, out QuickSettingsPage page))
+        {
+            SetPage(page);
+            PageRequested?.Invoke(this, page);
+            return;
+        }
+
+        if (Enum.TryParse(tag, out SidebarType type))
         {
             TabRequested?.Invoke(this, new SidebarTabRequestedEventArgs(type));
         }
