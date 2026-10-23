@@ -6,6 +6,25 @@
     xmlns:loc="using:Wiina.App.Localization"
     xmlns:local="using:Wiina.App.Controls">
 
+    <UserControl.Resources>
+        <!-- Fluent's caption style is 46x32 and centres in the 40px titlebar,
+             which leaves a strip above the hover fill. These local variants
+             stretch the full caption row instead; the template still centres
+             the glyph. -->
+        <Style x:Key="TitleBarCaptionButtonStyle"
+               TargetType="Button"
+               BasedOn="{StaticResource CaptionButtonStyle}">
+            <Setter Property="Height" Value="40" />
+            <Setter Property="VerticalAlignment" Value="Stretch" />
+        </Style>
+        <Style x:Key="TitleBarCaptionCloseButtonStyle"
+               TargetType="Button"
+               BasedOn="{StaticResource CaptionCloseButtonStyle}">
+            <Setter Property="Height" Value="40" />
+            <Setter Property="VerticalAlignment" Value="Stretch" />
+        </Style>
+    </UserControl.Resources>
+
     <Grid>
         <!-- Live Gaussian blur of the pixels behind the chrome (video
              included). BackdropBlur attaches a compositor child visual here;
@@ -113,19 +132,19 @@
                             Grid.Column="2"
                             Orientation="Horizontal"
                             HorizontalAlignment="Right"
-                            VerticalAlignment="Center"
-                            Height="32">
-                    <Button Style="{StaticResource CaptionButtonStyle}"
+                            VerticalAlignment="Stretch"
+                            Height="40">
+                    <Button Style="{StaticResource TitleBarCaptionButtonStyle}"
                             Content="&#xE921;"
                             Click="OnMinimizeClick"
                             loc:Loc.ToolTip="ui.minimize"
                             loc:Loc.AutomationName="ui.minimize" />
-                    <Button Style="{StaticResource CaptionButtonStyle}"
+                    <Button Style="{StaticResource TitleBarCaptionButtonStyle}"
                             Content="&#xE922;"
                             Click="OnMaximizeClick"
                             loc:Loc.ToolTip="ui.maximize"
                             loc:Loc.AutomationName="ui.maximize" />
-                    <Button Style="{StaticResource CaptionCloseButtonStyle}"
+                    <Button Style="{StaticResource TitleBarCaptionCloseButtonStyle}"
                             Content="&#xE8BB;"
                             Click="OnCloseClick"
                             loc:Loc.ToolTip="ui.close"

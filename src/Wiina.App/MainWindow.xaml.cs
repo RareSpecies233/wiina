@@ -136,6 +136,10 @@ public sealed partial class MainWindow : Window
         InitializeComponent();
         _settings = App.Settings;
 
+        // Follow system light/dark changes even when the OSD was constructed
+        // while the app was still on its default (dark) Application theme.
+        RootGrid.ActualThemeChanged += (_, _) => Osd.RequestedTheme = RootGrid.ActualTheme;
+
         Title = "Wiina";
         ExtendsContentIntoTitleBar = true;
         SetTitleBar(TitleBar);
@@ -1019,12 +1023,17 @@ public sealed partial class MainWindow : Window
 
     private void ApplyTheme()
     {
-        RootGrid.RequestedTheme = _settings.Theme switch
+        ElementTheme theme = _settings.Theme switch
         {
             ThemeMode.Dark => ElementTheme.Dark,
             ThemeMode.Light => ElementTheme.Light,
             _ => ElementTheme.Default,
         };
+
+        RootGrid.RequestedTheme = theme;
+        // OsdText is loaded before the first theme pass; its ThemeResource
+        // brushes can otherwise keep the dark values used at construction.
+        Osd.RequestedTheme = theme;
 
         DispatcherQueue.TryEnqueue(ConfigureCaptionButtons);
     }

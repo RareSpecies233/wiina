@@ -48,6 +48,8 @@
             <SolidColorBrush x:Key="CaptionClosePressedBrush" Color="#FFB01F14" />
             <SolidColorBrush x:Key="CardBrush" Color="#14FFFFFF" />
             <SolidColorBrush x:Key="CardBorderBrush" Color="#1FFFFFFF" />
+            <!-- White rounded tile behind the brand triangle (about window). -->
+            <SolidColorBrush x:Key="BrandTileBrush" Color="#FFFFFFFF" />
             <SolidColorBrush x:Key="PrimaryTextBrush" Color="#FFFFFFFF" />
             <SolidColorBrush x:Key="SecondaryTextBrush" Color="#B3FFFFFF" />
             <SolidColorBrush x:Key="TertiaryTextBrush" Color="#80FFFFFF" />
@@ -106,6 +108,7 @@
             <SolidColorBrush x:Key="CaptionClosePressedBrush" Color="#FFB01F14" />
             <SolidColorBrush x:Key="CardBrush" Color="#CCFFFFFF" />
             <SolidColorBrush x:Key="CardBorderBrush" Color="#14000000" />
+            <SolidColorBrush x:Key="BrandTileBrush" Color="#FFFFFFFF" />
             <SolidColorBrush x:Key="PrimaryTextBrush" Color="#E4000000" />
             <SolidColorBrush x:Key="SecondaryTextBrush" Color="#99000000" />
             <SolidColorBrush x:Key="TertiaryTextBrush" Color="#66000000" />
@@ -154,6 +157,7 @@
             <SolidColorBrush x:Key="WindowTintBrush" Color="{ThemeResource SystemColorWindowColor}" />
             <SolidColorBrush x:Key="CardBrush" Color="{ThemeResource SystemColorWindowColor}" />
             <SolidColorBrush x:Key="CardBorderBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <SolidColorBrush x:Key="BrandTileBrush" Color="{ThemeResource SystemColorWindowColor}" />
             <SolidColorBrush x:Key="PrimaryTextBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
             <SolidColorBrush x:Key="SecondaryTextBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
             <SolidColorBrush x:Key="TertiaryTextBrush" Color="{ThemeResource SystemColorGrayTextColor}" />

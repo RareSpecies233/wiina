@@ -59,22 +59,35 @@
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
 
-        <!-- Extended titlebar: drag region + system caption buttons. -->
-        <Grid x:Name="DragRegion"
-              Grid.Row="0"
-              Background="Transparent">
-            <StackPanel Orientation="Horizontal"
-                        Spacing="8"
-                        Margin="16,0,0,0"
-                        VerticalAlignment="Center">
-                <FontIcon Glyph="&#xE713;"
-                          FontSize="14"
-                          Foreground="{ThemeResource SecondaryTextBrush}" />
+        <!-- Extended titlebar: drag region + search box + system caption buttons. -->
+        <Grid Grid.Row="0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="140" />
+            </Grid.ColumnDefinitions>
+
+            <Grid x:Name="DragRegion"
+                  Grid.Column="0"
+                  Background="Transparent">
                 <TextBlock loc:Loc.Text="ui.wiinaSettings"
+                           Margin="16,0,0,0"
+                           VerticalAlignment="Center"
                            FontSize="12"
                            FontWeight="SemiBold"
                            Foreground="{ThemeResource SecondaryTextBrush}" />
-            </StackPanel>
+            </Grid>
+
+            <TextBox x:Name="SearchBox"
+                     Grid.Column="1"
+                     Width="280"
+                     Height="32"
+                     Margin="0,0,12,0"
+                     VerticalAlignment="Center"
+                     loc:Loc.Placeholder="ui.searchSettings"
+                     FontSize="12"
+                     TextChanged="OnSearchChanged"
+                     KeyDown="OnSearchKeyDown" />
         </Grid>
 
         <Grid Grid.Row="1">
@@ -83,33 +96,15 @@
                 <ColumnDefinition Width="*" MinWidth="400" />
             </Grid.ColumnDefinitions>
 
-            <Border Grid.Column="0"
-                    Background="{ThemeResource SettingsRailBrush}"
-                    BorderBrush="{ThemeResource PanelBorderBrush}"
-                    BorderThickness="0,0,1,0">
-                <Grid>
-                    <Grid.RowDefinitions>
-                        <RowDefinition Height="Auto" />
-                        <RowDefinition Height="*" />
-                        <RowDefinition Height="Auto" />
-                    </Grid.RowDefinitions>
-
-                    <TextBox x:Name="SearchBox"
-                             Grid.Row="0"
-                             Margin="10,8,10,4"
-                             loc:Loc.Placeholder="ui.searchSettings"
-                             FontSize="12"
-                             TextChanged="OnSearchChanged"
-                             KeyDown="OnSearchKeyDown" />
-
-                    <ScrollViewer Grid.Row="1"
-                                  VerticalScrollBarVisibility="Auto"
-                                  Padding="0,0,0,8">
-                        <StackPanel x:Name="NavPanel"
-                                    Margin="8,2,8,8"
-                                    Spacing="1" />
-                    </ScrollViewer>
-                </Grid>
+            <!-- The rail is transparent so the window tint is identical across
+                 rail and content (no divider line). -->
+            <Border Grid.Column="0" Background="Transparent">
+                <ScrollViewer VerticalScrollBarVisibility="Auto"
+                              Padding="0,0,0,8">
+                    <StackPanel x:Name="NavPanel"
+                                Margin="8,8,8,8"
+                                Spacing="1" />
+                </ScrollViewer>
             </Border>
 
             <Grid Grid.Column="1">
@@ -141,44 +136,45 @@
                                 Spacing="0" />
                 </ScrollViewer>
             </Grid>
-
-            <!-- Search popover list (spec §12.2); opens under the search box. -->
-            <Border x:Name="SearchPanel"
-                    Grid.ColumnSpan="2"
-                    Width="360"
-                    MaxHeight="320"
-                    Margin="8,46,0,0"
-                    HorizontalAlignment="Left"
-                    VerticalAlignment="Top"
-                    Padding="4"
-                    Visibility="Collapsed"
-                    Background="{ThemeResource PanelBrush}"
-                    BorderBrush="{ThemeResource PanelBorderBrush}"
-                    BorderThickness="1"
-                    CornerRadius="8"
-                    Canvas.ZIndex="20">
-                <ListView x:Name="SearchList"
-                          MaxHeight="312"
-                          SelectionMode="Single"
-                          IsItemClickEnabled="True"
-                          ItemClick="OnSearchResultClick">
-                    <ListView.ItemTemplate>
-                        <DataTemplate>
-                            <StackPanel Spacing="1" Padding="2,4">
-                                <TextBlock Text="{Binding Title}"
-                                           FontSize="13"
-                                           Foreground="{ThemeResource PrimaryTextBrush}"
-                                           TextTrimming="CharacterEllipsis" />
-                                <TextBlock Text="{Binding Subtitle}"
-                                           FontSize="11"
-                                           Foreground="{ThemeResource SecondaryTextBrush}"
-                                           TextTrimming="CharacterEllipsis" />
-                            </StackPanel>
-                        </DataTemplate>
-                    </ListView.ItemTemplate>
-                </ListView>
-            </Border>
         </Grid>
+
+        <!-- Search popover list (spec §12.2); opens under the search box. -->
+        <Border x:Name="SearchPanel"
+                Grid.Row="0"
+                Grid.RowSpan="2"
+                Width="280"
+                MaxHeight="320"
+                Margin="0,52,152,0"
+                HorizontalAlignment="Right"
+                VerticalAlignment="Top"
+                Padding="4"
+                Visibility="Collapsed"
+                Background="{ThemeResource PanelBrush}"
+                BorderBrush="{ThemeResource PanelBorderBrush}"
+                BorderThickness="1"
+                CornerRadius="8"
+                Canvas.ZIndex="20">
+            <ListView x:Name="SearchList"
+                      MaxHeight="312"
+                      SelectionMode="Single"
+                      IsItemClickEnabled="True"
+                      ItemClick="OnSearchResultClick">
+                <ListView.ItemTemplate>
+                    <DataTemplate>
+                        <StackPanel Spacing="1" Padding="2,4">
+                            <TextBlock Text="{Binding Title}"
+                                       FontSize="13"
+                                       Foreground="{ThemeResource PrimaryTextBrush}"
+                                       TextTrimming="CharacterEllipsis" />
+                            <TextBlock Text="{Binding Subtitle}"
+                                       FontSize="11"
+                                       Foreground="{ThemeResource SecondaryTextBrush}"
+                                       TextTrimming="CharacterEllipsis" />
+                        </StackPanel>
+                    </DataTemplate>
+                </ListView.ItemTemplate>
+            </ListView>
+        </Border>
     </Grid>
 </Window>
 

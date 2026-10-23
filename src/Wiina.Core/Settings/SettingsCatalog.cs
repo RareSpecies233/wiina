@@ -92,6 +92,15 @@ public static class SettingsCatalog
             settings => settings.ResumePlayback,
             (settings, value) => settings.ResumePlayback = value,
             "resume history 续播 历史"));
+        rows.Add(ChoiceRow(
+            "general.auto-playlist", SettingsPageId.General, "播放列表",
+            "自动添加播放列表",
+            "打开单个视频时，自动把同目录的媒体加入播放列表；手动模式只播放选中的文件。",
+            new[] { "同目录文件", "仅手动添加", "同目录及子文件夹" },
+            settings => (int)settings.AutoPlaylistMode,
+            (settings, value) => settings.AutoPlaylistMode =
+                (AutoPlaylistMode)Math.Clamp(value, 0, 2),
+            "playlist auto folder subfolder 播放列表 自动 同目录 子文件夹 手动"));
         rows.Add(BoolRow(
             "general.restore-window", SettingsPageId.General, "播放与历史",
             "恢复上次窗口位置", "启动时还原窗口尺寸与位置；关闭后总是居中显示。",

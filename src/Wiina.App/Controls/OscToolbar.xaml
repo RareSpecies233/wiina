@@ -27,7 +27,6 @@
                 Style="{StaticResource OscIconButtonStyle}"
                 Content="&#xE740;"
                 Command="{Binding FullscreenCommand}"
-                loc:Loc.ToolTip="ui.fullscreenShortcut"
                 loc:Loc.AutomationName="ui.fullscreen" />
         <Button x:Name="MoreButton"
                 Style="{StaticResource OscIconButtonStyle}"

@@ -19,7 +19,7 @@
                 Background="{ThemeResource OscAcrylicBrush}"
                 BorderBrush="{ThemeResource PanelBorderBrush}"
                 BorderThickness="0,1,0,0"
-                Height="64">
+                MinHeight="64">
         <Grid Margin="16,0,12,0">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="Auto" />

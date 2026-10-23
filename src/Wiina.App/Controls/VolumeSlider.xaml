@@ -12,8 +12,11 @@
                 Command="{Binding MuteCommand}"
                 loc:Loc.ToolTip="ui.muteShortcut"
                 loc:Loc.AutomationName="osd.mute" />
+        <!-- 12 px inset each side keeps the 20 px thumb inside the host at 0%
+             and 100% (WinUI's default template otherwise clips half of it at
+             the maximum on high-DPI displays). -->
         <Grid x:Name="SliderHost"
-              Width="70"
+              Width="94"
               Height="28"
               VerticalAlignment="Center"
               ToolTipService.ToolTip="{Binding VolumeText}">
@@ -23,6 +26,7 @@
                     StepFrequency="1"
                     Value="{Binding VolumeUi, Mode=TwoWay}"
                     IsThumbToolTipEnabled="False"
+                    Margin="12,0"
                     VerticalAlignment="Center"
                     PointerWheelChanged="OnSliderWheelChanged"
                     loc:Loc.AutomationName="ui.volume" />

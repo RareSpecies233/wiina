@@ -28,6 +28,17 @@ public sealed partial class MainWindow
     {
         var flyout = new MenuFlyout();
         MenuState state = BuildMenuState();
+
+        // Quick window action: expanded OSC menus start with pin/unpin so the
+        // common window operation does not require opening 窗口 first.
+        var pin = new MenuFlyoutItem
+        {
+            Text = _settings.AlwaysOnTop ? Loc.T("icons.unpin") : Loc.T("icons.pin"),
+        };
+        pin.Click += (_, _) => TogglePin();
+        flyout.Items.Add(pin);
+        flyout.Items.Add(new MenuFlyoutSeparator());
+
         foreach (MenuGroupDefinition group in MenuCatalog.Build(state, Loc.CurrentLanguage))
         {
             var top = new MenuFlyoutSubItem { Text = group.Title };

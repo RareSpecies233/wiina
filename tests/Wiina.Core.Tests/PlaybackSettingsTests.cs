@@ -18,6 +18,7 @@ public sealed class PlaybackSettingsTests
         Assert.Equal(SubtitleLanguagePreferences.Auto, settings.PreferredSubtitleLanguage);
         Assert.True(settings.AutoLoadExternalAudio);
         Assert.Equal(KeyBindingProfiles.Default, settings.KeyBindingProfile);
+        Assert.Equal(AutoPlaylistMode.SameFolder, settings.AutoPlaylistMode);
     }
 
     [Fact]
@@ -39,6 +40,7 @@ public sealed class PlaybackSettingsTests
                 PreferredSubtitleLanguage = SubtitleLanguagePreferences.TraditionalChinese,
                 AutoLoadExternalAudio = false,
                 KeyBindingProfile = KeyBindingProfiles.Iina,
+                AutoPlaylistMode = AutoPlaylistMode.IncludeSubfolders,
             };
             store.Save(saved);
 
@@ -48,6 +50,7 @@ public sealed class PlaybackSettingsTests
             Assert.Equal(SubtitleLanguagePreferences.TraditionalChinese, loaded.PreferredSubtitleLanguage);
             Assert.False(loaded.AutoLoadExternalAudio);
             Assert.Equal(KeyBindingProfiles.Iina, loaded.KeyBindingProfile);
+            Assert.Equal(AutoPlaylistMode.IncludeSubfolders, loaded.AutoPlaylistMode);
         }
         finally
         {

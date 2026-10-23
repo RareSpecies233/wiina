@@ -5,7 +5,8 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:loc="using:Wiina.App.Localization"
     xmlns:local="using:Wiina.App.Controls"
-    Width="460">
+    MinWidth="460"
+    HorizontalAlignment="Left">
 
     <Grid>
         <!-- Live Gaussian blur of the frame behind the floating OSC (video
@@ -19,12 +20,12 @@
         <Border x:Name="DragArea"
             Style="{StaticResource PanelBorderStyle}"
             Background="{ThemeResource OscAcrylicBrush}"
-            Height="64"
+            MinHeight="64"
             Padding="12,6">
         <Grid>
             <Grid.RowDefinitions>
                 <RowDefinition Height="*" />
-                <RowDefinition Height="18" />
+                <RowDefinition Height="Auto" MinHeight="18" />
             </Grid.RowDefinitions>
 
             <Grid Grid.Row="0">

@@ -24,4 +24,10 @@ public sealed partial class AppSettings
 
     /// <summary>One of <see cref="KeyBindingProfiles.All"/>.</summary>
     public string KeyBindingProfile { get; set; } = KeyBindingProfiles.Default;
+
+    /// <summary>
+    /// How opening one media file fills the playlist. Defaults to the files
+    /// beside the opened video; manual keeps only the picked file.
+    /// </summary>
+    public AutoPlaylistMode AutoPlaylistMode { get; set; } = AutoPlaylistMode.SameFolder;
 }

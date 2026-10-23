@@ -19,6 +19,7 @@ public static class SettingsLocalization
         ["general.language"] = new("Interface language", "Choose the UI language; changes apply immediately and are remembered.", new[] { "Follow system", "Simplified Chinese", "English" }),
         ["general.welcome"] = new("Show Welcome on startup", "Show the welcome page when no media was opened from the command line or recent list.", null),
         ["general.resume"] = new("Resume last position", "Resume local files from the saved playback history position.", null),
+        ["general.auto-playlist"] = new("Auto-add to playlist", "When a single video opens, also queue other media from its folder; manual mode plays only the selected file.", new[] { "Same folder", "Manual only", "Same folder + subfolders" }),
         ["general.restore-window"] = new("Restore window position", "Restore window size and position at startup; when off, always center the window.", null),
         ["general.screenshot-folder"] = new("Screenshot folder", @"Folder where Ctrl+S saves screenshots (default Pictures\Wiina Screenshots).", null),
         ["general.data-folder"] = new("Open data folder", "Folder containing settings.json, history.json, and the mpv configuration.", null),
@@ -144,6 +145,7 @@ public static class SettingsLocalization
     {
         ["外观与启动"] = "Appearance & Startup",
         ["播放与历史"] = "Playback & History",
+        ["播放列表"] = "Playlist",
         ["窗口与 OSC"] = "Window & OSC",
         ["OSD"] = "OSD",
         ["全屏状态栏"] = "Fullscreen Status Bar",

@@ -7,6 +7,77 @@
     xmlns:local="using:Wiina.App.Controls"
     Width="360">
 
+    <UserControl.Resources>
+        <!-- WinUI underline tab for the sidebar's icon row. Keeps the same
+             40x44 hit target and shows a 2px accent bar under the active page
+             instead of a filled pill, matching the page tabs below. -->
+        <Style x:Key="SidebarTypeTabStyle" TargetType="ToggleButton">
+            <Setter Property="Width" Value="40" />
+            <Setter Property="Height" Value="44" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="FontFamily" Value="{StaticResource IconFont}" />
+            <Setter Property="FontSize" Value="15" />
+            <Setter Property="Foreground" Value="{ThemeResource SecondaryTextBrush}" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ToggleButton">
+                        <Grid x:Name="TypeTabRoot" Background="Transparent">
+                            <VisualStateManager.VisualStateGroups>
+                                <VisualStateGroup x:Name="CommonStates">
+                                    <VisualState x:Name="Normal" />
+                                    <VisualState x:Name="PointerOver">
+                                        <VisualState.Setters>
+                                            <Setter Target="TypeTabPresenter.Foreground" Value="{ThemeResource PrimaryTextBrush}" />
+                                        </VisualState.Setters>
+                                    </VisualState>
+                                    <VisualState x:Name="Pressed">
+                                        <VisualState.Setters>
+                                            <Setter Target="TypeTabPresenter.Opacity" Value="0.7" />
+                                        </VisualState.Setters>
+                                    </VisualState>
+                                    <VisualState x:Name="Disabled">
+                                        <VisualState.Setters>
+                                            <Setter Target="TypeTabPresenter.Opacity" Value="0.4" />
+                                        </VisualState.Setters>
+                                    </VisualState>
+                                </VisualStateGroup>
+                                <VisualStateGroup x:Name="CheckStates">
+                                    <VisualState x:Name="Checked">
+                                        <VisualState.Setters>
+                                            <Setter Target="TypeTabPresenter.Foreground" Value="{ThemeResource AccentBrush}" />
+                                            <Setter Target="TypeTabUnderline.Background" Value="{ThemeResource AccentBrush}" />
+                                        </VisualState.Setters>
+                                    </VisualState>
+                                    <VisualState x:Name="Unchecked" />
+                                    <VisualState x:Name="Indeterminate" />
+                                </VisualStateGroup>
+                            </VisualStateManager.VisualStateGroups>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="*" />
+                                <RowDefinition Height="2" />
+                            </Grid.RowDefinitions>
+                            <ContentPresenter x:Name="TypeTabPresenter"
+                                              Grid.Row="0"
+                                              HorizontalAlignment="Center"
+                                              VerticalAlignment="Center"
+                                              Content="{TemplateBinding Content}"
+                                              FontFamily="{TemplateBinding FontFamily}"
+                                              FontSize="{TemplateBinding FontSize}"
+                                              Foreground="{TemplateBinding Foreground}" />
+                            <Border x:Name="TypeTabUnderline"
+                                    Grid.Row="1"
+                                    Height="2"
+                                    CornerRadius="1"
+                                    Background="Transparent" />
+                        </Grid>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </UserControl.Resources>
+
     <Grid x:Name="RootGrid" Background="Transparent">
         <Grid.RenderTransform>
             <CompositeTransform x:Name="SlideTransform" />
@@ -39,28 +110,28 @@
                                 Spacing="2"
                                 VerticalAlignment="Center">
                         <ToggleButton x:Name="SettingsTab"
-                                      Style="{StaticResource SidebarTabButtonStyle}"
+                                      Style="{StaticResource SidebarTypeTabStyle}"
                                       Content="&#xE713;"
                                       Tag="Settings"
                                       Click="OnTypeTabClick"
                                       loc:Loc.ToolTip="ui.quickSettings"
                                       loc:Loc.AutomationName="ui.quickSettings" />
                         <ToggleButton x:Name="PlaylistTab"
-                                      Style="{StaticResource SidebarTabButtonStyle}"
+                                      Style="{StaticResource SidebarTypeTabStyle}"
                                       Content="&#xE8FD;"
                                       Tag="Playlist"
                                       Click="OnTypeTabClick"
                                       loc:Loc.ToolTip="ui.playlist"
                                       loc:Loc.AutomationName="ui.playlist" />
                         <ToggleButton x:Name="ChaptersTab"
-                                      Style="{StaticResource SidebarTabButtonStyle}"
+                                      Style="{StaticResource SidebarTypeTabStyle}"
                                       Content="&#xE81C;"
                                       Tag="Chapters"
                                       Click="OnTypeTabClick"
                                       loc:Loc.ToolTip="ui.chapters"
                                       loc:Loc.AutomationName="ui.chapters" />
                         <ToggleButton x:Name="PluginsTab"
-                                      Style="{StaticResource SidebarTabButtonStyle}"
+                                      Style="{StaticResource SidebarTypeTabStyle}"
                                       Content="&#xEA86;"
                                       Tag="Plugins"
                                       Click="OnTypeTabClick"

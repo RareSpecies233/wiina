@@ -22,6 +22,7 @@ using Wiina.Core.History;
 using Wiina.Core.Input;
 using Wiina.Core.Models;
 using Wiina.Core.Osd;
+using Wiina.Core.Settings;
 using Wiina.Core.State;
 using Wiina.Core.Subtitles;
 using Wiina.Core.Text;
@@ -367,11 +368,38 @@ public sealed partial class MainWindow
         var subtitles = new List<string>();
         var errors = new List<string>();
 
-        foreach (string input in inputs
-                     .Where(input => !string.IsNullOrWhiteSpace(input))
-                     .Distinct(StringComparer.OrdinalIgnoreCase))
+        List<string> distinctInputs = inputs
+            .Where(input => !string.IsNullOrWhiteSpace(input))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        foreach (string input in distinctInputs)
         {
             CollectMediaPaths(input.Trim('"'), playable, subtitles, errors, 0);
+        }
+
+        // Opening a single video can pull the rest of its folder into the
+        // playlist. The subtitle/audio sidecar helpers still run from the
+        // regular open path, so only plain playable media is expanded here.
+        if (distinctInputs.Count == 1 && playable.Count == 1)
+        {
+            string single = distinctInputs[0].Trim('"');
+            if (File.Exists(single) &&
+                MediaFileTypes.IsPlayableMedia(single) &&
+                _settings.AutoPlaylistMode != AutoPlaylistMode.Manual)
+            {
+                string? folder = Path.GetDirectoryName(single);
+                if (!string.IsNullOrWhiteSpace(folder))
+                {
+                    bool recursive =
+                        _settings.AutoPlaylistMode == AutoPlaylistMode.IncludeSubfolders;
+                    playable.AddRange(MediaFileTypes
+                        .ExpandFolder(folder, recursive)
+                        .Where(MediaFileTypes.IsPlayableMedia)
+                        .Where(path => !string.Equals(
+                            path, single, StringComparison.OrdinalIgnoreCase)));
+                }
+            }
         }
 
         playable = playable
@@ -416,7 +444,9 @@ public sealed partial class MainWindow
 
         if (Directory.Exists(input))
         {
-            IReadOnlyList<string> files = MediaFileTypes.ExpandFolder(input);
+            IReadOnlyList<string> files = MediaFileTypes.ExpandFolder(
+                input,
+                recursive: _settings.AutoPlaylistMode == AutoPlaylistMode.IncludeSubfolders);
             if (files.Count == 0)
             {
                 errors.Add(Loc.F("osd.folderNoMedia", input));
