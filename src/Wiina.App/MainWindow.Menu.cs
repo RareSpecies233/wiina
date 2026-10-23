@@ -51,6 +51,33 @@ public sealed partial class MainWindow
             flyout.Items.Add(top);
         }
 
+        // Quick picture-quality switch without leaving the OSC overflow.
+        var quality = new MenuFlyoutSubItem { Text = Loc.T("ui.qualityPreset") };
+        foreach ((VideoQualityPreset preset, string labelKey) in new[]
+                 {
+                     (VideoQualityPreset.Auto, "ui.qualityAuto"),
+                     (VideoQualityPreset.Balanced, "ui.qualityBalanced"),
+                     (VideoQualityPreset.HighQuality, "ui.qualityHigh"),
+                     (VideoQualityPreset.Performance, "ui.qualityPerformance"),
+                 })
+        {
+            var option = new ToggleMenuFlyoutItem
+            {
+                Text = Loc.T(labelKey),
+                IsChecked = _settings.VideoQualityPreset == preset,
+            };
+            option.Click += (_, _) =>
+            {
+                _settings.VideoQualityPreset = preset;
+                ApplyQualityPreset();
+                SaveSettings();
+                ShowChrome();
+            };
+            quality.Items.Add(option);
+        }
+
+        flyout.Items.Add(quality);
+
         // Settings is a frequent destination but not a player command, so it
         // lives at the bottom of the overflow menu rather than as a permanent
         // gear button crowding the OSC transport row.

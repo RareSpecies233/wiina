@@ -384,13 +384,22 @@ public sealed partial class MainWindow : Window
 
         _pointerOverChrome = false;
         _autoHideTimer.Stop();
+
+        // A visible sidebar is an explicit operating mode. Moving the pointer
+        // away must not tear down the titlebar/OSC underneath it.
+        if (HasVisibleSidebar || _oscState.IsSuppressed)
+        {
+            return;
+        }
+
         HideChrome(force: true);
     }
 
     private void OnAutoHideTick(DispatcherQueueTimer sender, object args)
     {
         _autoHideTimer.Stop();
-        if (_pointerOverChrome || _oscDragging || _seeking)
+        if (_pointerOverChrome || _oscDragging || _seeking ||
+            HasVisibleSidebar || _oscState.IsSuppressed)
         {
             return;
         }
@@ -409,7 +418,9 @@ public sealed partial class MainWindow : Window
     private void OnChromePointerExited(object sender, PointerRoutedEventArgs e)
     {
         _autoHideTimer.Stop();
-        if (_oscState.AutoHideEnabled)
+        if (_oscState.AutoHideEnabled &&
+            !_oscState.IsSuppressed &&
+            !HasVisibleSidebar)
         {
             _autoHideTimer.Start();
         }
@@ -427,6 +438,7 @@ public sealed partial class MainWindow : Window
             _chromeShown = true;
             _oscState.Show();
             _oscState.CompleteShow();
+            ChromeBlur.SetActive(true);
             FadeChrome(1, hitTest: true);
             WindowInterop.SetCursorVisible(true);
         }
@@ -465,6 +477,7 @@ public sealed partial class MainWindow : Window
 
         _oscState.CompleteHide();
         _chromeShown = false;
+        ChromeBlur.SetActive(false);
         _autoHideTimer.Stop();
         FadeChrome(0, hitTest: false);
         WindowInterop.SetCursorVisible(false);
@@ -923,6 +936,7 @@ public sealed partial class MainWindow : Window
             {
                 case "pause":
                     _oscVm.SetPlayingFromPlayer(!value);
+                    _pipWindow?.SetPlaying(!value);
                     UpdateSmtc();
                     break;
                 case "mute":
@@ -1203,9 +1217,51 @@ public sealed partial class MainWindow : Window
         ResetAutoHideTimer();
     }
 
+    private void SnapWindowToEdges()
+    {
+        if (!_settings.EdgeSnapping ||
+            AppWindow.Presenter is not OverlappedPresenter { State: OverlappedPresenterState.Restored })
+        {
+            return;
+        }
+
+        DisplayArea area = DisplayArea.GetFromWindowId(AppWindow.Id, DisplayAreaFallback.Nearest);
+        RectInt32 work = area.WorkArea;
+        PointInt32 position = AppWindow.Position;
+        SizeInt32 size = AppWindow.Size;
+        double scale = RootGrid.XamlRoot?.RasterizationScale ?? 1.0;
+        int threshold = (int)Math.Round(24 * Math.Max(1.0, scale));
+
+        int x = position.X;
+        int y = position.Y;
+        if (Math.Abs(x - work.X) <= threshold)
+        {
+            x = work.X;
+        }
+        else if (Math.Abs(x + size.Width - (work.X + work.Width)) <= threshold)
+        {
+            x = work.X + work.Width - size.Width;
+        }
+
+        if (Math.Abs(y - work.Y) <= threshold)
+        {
+            y = work.Y;
+        }
+        else if (Math.Abs(y + size.Height - (work.Y + work.Height)) <= threshold)
+        {
+            y = work.Y + work.Height - size.Height;
+        }
+
+        if (x != position.X || y != position.Y)
+        {
+            AppWindow.Move(new PointInt32(x, y));
+        }
+    }
+
     private void OnRootLoaded(object sender, RoutedEventArgs e)
     {
         ConfigureCaptionButtons();
+        ChromeBlur.SetMode(_settings.ChromeBlurMode);
         WindowInterop.Attach(
             this,
             285,
@@ -1213,7 +1269,8 @@ public sealed partial class MainWindow : Window
             () => _settings.LockAspectRatio,
             () => _videoAspect,
             OnAppCommand,
-            () => _userResizedWindow = true);
+            () => _userResizedWindow = true,
+            SnapWindowToEdges);
 
         if (RootGrid.XamlRoot is { } xamlRoot)
         {
@@ -1305,6 +1362,7 @@ public sealed partial class MainWindow : Window
                 hwdec: HasActiveVideoFilters() ? "no" : EffectiveHwdecValue());
             _player.ObserveProperty("display-swapchain", MpvFormat.Int64);
             InitializePlayerStage3(_player);
+            ApplyQualityPreset();
             ApplyPersistedQuickSettings();
             ApplyStage7Settings();
             ApplyStage8Settings();
@@ -1557,22 +1615,6 @@ public sealed partial class MainWindow : Window
             area.Y + Math.Max(0, (area.Height - height) / 2),
             width,
             height));
-    }
-
-    private void OnEscape(KeyboardAccelerator sender, KeyboardAcceleratorInvokedEventArgs args)
-    {
-        if (_mode.Current != PlayerMode.Normal)
-        {
-            args.Handled = true;
-            RequestMode(PlayerMode.Normal);
-            return;
-        }
-
-        if (AppWindow.Presenter.Kind == AppWindowPresenterKind.FullScreen)
-        {
-            args.Handled = true;
-            RequestMode(PlayerMode.Normal);
-        }
     }
 
     private void OnToggleSidebarAccel(KeyboardAccelerator sender, KeyboardAcceleratorInvokedEventArgs args)

@@ -28,6 +28,30 @@ public sealed class SmartSubtitleFinderTests
     }
 
     [Fact]
+    public void FindsLooseSidecarWhenVideoHasExtraReleaseTags()
+    {
+        using var folder = new TempFolder();
+        string video = folder.File("[Group] Show [01][1080p][x265].mkv");
+        folder.File("[Group] Show [01].chs.ass");
+
+        SubtitleCandidate? best = SmartSubtitleFinder.FindBest(video);
+
+        Assert.NotNull(best);
+        Assert.EndsWith("[Group] Show [01].chs.ass", best!.FileName, StringComparison.OrdinalIgnoreCase);
+        Assert.False(best.IsExactBase);
+    }
+
+    [Fact]
+    public void LooseMatchDoesNotCrossEpisodes()
+    {
+        using var folder = new TempFolder();
+        string video = folder.File("[Group] Show [01][1080p].mkv");
+        folder.File("[Group] Show [02].chs.ass");
+
+        Assert.Null(SmartSubtitleFinder.FindBest(video));
+    }
+
+    [Fact]
     public void PrefersSimplifiedThenTraditionalAndAssFontsLast()
     {
         using var folder = new TempFolder();

@@ -7,6 +7,7 @@ using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Controls.Primitives;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
+using Microsoft.UI.Xaml.Media.Animation;
 using Microsoft.UI.Xaml.Shapes;
 using Windows.Graphics;
 using Windows.Storage;
@@ -214,6 +215,42 @@ public sealed partial class SettingsWindow : Window
         {
             DispatcherQueue.TryEnqueue(() => HighlightRow(rowId));
         }
+
+        AnimatePageChange();
+    }
+
+    private void AnimatePageChange()
+    {
+        if (!App.Settings.AnimationsEnabled)
+        {
+            PagePanel.Opacity = 1;
+            PagePanel.Translation = System.Numerics.Vector3.Zero;
+            return;
+        }
+
+        PagePanel.Opacity = 0;
+        var transform = new TranslateTransform { Y = 10 };
+        PagePanel.RenderTransform = transform;
+        var storyboard = new Storyboard();
+        var fade = new DoubleAnimation
+        {
+            To = 1,
+            Duration = TimeSpan.FromMilliseconds(160),
+            EnableDependentAnimation = true,
+        };
+        Storyboard.SetTarget(fade, PagePanel);
+        Storyboard.SetTargetProperty(fade, "Opacity");
+        storyboard.Children.Add(fade);
+        var slide = new DoubleAnimation
+        {
+            To = 0,
+            Duration = TimeSpan.FromMilliseconds(200),
+            EnableDependentAnimation = true,
+        };
+        Storyboard.SetTarget(slide, transform);
+        Storyboard.SetTargetProperty(slide, "Y");
+        storyboard.Children.Add(slide);
+        storyboard.Begin();
     }
 
     private void AddSectionHeader(string section)

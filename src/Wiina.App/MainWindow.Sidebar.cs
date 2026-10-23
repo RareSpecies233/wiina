@@ -837,6 +837,25 @@ public sealed partial class MainWindow
 
     // ------------------------------------------------------------- mpv apply
 
+    private void ApplyQualityPreset()
+    {
+        (string Scale, string Downscale, string Chroma, string Deband) preset =
+            _settings.VideoQualityPreset switch
+            {
+                VideoQualityPreset.HighQuality =>
+                    ("ewa_lanczossharp", "mitchell", "bilinear", "yes"),
+                VideoQualityPreset.Balanced =>
+                    ("ewa_lanczos", "bilinear", "bilinear", "yes"),
+                VideoQualityPreset.Performance =>
+                    ("bilinear", "bilinear", "bilinear", "no"),
+                _ => ("bilinear", "bilinear", "bilinear", "no"),
+            };
+        ApplyMpvString("scale", preset.Scale);
+        ApplyMpvString("dscale", preset.Downscale);
+        ApplyMpvString("cscale", preset.Chroma);
+        ApplyMpvString("deband", preset.Deband);
+    }
+
     private void ApplyMpvString(string name, string value)
     {
         try

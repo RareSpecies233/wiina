@@ -27,7 +27,8 @@
         <Grid x:Name="DragRegion"
               Height="28"
               VerticalAlignment="Top"
-              Background="Transparent">
+              Background="Transparent"
+              Opacity="0">
             <FontIcon Glyph="&#xE76F;"
                       FontSize="10"
                       Foreground="#80FFFFFF"
@@ -39,6 +40,8 @@
                 VerticalAlignment="Bottom"
                 Height="44"
                 Background="#B3000000"
+                Opacity="0"
+                IsHitTestVisible="False"
                 PointerEntered="OnControlStripPointerEntered"
                 PointerExited="OnControlStripPointerExited">
             <StackPanel Orientation="Horizontal"
@@ -58,7 +61,7 @@
                         Click="OnPlayPauseClick"
                         loc:Loc.ToolTip="ui.playPauseSlash"
                         loc:Loc.AutomationName="ui.playPause" />
-                <Button x:Name="RestoreButton"
+                <Button x:Name="PinButton"
                         Width="36"
                         Height="32"
                         Padding="0"
@@ -67,10 +70,10 @@
                         Foreground="White"
                         FontFamily="{StaticResource IconFont}"
                         FontSize="16"
-                        Content="&#xE73F;"
-                        Click="OnRestoreClick"
-                        loc:Loc.ToolTip="ui.returnMain"
-                        loc:Loc.AutomationName="ui.returnMain" />
+                        Content="&#xE718;"
+                        Click="OnPinClick"
+                        loc:Loc.ToolTip="ui.alwaysOnTop"
+                        loc:Loc.AutomationName="ui.alwaysOnTop" />
                 <Button x:Name="CloseButton"
                         Width="36"
                         Height="32"
@@ -94,6 +97,7 @@
                 Padding="10,5"
                 CornerRadius="12"
                 Background="#99000000"
+                Opacity="0"
                 IsHitTestVisible="False">
             <TextBlock loc:Loc.Text="ui.pipDoubleClick"
                        FontSize="11"

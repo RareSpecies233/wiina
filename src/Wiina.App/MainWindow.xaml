@@ -13,10 +13,9 @@
           PointerMoved="OnRootPointerMoved"
           PointerExited="OnRootPointerExited">
         <Grid.KeyboardAccelerators>
-            <!-- F11 is handled by the configurable key map in OnRootKeyDown.
-                 A second KeyboardAccelerator here lets WinUI show its own
-                 "F11" accelerator tooltip over the video. -->
-            <KeyboardAccelerator Key="Escape" Invoked="OnEscape" />
+            <!-- Keyboard shortcuts are handled by the configurable key map in
+                 OnRootKeyDown. Avoid WinUI KeyboardAccelerators here: they
+                 render stray key-hint popups ("F11", "Esc") over the video. -->
         </Grid.KeyboardAccelerators>
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />

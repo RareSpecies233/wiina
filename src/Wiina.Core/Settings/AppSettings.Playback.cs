@@ -30,4 +30,7 @@ public sealed partial class AppSettings
     /// beside the opened video; manual keeps only the picked file.
     /// </summary>
     public AutoPlaylistMode AutoPlaylistMode { get; set; } = AutoPlaylistMode.SameFolder;
+
+    /// <summary>mpv scaling/deband profile; Auto keeps mpv/IINA defaults.</summary>
+    public VideoQualityPreset VideoQualityPreset { get; set; } = VideoQualityPreset.Auto;
 }

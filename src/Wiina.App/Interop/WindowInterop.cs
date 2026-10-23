@@ -93,7 +93,8 @@ internal static class WindowInterop
         Func<bool> lockAspect,
         Func<double> aspect,
         Func<int, bool>? appCommand = null,
-        Action? windowResizeStarted = null)
+        Action? windowResizeStarted = null,
+        Action? windowMoveEnded = null)
     {
         nint hwnd = Microsoft.UI.Win32Interop.GetWindowFromWindowId(window.AppWindow.Id);
         if (Hooks.ContainsKey(hwnd))
@@ -108,7 +109,8 @@ internal static class WindowInterop
             lockAspect,
             aspect,
             appCommand,
-            windowResizeStarted);
+            windowResizeStarted,
+            windowMoveEnded);
         Hooks[hwnd] = hook;
         hook.Attach();
     }
@@ -212,6 +214,7 @@ internal static class WindowInterop
         private readonly Func<double> _aspect;
         private readonly Func<int, bool>? _appCommand;
         private readonly Action? _windowResizeStarted;
+        private readonly Action? _windowMoveEnded;
         private readonly SubclassProc _proc;
         private bool _sizingGesture;
 
@@ -222,7 +225,8 @@ internal static class WindowInterop
             Func<bool> lockAspect,
             Func<double> aspect,
             Func<int, bool>? appCommand,
-            Action? windowResizeStarted)
+            Action? windowResizeStarted,
+            Action? windowMoveEnded)
         {
             _hwnd = hwnd;
             _minWidthDip = minWidthDip;
@@ -231,6 +235,7 @@ internal static class WindowInterop
             _aspect = aspect;
             _appCommand = appCommand;
             _windowResizeStarted = windowResizeStarted;
+            _windowMoveEnded = windowMoveEnded;
             _proc = WndProc;
         }
 
@@ -274,6 +279,7 @@ internal static class WindowInterop
             else if (msg == WM_EXITSIZEMOVE)
             {
                 _sizingGesture = false;
+                _windowMoveEnded?.Invoke();
             }
 
             if (msg == WM_SIZING && _lockAspect())

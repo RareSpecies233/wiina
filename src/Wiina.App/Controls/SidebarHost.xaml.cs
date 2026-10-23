@@ -154,7 +154,7 @@ public sealed partial class SidebarHost : UserControl
         CloseButton.HorizontalAlignment = trailing
             ? HorizontalAlignment.Left
             : HorizontalAlignment.Right;
-        CloseButton.Content = trailing ? "\uE76B" : "\uE76C";
+        CloseButton.Content = "\uE711";
         ToolTipService.SetToolTip(CloseButton, Loc.T("sidebar.close"));
     }
 
@@ -187,6 +187,10 @@ public sealed partial class SidebarHost : UserControl
         {
             UpdatePageChecks(SettingsContent.CurrentPage);
         }
+        else
+        {
+            UpdatePageLabels();
+        }
     }
 
     public void SetPage(QuickSettingsPage page)
@@ -208,6 +212,41 @@ public sealed partial class SidebarHost : UserControl
         PlaylistPageTab.IsChecked = false;
         ChaptersPageTab.IsChecked = false;
         PluginsPageTab.IsChecked = false;
+
+        UpdatePageLabels();
+    }
+
+    /// <summary>
+    /// Quick-settings locator labels only the current target; the rest stay
+    /// icon-only so all seven entries fit without shrinking their names.
+    /// </summary>
+    private void UpdatePageLabels()
+    {
+        bool settings = _currentType == SidebarType.Settings;
+        QuickSettingsPage page = SettingsContent.CurrentPage;
+
+        LayoutLabel.Visibility = settings && page == QuickSettingsPage.Layout
+            ? Visibility.Visible
+            : Visibility.Collapsed;
+        VideoLabel.Visibility = settings && page == QuickSettingsPage.Video
+            ? Visibility.Visible
+            : Visibility.Collapsed;
+        AudioLabel.Visibility = settings && page == QuickSettingsPage.Audio
+            ? Visibility.Visible
+            : Visibility.Collapsed;
+        SubtitlesLabel.Visibility = settings && page == QuickSettingsPage.Subtitles
+            ? Visibility.Visible
+            : Visibility.Collapsed;
+
+        PagePlaylistLabel.Visibility = _currentType == SidebarType.Playlist
+            ? Visibility.Visible
+            : Visibility.Collapsed;
+        PageChaptersLabel.Visibility = _currentType == SidebarType.Chapters
+            ? Visibility.Visible
+            : Visibility.Collapsed;
+        PagePluginsLabel.Visibility = _currentType == SidebarType.Plugins
+            ? Visibility.Visible
+            : Visibility.Collapsed;
     }
 
     public void ShowInstant()

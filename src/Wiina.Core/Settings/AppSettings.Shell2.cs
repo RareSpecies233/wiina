@@ -24,4 +24,10 @@ public sealed partial class AppSettings
     public int KeyBindingWindowX { get; set; } = int.MinValue;
 
     public int KeyBindingWindowY { get; set; } = int.MinValue;
+
+    /// <summary>Snap a dragged player window to a work-area edge (macOS style).</summary>
+    public bool EdgeSnapping { get; set; } = true;
+
+    /// <summary>Video-frame capture strategy behind the floating chrome.</summary>
+    public ChromeBlurMode ChromeBlurMode { get; set; } = ChromeBlurMode.Dynamic;
 }

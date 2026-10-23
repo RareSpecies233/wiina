@@ -23,6 +23,7 @@ public sealed partial class PipWindow : Window
     private readonly double _rasterizationScale;
     private bool _closedFromMain;
     private bool _pointerOverControls;
+    private bool _isPinned = true;
     private double _lastWidth;
     private double _lastHeight;
 
@@ -77,7 +78,10 @@ public sealed partial class PipWindow : Window
             (int)PipGeometry.MinWidth,
             (int)PipGeometry.MinHeight,
             () => true,
-            () => PipGeometry.AspectRatio);
+            () => PipGeometry.AspectRatio,
+            appCommand: null,
+            windowResizeStarted: null,
+            windowMoveEnded: SnapToEdges);
 
         Root.SizeChanged += OnRootSizeChanged;
         Root.Loaded += (_, _) =>
@@ -94,7 +98,9 @@ public sealed partial class PipWindow : Window
         _hideTimer.IsRepeating = false;
         _hideTimer.Tick += (_, _) => HideControls();
 
-        Activated += (_, _) => ShowControls();
+        // Start fully chrome-free; the hint, drag strip and transport appear
+        // only after the pointer moves over the picture.
+        HideControls();
     }
 
     /// <summary>"Return to main window" (button or double-click).</summary>
@@ -142,6 +148,8 @@ public sealed partial class PipWindow : Window
         _hideTimer.Stop();
         ControlStrip.Opacity = 1;
         ControlStrip.IsHitTestVisible = true;
+        DragRegion.Opacity = 1;
+        HintBadge.Opacity = 1;
         if (!_pointerOverControls)
         {
             _hideTimer.Start();
@@ -159,19 +167,24 @@ public sealed partial class PipWindow : Window
         if (!AnimationsEnabled())
         {
             ControlStrip.Opacity = 0;
+            DragRegion.Opacity = 0;
+            HintBadge.Opacity = 0;
             return;
         }
 
         var storyboard = new Storyboard();
-        var animation = new DoubleAnimation
+        foreach (UIElement element in new UIElement[] { ControlStrip, DragRegion, HintBadge })
         {
-            To = 0,
-            Duration = TimeSpan.FromMilliseconds(180),
-            EnableDependentAnimation = true,
-        };
-        Storyboard.SetTarget(animation, ControlStrip);
-        Storyboard.SetTargetProperty(animation, "Opacity");
-        storyboard.Children.Add(animation);
+            var animation = new DoubleAnimation
+            {
+                To = 0,
+                Duration = TimeSpan.FromMilliseconds(180),
+                EnableDependentAnimation = true,
+            };
+            Storyboard.SetTarget(animation, element);
+            Storyboard.SetTargetProperty(animation, "Opacity");
+            storyboard.Children.Add(animation);
+        }
         storyboard.Begin();
     }
 
@@ -213,6 +226,45 @@ public sealed partial class PipWindow : Window
         _lastWidth = width;
         _lastHeight = height;
         BufferSizeChanged?.Invoke(pixelWidth, pixelHeight, dpi);
+    }
+
+    private void SnapToEdges()
+    {
+        if (!App.Settings.EdgeSnapping ||
+            AppWindow.Presenter is not OverlappedPresenter { State: OverlappedPresenterState.Restored })
+        {
+            return;
+        }
+
+        DisplayArea area = DisplayArea.GetFromWindowId(AppWindow.Id, DisplayAreaFallback.Nearest);
+        RectInt32 work = area.WorkArea;
+        PointInt32 position = AppWindow.Position;
+        SizeInt32 size = AppWindow.Size;
+        int threshold = (int)Math.Round(24 * Math.Max(1.0, _rasterizationScale));
+        int x = position.X;
+        int y = position.Y;
+        if (Math.Abs(x - work.X) <= threshold)
+        {
+            x = work.X;
+        }
+        else if (Math.Abs(x + size.Width - (work.X + work.Width)) <= threshold)
+        {
+            x = work.X + work.Width - size.Width;
+        }
+
+        if (Math.Abs(y - work.Y) <= threshold)
+        {
+            y = work.Y;
+        }
+        else if (Math.Abs(y + size.Height - (work.Y + work.Height)) <= threshold)
+        {
+            y = work.Y + work.Height - size.Height;
+        }
+
+        if (x != position.X || y != position.Y)
+        {
+            AppWindow.Move(new PointInt32(x, y));
+        }
     }
 
     private static (int X, int Y) NudgeAwayFromMain(
@@ -302,8 +354,17 @@ public sealed partial class PipWindow : Window
         ShowControls();
     }
 
-    private void OnRestoreClick(object sender, RoutedEventArgs e) =>
-        RestoreRequested?.Invoke(this, EventArgs.Empty);
+    private void OnPinClick(object sender, RoutedEventArgs e)
+    {
+        _isPinned = !_isPinned;
+        if (AppWindow.Presenter is OverlappedPresenter presenter)
+        {
+            presenter.IsAlwaysOnTop = _isPinned;
+        }
+
+        PinButton.Content = _isPinned ? "\uE718" : "\uE77A";
+        ShowControls();
+    }
 
     private void OnCloseClick(object sender, RoutedEventArgs e) =>
         RestoreRequested?.Invoke(this, EventArgs.Empty);

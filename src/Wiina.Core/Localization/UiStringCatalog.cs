@@ -604,6 +604,11 @@ public static class UiStrings
         Add("ui.moveUp", "上移", "Move up");
         Add("ui.copy", "复制", "Copy");
         Add("ui.video", "视频", "Video");
+        Add("ui.qualityPreset", "视频画质", "Video quality");
+        Add("ui.qualityAuto", "自动（IINA 默认）", "Auto (IINA default)");
+        Add("ui.qualityBalanced", "均衡", "Balanced");
+        Add("ui.qualityHigh", "高质量", "High quality");
+        Add("ui.qualityPerformance", "性能优先", "Performance first");
         Add("ui.removeSelected", "移除所选", "Remove selected");
         Add("ui.about", "关于 Wiina", "About Wiina");
         Add("ui.loadSelected", "载入所选", "Load selected");

@@ -152,12 +152,22 @@ public sealed partial class KeyBindingsEditor : UserControl
             {
                 Text = chordText,
                 FontFamily = new FontFamily("Cascadia Mono"),
-                FontSize = 11,
-                Opacity = chords.Count == 0 ? 0.45 : 0.8,
+                FontSize = 10,
+                Opacity = chords.Count == 0 ? 0.45 : 0.9,
                 VerticalAlignment = VerticalAlignment.Center,
             };
-            Grid.SetColumn(chordBlock, 1);
-            content.Children.Add(chordBlock);
+            var chordChip = new Border
+            {
+                Background = new SolidColorBrush(Color.FromArgb(0x1A, 0x80, 0x80, 0x80)),
+                BorderBrush = new SolidColorBrush(Color.FromArgb(0x24, 0x80, 0x80, 0x80)),
+                BorderThickness = new Thickness(1),
+                CornerRadius = new CornerRadius(4),
+                Padding = new Thickness(6, 2, 6, 2),
+                VerticalAlignment = VerticalAlignment.Center,
+                Child = chordBlock,
+            };
+            Grid.SetColumn(chordChip, 1);
+            content.Children.Add(chordChip);
 
             var button = new Button
             {

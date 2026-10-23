@@ -150,6 +150,8 @@ public static class SmartSubtitleFinder
 
             string stem = Path.GetFileNameWithoutExtension(file);
             string? suffix = SidecarSuffix(videoBase, stem);
+            bool exactBase = suffix is not null;
+            suffix ??= FuzzySuffix(videoBase, stem);
             if (suffix is null)
             {
                 continue;
@@ -181,7 +183,7 @@ public static class SmartSubtitleFinder
                 file,
                 language,
                 assFonts,
-                suffix.Length == 0,
+                exactBase && suffix.Length == 0,
                 extensionRank));
         }
 
@@ -268,6 +270,86 @@ public static class SmartSubtitleFinder
         }
 
         return null;
+    }
+
+    /// <summary>
+    /// IINA-style loose match: ignore trailing release tags on the video name
+    /// and accept a sidecar that keeps the same title/episode tokens. This
+    /// catches "[Group] Show [01][1080p].mkv" + "[Group] Show [01].chs.ass"
+    /// without matching a different episode.
+    /// </summary>
+    private static string? FuzzySuffix(string videoBase, string subtitleStem)
+    {
+        List<string> videoTokens = Tokenize(videoBase);
+        while (videoTokens.Count > 0 && IsReleaseTag(videoTokens[^1]))
+        {
+            videoTokens.RemoveAt(videoTokens.Count - 1);
+        }
+
+        List<string> subtitleTokens = Tokenize(subtitleStem);
+        if (videoTokens.Count < 2 || subtitleTokens.Count <= videoTokens.Count)
+        {
+            return null;
+        }
+
+        for (int i = 0; i < videoTokens.Count; i++)
+        {
+            if (!string.Equals(videoTokens[i], subtitleTokens[i], StringComparison.OrdinalIgnoreCase))
+            {
+                return null;
+            }
+        }
+
+        string[] suffixTokens = subtitleTokens.Skip(videoTokens.Count).ToArray();
+        if (suffixTokens.Length == 0 ||
+            !suffixTokens.All(token => IsReleaseTag(token) || IsLanguageTag(token)))
+        {
+            return null;
+        }
+
+        return string.Join('.', suffixTokens);
+    }
+
+    private static List<string> Tokenize(string value)
+    {
+        var tokens = new List<string>();
+        var current = new System.Text.StringBuilder();
+        foreach (char c in value)
+        {
+            if (char.IsLetterOrDigit(c))
+            {
+                current.Append(c);
+            }
+            else if (current.Length > 0)
+            {
+                tokens.Add(current.ToString());
+                current.Clear();
+            }
+        }
+
+        if (current.Length > 0)
+        {
+            tokens.Add(current.ToString());
+        }
+
+        return tokens;
+    }
+
+    private static bool IsLanguageTag(string token) =>
+        SubtitleLanguagePreferences.Normalize(token) != SubtitleLanguagePreferences.Auto ||
+        string.Equals(token, "assfonts", StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsReleaseTag(string token)
+    {
+        string normalized = token.ToLowerInvariant();
+        return normalized is
+            "1080p" or "2160p" or "1440p" or "720p" or "576p" or "480p" or
+            "4k" or "8k" or "uhd" or "hdr" or "hdr10" or "dv" or "dolby" or
+            "vision" or "atmos" or "x264" or "x265" or "h264" or "h265" or
+            "hevc" or "avc" or "av1" or "10bit" or "8bit" or "ma10p" or
+            "flac" or "aac" or "ac3" or "dts" or "truehd" or "web" or
+            "webrip" or "webdl" or "bluray" or "bdrip" or "remux" or
+            "proper" or "repack" or "v2" or "v3";
     }
 
     private static int ExactPenalty(SubtitleCandidate candidate, SubtitleLanguage preferred) =>

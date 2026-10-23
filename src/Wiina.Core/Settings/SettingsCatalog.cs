@@ -107,6 +107,13 @@ public static class SettingsCatalog
             settings => settings.RestoreWindowPosition,
             (settings, value) => settings.RestoreWindowPosition = value,
             "window position restore 窗口 位置"));
+        rows.Add(BoolRow(
+            "general.edge-snap", SettingsPageId.General, "播放与历史",
+            "拖动时吸附屏幕边缘",
+            "拖动窗口结束后，靠近显示器工作区边缘会自动贴合（类似 macOS）。",
+            settings => settings.EdgeSnapping,
+            (settings, value) => settings.EdgeSnapping = value,
+            "snap edge window drag 吸附 边缘 拖动 窗口"));
         rows.Add(ActionRow(
             "general.screenshot-folder", SettingsPageId.General, "播放与历史",
             "截图文件夹",
@@ -130,6 +137,15 @@ public static class SettingsCatalog
                 ? WindowLayoutMode.Docked
                 : WindowLayoutMode.EdgeToEdge,
             "layout docked edge 布局"));
+        rows.Add(ChoiceRow(
+            "ui.blur-mode", SettingsPageId.Ui, "窗口与 OSC",
+            "毛玻璃性能模式",
+            "固定：显示面板时取一帧后复用，最省电；动态：面板可见时持续更新；始终：面板隐藏时也计算。",
+            new[] { "固定（预渲染一帧）", "动态（默认）", "始终计算" },
+            settings => (int)settings.ChromeBlurMode,
+            (settings, value) => settings.ChromeBlurMode =
+                (ChromeBlurMode)Math.Clamp(value, 0, 2),
+            "blur acrylic glass performance 毛玻璃 性能 固定 动态 始终"));
         rows.Add(BoolRow(
             "ui.always-on-top", SettingsPageId.Ui, "窗口与 OSC",
             "窗口置顶", "播放窗口始终位于其他窗口之上。",
@@ -267,6 +283,15 @@ public static class SettingsCatalog
                 new[] { "auto-safe", "auto", "d3d11va", "dxva2", "no" }[
                     Math.Clamp(value, 0, 4)],
             "hwdec hardware decode d3d11va dxva2 硬解 模式"));
+        rows.Add(ChoiceRow(
+            "video.quality", SettingsPageId.Video, "解码",
+            "视频画质预设",
+            "mpv 缩放与去色带 profile；自动保留 IINA/libmpv 默认，高质量更清晰但更耗 GPU。",
+            new[] { "自动（IINA 默认）", "均衡", "高质量", "性能优先" },
+            settings => (int)settings.VideoQualityPreset,
+            (settings, value) => settings.VideoQualityPreset =
+                (VideoQualityPreset)Math.Clamp(value, 0, 3),
+            "quality profile scaler mpv IINA 画质 缩放 性能 高质量 预设"));
         rows.Add(BoolRow(
             "video.deinterlace", SettingsPageId.Video, "解码",
             "去隔行", "对隔行扫描素材启用 mpv 去隔行。",

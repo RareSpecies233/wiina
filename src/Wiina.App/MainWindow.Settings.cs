@@ -2,6 +2,7 @@ using System.Globalization;
 using System.IO;
 using Microsoft.UI.Windowing;
 using Wiina.App.Controls;
+using Wiina.App.Interop;
 using Wiina.App.Views;
 using Wiina.Core.Diagnostics;
 using Wiina.App.Localization;
@@ -101,6 +102,9 @@ public sealed partial class MainWindow
                 _oscState.AutoHideEnabled = _settings.OscAutoHide;
                 ResetAutoHideTimer();
                 break;
+            case "ui.blur-mode":
+                ChromeBlur.SetMode(_settings.ChromeBlurMode);
+                break;
             case "ui.osd-enabled":
             case "ui.osd-position":
             case "ui.osd-size":
@@ -140,6 +144,9 @@ public sealed partial class MainWindow
                 _settings.VideoHwdecMode = NormalizeHwdecMode(_settings.VideoHwdecMode);
                 ApplyMpvString("hwdec", EffectiveHwdecValue());
                 ApplyVideoFilters();
+                break;
+            case "video.quality":
+                ApplyQualityPreset();
                 break;
             case "video.tone-mapping":
             case "video.hdr-compute-peak":

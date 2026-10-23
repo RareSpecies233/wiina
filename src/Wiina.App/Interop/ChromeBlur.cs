@@ -12,6 +12,7 @@ using Microsoft.UI.Xaml.Shapes;
 using Windows.Foundation;
 using Windows.UI;
 using Wiina.App.Controls;
+using Wiina.Core.Settings;
 using Wiina.Mpv;
 namespace Wiina.App.Interop;
 
@@ -51,6 +52,29 @@ internal sealed class ChromeBlur
     private int _queued;
     private bool _osdInjected;
     private long _osdScanAt;
+    private volatile bool _active = true;
+    private volatile bool _fixedCaptured;
+    private ChromeBlurMode _mode = ChromeBlurMode.Dynamic;
+
+    /// <summary>Chrome visibility drives captures in the default Dynamic mode.</summary>
+    public static void SetActive(bool active)
+    {
+        ChromeBlur blur = Current;
+        if (active)
+        {
+            blur._fixedCaptured = false;
+        }
+        blur._active = active;
+    }
+
+    /// <summary>Switch capture strategy; also restarts the fixed-mode frame.</summary>
+    public static void SetMode(ChromeBlurMode mode)
+    {
+        ChromeBlur blur = Current;
+        blur._mode = mode;
+        blur._fixedCaptured = false;
+        blur._active = true;
+    }
     private ChromeBlur()
     {
     }
@@ -140,6 +164,18 @@ internal sealed class ChromeBlur
         while (_running)
         {
             long started = Environment.TickCount64;
+            if (!_active && _mode != ChromeBlurMode.Always)
+            {
+                Thread.Sleep(FrameIntervalMs);
+                continue;
+            }
+
+            if (_mode == ChromeBlurMode.Fixed && _fixedCaptured)
+            {
+                Thread.Sleep(FrameIntervalMs);
+                continue;
+            }
+
             try
             {
                 MpvPlayer? player = ResolvePlayer();
@@ -149,6 +185,10 @@ internal sealed class ChromeBlur
                     if (shot is not null && shot.Pixels.Length > 0)
                     {
                         Blur(shot);
+                        if (_mode == ChromeBlurMode.Fixed)
+                        {
+                            _fixedCaptured = true;
+                        }
                     }
                 }
             }
