@@ -1,9 +1,11 @@
+using System.Diagnostics;
 using System.Globalization;
 using System.Runtime.InteropServices.WindowsRuntime;
 using Wiina.Core.Caching;
 using Wiina.Mpv;
 using Windows.Graphics.Imaging;
 using Windows.Storage;
+using Windows.Storage.Streams;
 
 namespace Wiina.App.Services;
 
@@ -18,25 +20,41 @@ public sealed record ThumbnailFrame(
 /// Background thumbnail generator for the timeline hover peek. A second,
 /// headless libmpv instance seeks the same file, captures <c>screenshot-raw</c>
 /// and scales it before returning. The UI thread never performs file IO or
-/// frame decoding. Results are cached by time bucket with a bounded LRU.
+/// frame decoding.
+///
+/// Results live in three tiers: a bounded memory LRU for the current session, an
+/// on-disk JPEG cache keyed by file identity (path, size, mtime, duration,
+/// bucket, height) that survives restarts, and a background pre-generation pass
+/// that warms the disk cache once a file is opened. Extraction runs on a single
+/// worker so only one libmpv seek is ever in flight; hover requests are queued
+/// ahead of pre-generation work.
 /// </summary>
 public sealed class ThumbnailService : IDisposable
 {
     private const int MaxSourceDimension = 16_384;
+    private const int PreGenerationHeight = 90;
+
     private readonly object _gate = new();
-    private readonly Dictionary<long, Task<ThumbnailFrame?>> _inflight = new();
-    private readonly SemaphoreSlim _extractGate = new(1, 1);
+    private readonly List<Job> _queue = new();
+    private readonly Dictionary<string, Job> _jobs = new(StringComparer.Ordinal);
+    private readonly SemaphoreSlim _wake = new(0);
     private readonly ThumbnailCache<ThumbnailFrame> _cache;
+    private readonly ThumbnailDiskCache? _disk;
     private readonly double _bucketSeconds;
     private MpvPlayer? _player;
     private TaskCompletionSource<bool>? _fileLoaded;
     private string? _loadedPath;
+    private Task? _worker;
+    private CancellationTokenSource? _pregenCts;
+    private DateTime _lastInteractionUtc = DateTime.UtcNow;
     private bool _disposed;
 
     public ThumbnailService(
         int cacheCount = 60,
         double bucketSeconds = 5,
-        Action<string>? log = null)
+        Action<string>? log = null,
+        string? diskCacheDirectory = null,
+        int diskCacheMegabytes = 512)
     {
         _bucketSeconds = double.IsFinite(bucketSeconds) && bucketSeconds > 0
             ? bucketSeconds
@@ -45,117 +63,408 @@ public sealed class ThumbnailService : IDisposable
             Math.Max(1, cacheCount),
             _bucketSeconds);
         Log = log;
+
+        long budget = Math.Max(0, diskCacheMegabytes) * 1024L * 1024L;
+        if (budget > 0)
+        {
+            string directory = string.IsNullOrWhiteSpace(diskCacheDirectory)
+                ? Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                    "Wiina",
+                    "thumbnails")
+                : diskCacheDirectory;
+            _disk = new ThumbnailDiskCache(directory);
+            _disk.SetLimitBytes(budget);
+        }
     }
 
     public Action<string>? Log { get; }
 
     public int CachedCount => _cache.Count;
 
+    /// <summary>Whether an on-disk cache is active (a 0 MiB budget disables it).</summary>
+    public bool DiskCacheEnabled => _disk is not null;
+
+    /// <summary>Bytes currently occupied by the on-disk cache.</summary>
+    public long DiskCacheBytes => _disk?.TotalBytes ?? 0;
+
     public bool TryGetCached(double seconds, out ThumbnailFrame frame) =>
         _cache.TryGet(seconds, out frame);
 
     /// <summary>
     /// Requests a thumbnail for <paramref name="seconds"/>. Concurrent requests
-    /// for the same bucket share one extraction. Stale callers are expected to
+    /// for the same source/time share one extraction. The memory cache answers
+    /// immediately, the disk cache answers after an IO hop, and anything else is
+    /// queued on the single extraction worker. Stale callers are expected to
     /// ignore the result (the UI cancels its own request token).
     /// </summary>
-    public Task<ThumbnailFrame?> GetAsync(
+    public async Task<ThumbnailFrame?> GetAsync(
         string? mediaPath,
         double seconds,
+        double durationSeconds,
         int targetHeight = 90,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        bool background = false)
     {
-        if (_disposed || cancellationToken.IsCancellationRequested)
+        if (_disposed || cancellationToken.IsCancellationRequested || !IsLocalFile(mediaPath))
         {
-            return Task.FromResult<ThumbnailFrame?>(null);
+            return null;
         }
 
-        if (!IsLocalFile(mediaPath))
+        if (!background)
         {
-            return Task.FromResult<ThumbnailFrame?>(null);
+            _lastInteractionUtc = DateTime.UtcNow;
         }
 
         if (_cache.TryGet(seconds, out ThumbnailFrame cached))
         {
-            return Task.FromResult<ThumbnailFrame?>(cached);
+            return cached;
         }
 
-        long key = _cache.KeyFor(seconds);
+        int height = ClampHeight(targetHeight);
+        long bucket = _cache.KeyFor(seconds);
+        double bucketTime = bucket * _bucketSeconds;
+
+        if (_disk is not null && durationSeconds > 0)
+        {
+            var diskClock = Stopwatch.StartNew();
+            ThumbnailFrame? diskFrame = await TryReadDiskAsync(
+                mediaPath!,
+                durationSeconds,
+                bucketTime,
+                height).ConfigureAwait(false);
+            if (diskFrame is not null)
+            {
+                diskClock.Stop();
+                _cache.Put(bucketTime, diskFrame);
+                Log?.Invoke(
+                    $"thumbnail {bucketTime:0.0}s from disk in " +
+                    $"{diskClock.Elapsed.TotalMilliseconds:0} ms");
+                return diskFrame;
+            }
+        }
+
+        Job job = GetOrCreateJob(mediaPath!, bucketTime, durationSeconds, height, background);
+        return await job.Completion.Task.WaitAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    private Job GetOrCreateJob(
+        string path,
+        double seconds,
+        double duration,
+        int height,
+        bool background)
+    {
+        string id = JobId(path, seconds, height);
+        long bucket = _cache.KeyFor(seconds);
         lock (_gate)
         {
-            if (_inflight.TryGetValue(key, out Task<ThumbnailFrame?>? running))
+            if (_jobs.TryGetValue(id, out Job? existing))
             {
-                return running;
+                if (!background && existing.Background)
+                {
+                    existing.Background = false;
+                    ReprioritizeLocked(existing);
+                }
+
+                return existing;
             }
 
-            Task<ThumbnailFrame?> task = Task.Run(
-                () => ExtractAsync(mediaPath!, key, targetHeight));
-            _inflight[key] = task;
-            _ = task.ContinueWith(
-                _ =>
-                {
-                    lock (_gate)
-                    {
-                        _inflight.Remove(key);
-                    }
-                },
-                CancellationToken.None,
-                TaskContinuationOptions.ExecuteSynchronously,
-                TaskScheduler.Default);
-            return task;
+            var job = new Job
+            {
+                Id = id,
+                Path = path,
+                Seconds = seconds,
+                Duration = duration,
+                Height = height,
+                Bucket = bucket,
+                Background = background,
+            };
+            _jobs[id] = job;
+            InsertLocked(job);
+            EnsureWorkerLocked();
+            _wake.Release();
+            return job;
         }
     }
 
-    private async Task<ThumbnailFrame?> ExtractAsync(
-        string mediaPath,
-        long bucket,
-        int targetHeight)
+    /// <summary>
+    /// Extracts every time bucket of <paramref name="mediaPath"/> into the disk
+    /// cache in the background. A previous run for another file is cancelled.
+    /// Pre-generated jobs run behind interactive hover requests.
+    /// </summary>
+    public void StartPreGeneration(
+        string? mediaPath,
+        double durationSeconds,
+        int targetHeight = PreGenerationHeight)
     {
+        StopPreGeneration();
+        if (_disposed
+            || _disk is null
+            || !IsLocalFile(mediaPath)
+            || !double.IsFinite(durationSeconds)
+            || durationSeconds <= 0)
+        {
+            return;
+        }
+
+        var cts = new CancellationTokenSource();
+        _pregenCts = cts;
+        string path = mediaPath!;
+        int height = ClampHeight(targetHeight);
+        _ = Task.Run(() => PreGenerateAsync(path, durationSeconds, height, cts.Token));
+    }
+
+    public void StopPreGeneration()
+    {
+        CancellationTokenSource? cts;
+        lock (_gate)
+        {
+            cts = _pregenCts;
+            _pregenCts = null;
+        }
+
+        if (cts is null)
+        {
+            return;
+        }
+
         try
         {
-            await _extractGate.WaitAsync().ConfigureAwait(false);
-            try
+            cts.Cancel();
+        }
+        catch (ObjectDisposedException)
+        {
+        }
+
+        cts.Dispose();
+    }
+
+    /// <summary>Applies a new disk budget live; 0 disables the cache and clears it.</summary>
+    public void SetDiskCacheLimit(int megabytes)
+    {
+        long budget = Math.Max(0, megabytes) * 1024L * 1024L;
+        _disk?.SetLimitBytes(budget);
+        if (megabytes <= 0)
+        {
+            StopPreGeneration();
+        }
+    }
+
+    /// <summary>Deletes every cached frame; returns the number of bytes freed.</summary>
+    public long ClearDiskCache() => _disk?.Clear() ?? 0;
+
+    private async Task PreGenerateAsync(
+        string path,
+        double duration,
+        int height,
+        CancellationToken ct)
+    {
+        long lastBucket = (long)Math.Floor(duration / _bucketSeconds);
+        int extracted = 0;
+        int reused = 0;
+        var clock = Stopwatch.StartNew();
+        try
+        {
+            for (long bucket = 0; bucket <= lastBucket; bucket++)
             {
-                if (_disposed)
+                if (ct.IsCancellationRequested || _disposed)
                 {
-                    return null;
+                    return;
                 }
 
                 double seconds = bucket * _bucketSeconds;
-                MpvPlayer? player = EnsurePlayer();
-                if (player is null || !await LoadFileAsync(player, mediaPath).ConfigureAwait(false))
+                if (_cache.TryGet(seconds, out _))
                 {
-                    return null;
+                    reused++;
+                    continue;
                 }
 
-                await SeekAsync(player, seconds).ConfigureAwait(false);
-                MpvScreenshot? shot = Capture(player);
-                ThumbnailFrame? frame = shot is null ? null : Scale(shot, seconds, targetHeight);
-                if (frame is null)
+                if (_disk is not null
+                    && await TryReadDiskAsync(path, duration, seconds, height).ConfigureAwait(false) is { } cached)
                 {
-                    shot = await CaptureToFileAsync(player).ConfigureAwait(false);
-                    frame = shot is null ? null : Scale(shot, seconds, targetHeight);
+                    _cache.Put(seconds, cached);
+                    reused++;
+                    continue;
                 }
 
-                if (frame is null)
+                ThumbnailFrame? frame = await GetAsync(
+                    path,
+                    seconds,
+                    duration,
+                    height,
+                    ct,
+                    background: true).ConfigureAwait(false);
+                if (frame is not null)
                 {
-                    Log?.Invoke($"thumbnail {seconds:0.0}s failed");
-                    return null;
+                    extracted++;
                 }
-
-                _cache.Put(seconds, frame);
-                return frame;
             }
-            finally
-            {
-                _extractGate.Release();
-            }
+        }
+        catch (OperationCanceledException)
+        {
         }
         catch (Exception ex)
         {
-            Log?.Invoke($"thumbnail {mediaPath} @ {bucket}: {ex.Message}");
+            Log?.Invoke("thumbnail pre-generation failed: " + ex.Message);
+        }
+        finally
+        {
+            clock.Stop();
+            Log?.Invoke(
+                $"thumbnail pre-generation: {extracted} extracted, {reused} cached, " +
+                $"{lastBucket + 1} buckets in {clock.Elapsed.TotalSeconds:0.0}s");
+        }
+    }
+
+    // ------------------------------------------------------------- worker loop
+
+    private void EnsureWorkerLocked()
+    {
+        if (_worker is { IsCompleted: false })
+        {
+            return;
+        }
+
+        _worker = Task.Run(WorkerLoopAsync);
+    }
+
+    private async Task WorkerLoopAsync()
+    {
+        while (true)
+        {
+            Job? job;
+            lock (_gate)
+            {
+                if (_disposed)
+                {
+                    return;
+                }
+
+                job = TakeNextLocked();
+            }
+
+            if (job is null)
+            {
+                try
+                {
+                    await _wake.WaitAsync(250).ConfigureAwait(false);
+                }
+                catch (ObjectDisposedException)
+                {
+                    return;
+                }
+
+                continue;
+            }
+
+            // Never let pre-generation compete with a fresh hover: the drag
+            // preview feels laggy if a background seek occupies mpv.
+            if (job.Background
+                && (DateTime.UtcNow - _lastInteractionUtc).TotalMilliseconds < 1000)
+            {
+                await Task.Delay(120).ConfigureAwait(false);
+            }
+
+            ThumbnailFrame? frame = null;
+            try
+            {
+                frame = await ExtractAsync(job).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                Log?.Invoke(
+                    $"thumbnail {job.Path} @ {job.Seconds:0.0}s: {ex.Message}");
+            }
+
+            job.Completion.TrySetResult(frame);
+            lock (_gate)
+            {
+                _jobs.Remove(job.Id);
+            }
+        }
+    }
+
+    private Job? TakeNextLocked()
+    {
+        if (_queue.Count == 0)
+        {
             return null;
         }
+
+        Job job = _queue[0];
+        _queue.RemoveAt(0);
+        return job;
+    }
+
+    private void InsertLocked(Job job)
+    {
+        int index = _queue.Count;
+        for (int i = 0; i < _queue.Count; i++)
+        {
+            if (Compare(job, _queue[i]) < 0)
+            {
+                index = i;
+                break;
+            }
+        }
+
+        _queue.Insert(index, job);
+    }
+
+    private void ReprioritizeLocked(Job job)
+    {
+        _queue.Remove(job);
+        InsertLocked(job);
+    }
+
+    private static int Compare(Job a, Job b)
+    {
+        int priority = (a.Background ? 1 : 0).CompareTo(b.Background ? 1 : 0);
+        return priority != 0 ? priority : a.Bucket.CompareTo(b.Bucket);
+    }
+
+    private async Task<ThumbnailFrame?> ExtractAsync(Job job)
+    {
+        var clock = Stopwatch.StartNew();
+        MpvPlayer? player = EnsurePlayer();
+        if (player is null || !await LoadFileAsync(player, job.Path).ConfigureAwait(false))
+        {
+            return null;
+        }
+
+        await SeekAsync(player, job.Seconds).ConfigureAwait(false);
+        MpvScreenshot? shot = Capture(player);
+        ThumbnailFrame? frame = shot is null ? null : Scale(shot, job.Seconds, job.Height);
+        if (frame is null)
+        {
+            shot = await CaptureToFileAsync(player).ConfigureAwait(false);
+            frame = shot is null ? null : Scale(shot, job.Seconds, job.Height);
+        }
+
+        if (frame is null)
+        {
+            Log?.Invoke($"thumbnail {job.Seconds:0.0}s failed");
+            return null;
+        }
+
+        _cache.Put(job.Seconds, frame);
+        clock.Stop();
+        long extractedMs = clock.ElapsedMilliseconds;
+        if (_disk is not null && job.Duration > 0)
+        {
+            await WriteDiskAsync(job, frame).ConfigureAwait(false);
+        }
+
+        // Pre-generation extracts hundreds of frames; only log the interactive
+        // requests, which are the ones whose latency matters to a user.
+        if (!job.Background)
+        {
+            Log?.Invoke(
+                $"thumbnail {job.Seconds:0.0}s extracted in {extractedMs} ms");
+        }
+
+        return frame;
     }
 
     private MpvPlayer? EnsurePlayer()
@@ -314,6 +623,182 @@ public sealed class ThumbnailService : IDisposable
             pixels);
     }
 
+    // -------------------------------------------------------------- disk cache
+
+    private async Task<ThumbnailFrame?> TryReadDiskAsync(
+        string path,
+        double duration,
+        double seconds,
+        int height)
+    {
+        ThumbnailDiskCache? disk = _disk;
+        if (disk is null)
+        {
+            return null;
+        }
+
+        try
+        {
+            long bucket = _cache.KeyFor(seconds);
+            ThumbnailDiskEntry? entry = await Task.Run(() =>
+            {
+                ThumbnailSource source = DescribeSource(path, duration, height);
+                return disk.TryRead(source, bucket, out ThumbnailDiskEntry? found)
+                    ? found
+                    : null;
+            }).ConfigureAwait(false);
+            if (entry is null)
+            {
+                return null;
+            }
+
+            return await DecodeJpegAsync(entry.Data, bucket * _bucketSeconds)
+                .ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            Log?.Invoke("thumbnail disk read failed: " + ex.Message);
+            return null;
+        }
+    }
+
+    private async Task WriteDiskAsync(Job job, ThumbnailFrame frame)
+    {
+        ThumbnailDiskCache? disk = _disk;
+        if (disk is null)
+        {
+            return;
+        }
+
+        try
+        {
+            byte[]? jpeg = await EncodeJpegAsync(frame).ConfigureAwait(false);
+            if (jpeg is null)
+            {
+                return;
+            }
+
+            await Task.Run(() =>
+            {
+                ThumbnailSource source = DescribeSource(
+                    job.Path, job.Duration, job.Height);
+                disk.Put(source, job.Bucket, jpeg, frame.Width, frame.Height);
+            }).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            Log?.Invoke("thumbnail disk write failed: " + ex.Message);
+        }
+    }
+
+    private ThumbnailSource DescribeSource(string path, double duration, int height)
+    {
+        long size = 0;
+        long ticks = 0;
+        try
+        {
+            var info = new FileInfo(path);
+            if (info.Exists)
+            {
+                size = info.Length;
+                ticks = info.LastWriteTimeUtc.Ticks;
+            }
+        }
+        catch (Exception)
+        {
+            // A missing/unreadable file simply yields a key that never hits.
+        }
+
+        return new ThumbnailSource(
+            path,
+            size,
+            ticks,
+            duration,
+            _bucketSeconds,
+            height);
+    }
+
+    private static async Task<byte[]?> EncodeJpegAsync(ThumbnailFrame frame)
+    {
+        var stream = new InMemoryRandomAccessStream();
+        try
+        {
+            BitmapEncoder encoder = await BitmapEncoder.CreateAsync(
+                BitmapEncoder.JpegEncoderId, stream);
+            encoder.SetPixelData(
+                BitmapPixelFormat.Bgra8,
+                BitmapAlphaMode.Ignore,
+                (uint)frame.Width,
+                (uint)frame.Height,
+                96,
+                96,
+                frame.Bgra);
+            await encoder.FlushAsync();
+            return await ReadStreamAsync(stream).ConfigureAwait(false);
+        }
+        catch (Exception)
+        {
+            return null;
+        }
+        finally
+        {
+            stream.Dispose();
+        }
+    }
+
+    private static async Task<ThumbnailFrame?> DecodeJpegAsync(byte[] jpeg, double seconds)
+    {
+        var stream = new InMemoryRandomAccessStream();
+        try
+        {
+            await stream.WriteAsync(jpeg.AsBuffer());
+            stream.Seek(0);
+            BitmapDecoder decoder = await BitmapDecoder.CreateAsync(stream);
+            using SoftwareBitmap bitmap = await decoder.GetSoftwareBitmapAsync(
+                BitmapPixelFormat.Bgra8,
+                BitmapAlphaMode.Premultiplied);
+            if (bitmap.PixelWidth <= 0 || bitmap.PixelHeight <= 0)
+            {
+                return null;
+            }
+
+            var pixels = new byte[bitmap.PixelWidth * bitmap.PixelHeight * 4];
+            bitmap.CopyToBuffer(pixels.AsBuffer());
+            return new ThumbnailFrame(
+                pixels,
+                bitmap.PixelWidth,
+                bitmap.PixelHeight,
+                seconds);
+        }
+        catch (Exception)
+        {
+            return null;
+        }
+        finally
+        {
+            stream.Dispose();
+        }
+    }
+
+    private static async Task<byte[]> ReadStreamAsync(IRandomAccessStream stream)
+    {
+        uint size = checked((uint)stream.Size);
+        var bytes = new byte[size];
+        using var reader = new DataReader(stream.GetInputStreamAt(0));
+        await reader.LoadAsync(size);
+        reader.ReadBytes(bytes);
+        return bytes;
+    }
+
+    private static int ClampHeight(int height) => Math.Clamp(height, 24, 240);
+
+    private static string JobId(string path, double seconds, int height) =>
+        (ThumbnailDiskCache.NormalizePath(path)
+            + "\u0001"
+            + seconds.ToString("0.###", CultureInfo.InvariantCulture)
+            + "\u0001"
+            + height.ToString(CultureInfo.InvariantCulture));
+
     /// <summary>Converts BGRA/BGR0/RGBA/RGB0 and downscales with bilinear sampling.</summary>
     internal static ThumbnailFrame? Scale(MpvScreenshot shot, double time, int targetHeight)
     {
@@ -449,9 +934,38 @@ public sealed class ThumbnailService : IDisposable
         }
 
         _disposed = true;
+        StopPreGeneration();
+
+        List<Job> pending;
+        lock (_gate)
+        {
+            pending = new List<Job>(_queue);
+            _queue.Clear();
+            _jobs.Clear();
+        }
+
+        foreach (Job job in pending)
+        {
+            job.Completion.TrySetResult(null);
+        }
+
+        _wake.Release();
         _player?.Dispose();
         _player = null;
         _cache.Clear();
-        _extractGate.Dispose();
+        _disk?.Flush();
+    }
+
+    private sealed class Job
+    {
+        public string Id { get; init; } = string.Empty;
+        public string Path { get; init; } = string.Empty;
+        public double Seconds { get; init; }
+        public double Duration { get; init; }
+        public int Height { get; init; }
+        public long Bucket { get; init; }
+        public bool Background { get; set; }
+        public TaskCompletionSource<ThumbnailFrame?> Completion { get; } =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
     }
 }

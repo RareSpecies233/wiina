@@ -1727,6 +1727,7 @@ public sealed partial class MainWindow
         if (name == "duration")
         {
             UpdateSmtc();
+            StartThumbnailPreGeneration();
         }
     }
 
@@ -1786,6 +1787,7 @@ public sealed partial class MainWindow
             UpdateMiniPlaylist();
             MaybeAutoEnterMini();
             UpdateSmtc();
+            StartThumbnailPreGeneration();
         }
         catch (Exception ex)
         {

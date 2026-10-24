@@ -1,6 +1,6 @@
 # Accessibility, localization, DPI and motion
 
-This document records what Wiina v1.2.6 implements, how it was checked, and
+This document records what Wiina v1.2.7 implements, how it was checked, and
 what is intentionally limited. It is a summary, not a certification.
 
 ## 1. Keyboard and focus
@@ -120,12 +120,12 @@ generic text containers mirror.
 
 ## 7. Localization coverage
 
-- Runtime catalog: 547 keys in `UiStringCatalog.cs`, each with a non-empty
+- Runtime catalog: 551 keys in `UiStringCatalog.cs`, each with a non-empty
   zh-Hans and English string. Coverage includes the title bar, OSC, OSD, menus,
   sidebars, quick settings, all 12 settings pages (titles, summaries, section
   headers, row titles/descriptions/choices), welcome/about/log/inspector/open-URL
   dialogs, filter/equalizer windows, playlist/chapters, mini player, PiP badge,
-  the 1.2.6 audio-device labels (auto/refresh/unavailable) and common errors.
+  the 1.2.6 audio-device labels (auto/refresh/unavailable), the 1.2.7 thumbnail-cache and administrator-association labels, and common errors.
 - The language row is enabled; changing it applies immediately, re-renders the
   main shell and settings window, and persists `Language` in
   `%LOCALAPPDATA%\Wiina\settings.json`. Already-open auxiliary windows pick up

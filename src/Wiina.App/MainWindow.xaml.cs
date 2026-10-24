@@ -84,6 +84,7 @@ public sealed partial class MainWindow : Window
     private bool _wasPlayingBeforeSeek;
     private bool _chromeShown = true;
     private bool _pointerOverChrome;
+    private bool _windowActive = true;
     private int _openFlyoutCount;
     private MenuFlyout? _applicationMenu;
     private Storyboard? _chromeStoryboard;
@@ -236,6 +237,10 @@ public sealed partial class MainWindow : Window
         {
             if (args.WindowActivationState == WindowActivationState.Deactivated)
             {
+                // An inactive window must not hide the pointer: the user may be
+                // pointing at it while working in another app.
+                _windowActive = false;
+                WindowInterop.SetCursorVisible(true);
                 CloseApplicationMenu();
 
                 // Losing focus keeps the chrome only in the docked layout and
@@ -257,6 +262,7 @@ public sealed partial class MainWindow : Window
                 return;
             }
 
+            _windowActive = true;
             RootGrid.Focus(FocusState.Programmatic);
             App.ActivateWindow(this);
         };
@@ -425,6 +431,10 @@ public sealed partial class MainWindow : Window
 
         Point point = e.GetCurrentPoint(RootGrid).Position;
         _pointerOverChrome = IsOverChrome(point);
+
+        // WinUI resets the cursor to the arrow for every mouse move; while the
+        // chrome is faded out the pointer must stay hidden even for jitter.
+        ReapplyHiddenCursor();
 
         // Sub-threshold jitter (a hand resting on the mouse) is not activity:
         // the OSC must still fade out, even with the pointer sitting on it.
@@ -648,7 +658,7 @@ public sealed partial class MainWindow : Window
             _oscState.CompleteShow();
             ChromeBlur.SetActive(true);
             FadeChrome(1, hitTest: true);
-            WindowInterop.SetCursorVisible(true);
+            UpdateCursorForChrome();
         }
 
         ResetAutoHideTimer();
@@ -693,7 +703,43 @@ public sealed partial class MainWindow : Window
         ChromeBlur.SetActive(false);
         _autoHideTimer.Stop();
         FadeChrome(0, hitTest: false);
+        UpdateCursorForChrome();
+    }
+
+    /// <summary>
+    /// Re-pushes the hidden pointer after WinUI handled a mouse move (it resets
+    /// the cursor to the arrow on every move). Only the hidden state is applied
+    /// here: while the chrome is visible the platform owns the cursor shape,
+    /// including the resize grips and text I-beams.
+    /// </summary>
+    private void ReapplyHiddenCursor()
+    {
+        if (!_windowActive ||
+            _chromeShown ||
+            _settings.Layout == WindowLayoutMode.Docked ||
+            !ChromeInteractionEnabled ||
+            !WindowInterop.IsCursorInsideWindow(this))
+        {
+            return;
+        }
+
         WindowInterop.SetCursorVisible(false);
+    }
+
+    /// <summary>
+    /// Reconciles the pointer with the chrome state after a show/hide, layout or
+    /// mode change: hidden only over the player once the chrome faded out,
+    /// visible everywhere else (including the docked layout, where the chrome
+    /// never hides).
+    /// </summary>
+    private void UpdateCursorForChrome()
+    {
+        bool hidden = _windowActive &&
+            !_chromeShown &&
+            _settings.Layout != WindowLayoutMode.Docked &&
+            ChromeInteractionEnabled &&
+            WindowInterop.IsCursorInsideWindow(this);
+        WindowInterop.SetCursorVisible(!hidden);
     }
 
     private void ResetAutoHideTimer()
@@ -1124,11 +1170,16 @@ public sealed partial class MainWindow : Window
     /// <summary>Widths of the sidebar panels that are currently on screen.</summary>
     private (double Leading, double Trailing) VisibleSidebarInsets()
     {
+        // A panel that is sliding out keeps reporting Visible at its full width
+        // until the animation collapses it; it must not keep the floating OSC
+        // pushed aside for that trailing stretch.
         double leading = SidebarLeading.Visibility == Visibility.Visible &&
+            !SidebarLeading.IsHiding &&
             SidebarLeading.ActualWidth > 0
             ? SidebarLeading.ActualWidth
             : 0;
         double trailing = SidebarTrailing.Visibility == Visibility.Visible &&
+            !SidebarTrailing.IsHiding &&
             SidebarTrailing.ActualWidth > 0
             ? SidebarTrailing.ActualWidth
             : 0;
@@ -1550,12 +1601,24 @@ public sealed partial class MainWindow : Window
         }
 
         ResetAutoHideTimer();
+        // Layout/mode changes can hide or reveal the chrome under a resting
+        // pointer, and the platform resets the cursor on the next move: push the
+        // state that belongs to the new layout.
+        UpdateCursorForChrome();
     }
 
     /// <summary>Shared edge magnet: snap threshold + breakaway hysteresis.</summary>
     private readonly EdgeSnapSession _snapSession = new();
 
-    private bool? _snapFrameApplied;
+    /// <summary>Last snapped state requested by the edge magnet (video/mini drag, WM_MOVING).</summary>
+    private bool _snapFrameEngaged;
+
+    /// <summary>
+    /// Last DWM frame style we applied, or null when it must be re-applied (a
+    /// presenter switch rebuilds the non-client frame and can re-enable the
+    /// system border behind our back).
+    /// </summary>
+    private WindowInterop.WindowFrameStyle? _frameStyleApplied;
 
     /// <summary>
     /// Invisible resize-border margins of this window. The OS reports the outer
@@ -1633,19 +1696,58 @@ public sealed partial class MainWindow : Window
     }
 
     /// <summary>
-    /// Applies the flush-edge DWM frame only on transitions. A snapped window
-    /// gets no border line and no rounded corners, so it really touches the
-    /// monitor edge (issue 4 acceptance: no white gap).
+    /// Records the magnet state and re-resolves the effective frame style.
+    /// Fullscreen always wins over a stale snapped state, which is what used to
+    /// leave a thin outline around the fullscreen surface.
     /// </summary>
     private void ApplySnapFrame(bool snapped)
     {
-        if (_snapFrameApplied == snapped)
+        _snapFrameEngaged = snapped;
+        ApplyWindowFrame();
+    }
+
+    /// <summary>
+    /// Applies the DWM frame only when the effective style changes. A snapped
+    /// window gets no border line and no rounded corners, so it really touches
+    /// the monitor edge (issue 4 acceptance); a fullscreen window forces the
+    /// same flush style so no ring survives the presenter switch (v1.2.7).
+    /// </summary>
+    private void ApplyWindowFrame()
+    {
+        WindowInterop.WindowFrameStyle style = IsFullscreen
+            ? WindowInterop.WindowFrameStyle.Fullscreen
+            : _snapFrameEngaged
+                ? WindowInterop.WindowFrameStyle.Snapped
+                : WindowInterop.WindowFrameStyle.Default;
+        if (_frameStyleApplied == style)
         {
             return;
         }
 
-        _snapFrameApplied = snapped;
-        WindowInterop.SetSnappedFrame(this, snapped);
+        _frameStyleApplied = style;
+        WindowInterop.SetWindowFrame(this, style);
+    }
+
+    /// <summary>
+    /// Presenter switches recreate the non-client frame, so the DWM border may
+    /// come back after we set it. Entering fullscreen also invalidates the edge
+    /// magnet: the snapped frame must not be restored when leaving fullscreen.
+    /// </summary>
+    private void OnAppWindowChanged(AppWindow sender, AppWindowChangedEventArgs args)
+    {
+        if (!args.DidPresenterChange)
+        {
+            return;
+        }
+
+        if (IsFullscreen)
+        {
+            _snapSession.Reset();
+            _snapFrameEngaged = false;
+        }
+
+        _frameStyleApplied = null;
+        ApplyWindowFrame();
     }
 
     private void OnRootLoaded(object sender, RoutedEventArgs e)
@@ -1670,6 +1772,10 @@ public sealed partial class MainWindow : Window
             xamlRoot.Changed += OnXamlRootChanged;
         }
 
+        // Fullscreen / PiP / mini switches rebuild the DWM frame; keep the
+        // borderless style authoritative instead of trusting the cached state.
+        AppWindow.Changed += OnAppWindowChanged;
+
         RootGrid.Focus(FocusState.Programmatic);
         UpdateSmtc();
     }
@@ -1691,6 +1797,10 @@ public sealed partial class MainWindow : Window
             PositionTimePreview();
             PositionThumbnail();
         }
+
+        // A resize can leave the pointer over a different element, and the next
+        // mouse move will have its cursor reset by the platform.
+        ReapplyHiddenCursor();
 
         _resizeTimer.Stop();
         _resizeTimer.Start();
@@ -1714,6 +1824,9 @@ public sealed partial class MainWindow : Window
         _resizeTimer.Stop();
         _resizeTimer.Start();
         ConfigureCaptionButtons();
+        // A DPI / monitor change recreates the DWM frame; re-assert the
+        // fullscreen or snapped decoration so no border ring survives it.
+        ApplyWindowFrame();
         if (_previewTimeline is not null && TimePreview.Visibility == Visibility.Visible)
         {
             PositionTimePreview();
@@ -1996,33 +2109,109 @@ public sealed partial class MainWindow : Window
         }
     }
 
+    /// <summary>
+    /// 0.5× / 1× / 2×: the window is sized from the actual video resolution
+    /// (mpv's display dw/dh when present, else the decoded size), so 1× shows
+    /// every video pixel at a physical pixel. The helper returns DIP and keeps
+    /// the window inside the current monitor's work area.
+    /// </summary>
     private void ResizeToScale(double scale)
     {
-        double dpi = RootGrid.XamlRoot?.RasterizationScale ?? 1.0;
-        int width = Math.Max(320, (int)Math.Round(1280 * scale * dpi));
-        int height = Math.Max(180, (int)Math.Round(720 * scale * dpi));
-        AppWindow.Resize(new SizeInt32(width, height));
-    }
-
-    private void FitToScreen()
-    {
-        RectInt32 area = DisplayArea
-            .GetFromWindowId(AppWindow.Id, DisplayAreaFallback.Primary)
-            .WorkArea;
-
-        int width = Math.Max(320, area.Width - 96);
-        int height = (int)Math.Round(width / (16.0 / 9.0));
-        if (height > area.Height - 96)
+        double dpi = DisplayScale;
+        RectInt32 workArea = CurrentWorkArea();
+        (int videoWidth, int videoHeight) = DisplayVideoSize();
+        DipSize? size = WindowSizing.ScaledVideoWindowSize(
+            videoWidth, videoHeight, scale, dpi, workArea.Width, workArea.Height);
+        if (size is null)
         {
-            height = Math.Max(180, area.Height - 96);
-            width = (int)Math.Round(height * (16.0 / 9.0));
+            return;
         }
 
+        (int width, int height) = WindowSizing.ToPhysical(size.Value, dpi);
+        width = Math.Clamp(width, 1, workArea.Width);
+        height = Math.Clamp(height, 1, workArea.Height);
+
+        // An explicit size choice must survive the first-video auto sizing.
+        _userResizedWindow = true;
+        AppWindow.Resize(new SizeInt32(width, height));
+        ClampWindowIntoWorkArea(workArea, width, height);
+    }
+
+    /// <summary>
+    /// Fits the window to the largest area with the video's display aspect ratio
+    /// (not a hardcoded 16:9 box), centered on the current monitor with the same
+    /// 96 px breathing room as before. No video keeps the 1280x720 fallback.
+    /// </summary>
+    private void FitToScreen()
+    {
+        double dpi = DisplayScale;
+        RectInt32 workArea = CurrentWorkArea();
+        const int margin = 96;
+        int availableWidth = Math.Max(1, workArea.Width - margin);
+        int availableHeight = Math.Max(1, workArea.Height - margin);
+        (int videoWidth, int videoHeight) = DisplayVideoSize();
+        DipSize? size = WindowSizing.FitVideoWindowSize(
+            videoWidth, videoHeight, dpi, availableWidth, availableHeight);
+        if (size is null)
+        {
+            return;
+        }
+
+        (int width, int height) = WindowSizing.ToPhysical(size.Value, dpi);
+        width = Math.Clamp(width, 1, availableWidth);
+        height = Math.Clamp(height, 1, availableHeight);
+
+        _userResizedWindow = true;
         AppWindow.MoveAndResize(new RectInt32(
-            area.X + Math.Max(0, (area.Width - width) / 2),
-            area.Y + Math.Max(0, (area.Height - height) / 2),
+            workArea.X + Math.Max(0, (workArea.Width - width) / 2),
+            workArea.Y + Math.Max(0, (workArea.Height - height) / 2),
             width,
             height));
+    }
+
+    /// <summary>Work area of the monitor the window currently sits on.</summary>
+    private RectInt32 CurrentWorkArea() =>
+        DisplayArea.GetFromWindowId(AppWindow.Id, DisplayAreaFallback.Nearest).WorkArea;
+
+    /// <summary>
+    /// Video display size: mpv's aspect-corrected dw/dh (anamorphic sources are
+    /// widened) with the dwidth/dheight and decoded-size fallbacks. (0,0) when
+    /// no video is loaded; the WindowSizing helpers then use 1280x720.
+    /// </summary>
+    private (int Width, int Height) DisplayVideoSize()
+    {
+        int width = (int)(_player?.GetPropertyInt64("video-params/dw") ?? 0);
+        int height = (int)(_player?.GetPropertyInt64("video-params/dh") ?? 0);
+        if (width <= 0)
+        {
+            width = (int)(_player?.GetPropertyInt64("dwidth") ?? 0);
+        }
+
+        if (height <= 0)
+        {
+            height = (int)(_player?.GetPropertyInt64("dheight") ?? 0);
+        }
+
+        if (width <= 0 || height <= 0)
+        {
+            return (_videoWidth, _videoHeight);
+        }
+
+        return (width, height);
+    }
+
+    /// <summary>Keeps a just-resized window on screen without changing its size.</summary>
+    private void ClampWindowIntoWorkArea(RectInt32 workArea, int width, int height)
+    {
+        PointInt32 position = AppWindow.Position;
+        int x = Math.Clamp(
+            position.X, workArea.X, Math.Max(workArea.X, workArea.X + workArea.Width - width));
+        int y = Math.Clamp(
+            position.Y, workArea.Y, Math.Max(workArea.Y, workArea.Y + workArea.Height - height));
+        if (x != position.X || y != position.Y)
+        {
+            AppWindow.Move(new PointInt32(x, y));
+        }
     }
 
     private void OnToggleSidebarAccel(KeyboardAccelerator sender, KeyboardAcceleratorInvokedEventArgs args)
@@ -2076,6 +2265,7 @@ public sealed partial class MainWindow : Window
     {
         Trace("Window closed");
         _closed = true;
+        AppWindow.Changed -= OnAppWindowChanged;
         App.SettingsChanged -= OnSharedSettingsChanged;
         _resizeTimer.Stop();
         _autoHideTimer.Stop();
@@ -2102,6 +2292,12 @@ public sealed partial class MainWindow : Window
         OnClosedStage3();
         DisposeStage5();
         SaveSettings();
+
+        // Stop the blur capture worker before the player goes away: it calls
+        // mpv screenshot-raw from its own thread, which used to race disposal.
+        ChromeBlur.SetActive(false);
+        ChromeBlur.Shutdown();
+
         WindowInterop.Detach(this);
 
         VideoHost.Detach();

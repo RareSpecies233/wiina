@@ -6,7 +6,8 @@
 >
 > 证据约定：正文中的 `iina/Xxx.swift:123` 指 `repo/iina/Xxx.swift` 第 123 行；Wiina 的路径均相对仓库根 `C:\Users\zheng\Desktop\wiina`。
 >
-> 本文只做分析与方案，**不含任何实现改动**。
+> **1.2.7 更新**：本文第 3 节的“对齐方案”已在 1.2.7 落地（预生成 + 磁盘缓存）。正文其余部分保留的是
+> 1.2.6 时的现状与调研结论，用于对照；实现记录见文末「1.2.7 实现记录」。
 
 ---
 
@@ -360,3 +361,21 @@ IINA 的悬停链路只有"查表"和"隐藏"两个分支；Wiina 的悬停链�
 | `_currentPath` 来源 | `src/Wiina.App/MainWindow.Playback.cs:1770` |
 | headless mpv 选项 | `src/Wiina.Mpv/MpvPlayer.cs:156-186` |
 | `screenshot-raw` | `src/Wiina.Mpv/MpvPlayer.cs:514-557` |
+
+## 1.2.7 实现记录
+
+- **磁盘缓存**：`src/Wiina.Core/Caching/ThumbnailDiskCache.cs`。根目录
+  `%LOCALAPPDATA%\Wiina\thumbnails\v2`（`FormatVersion = 2`），每桶一张 JPEG +
+  原子重写的 `index.json`（临时文件 + `File.Move` 覆盖），按字节 LRU（`Trim`），
+  版本目录自动丢弃旧格式。键 = hash(路径 | 大小 | mtime | 时长 | 桶宽 | 高度)，
+  文件大小或 mtime 变化即视为新文件。
+- **预生成**：`ThumbnailService.StartPreGeneration`（`src/Wiina.App/Services/ThumbnailService.cs:196`），
+  在 `MainWindow.Playback.cs:1730`、`:1790` 媒体加载后触发；单提取 worker，
+  预生成高度 90 px、每 5 秒一桶，悬停请求插队。
+- **设置**：`ui.thumbnail-cache-mb`（0–4096 MB，步进 64，默认 512，0 = 关闭磁盘缓存）与
+  `ui.thumbnail-cache-clear`（清除磁盘 + 内存缓存并提示释放空间）；网络/UNC 源只走内存缓存
+  （`ThumbnailService.IsLocalFile` `:903`）。
+- **实测**（维护者，1080p 23:40 HEVC）：冷启动预生成 285 桶 14.1–14.9 s，热缓存 0.3 s；
+  悬停冷 73 ms / 热 4 ms；285 帧共 1.70 MB。
+- **仍存在的差距**：悬停未命中仍要等一次 seek+decode；拖动进度条不做节流；缓存键包含
+  mtime/size，原地替换且两者不变时可能命中旧帧。

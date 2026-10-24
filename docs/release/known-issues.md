@@ -1,6 +1,6 @@
-# Known issues — Wiina v1.2.6
+# Known issues — Wiina v1.2.7
 
-Nothing here is hidden; these are known limitations of the v1 build.
+Nothing here is hidden; these are known limitations of the v1.2.7 build.
 
 ## Scope decisions
 
@@ -35,20 +35,21 @@ Nothing here is hidden; these are known limitations of the v1 build.
   gap; panels that do not vertically overlap the OSC leave it untouched. PiP
   and mini layouts never show an OSC.
 
-## Timeline thumbnails (research only)
+## Timeline thumbnails
 
-- Wiina builds the scrub preview **live per hover**: a headless libmpv instance
-  seeks to a ~5 s bucket and takes a `screenshot-raw`. There is no disk
-  thumbnail cache, the UI shows a loading placeholder, and non-file sources are
-  skipped (`File.Exists` gate). Each preview costs one seek plus one decode on
-  a background instance, not on the UI thread.
-- IINA instead pre-generates about 100 thumbnails once per file through
-  `FFmpegController`, stores them on disk, and does a nearest-neighbour lookup
-  at hover with no loading state; streams are skipped there too.
-- Adopting the IINA pipeline (pre-generation + cache) is **planned but not
-  implemented**; the research note with file references is
-  [../reference/iina-thumbnails.md](../reference/iina-thumbnails.md).
-
+- Thumbnails are now pre-generated after a file loads and cached on disk
+  (`%LOCALAPPDATA%\Wiina\thumbnails\v2`, format v2): one JPEG per 5 s bucket plus
+  an atomically rewritten `index.json`; the default budget is 512 MB (Ui →
+  Thumbnails → Thumbnail cache, 0 disables it) and eviction is byte-based LRU.
+  Hovering reads disk/memory first; misses are queued to the single extraction
+  worker and jump ahead of the pre-generation backlog.
+- Limits: the cache key includes file size and mtime, so an in-place replacement
+  with identical size/mtime can hit a stale frame; dragging the timeline is not
+  throttled (only stale results are dropped); network/UNC sources are
+  memory-only; old files are reclaimed lazily by the LRU trim.
+- Measured on a 1080p 23:40 HEVC file: cold pre-generation 14.1–14.9 s for 285
+  buckets, warm start 0.3 s, hover 73 ms cold / 4 ms warm, 1.70 MB on disk.
+  Research comparison with IINA: [../reference/iina-thumbnails.md](../reference/iina-thumbnails.md).
 ## Audio output device
 
 - The dropdown is fed by mpv's `audio-device-list`. Before the first player
@@ -139,19 +140,25 @@ Nothing here is hidden; these are known limitations of the v1 build.
 
 ## File associations
 
-- Registration is **per-user only** (`HKCU\Software\Classes`) and needs no
-  administrator rights. It makes Wiina an eligible handler; Windows still asks
-  the user to confirm a default app in **Settings → Apps → Default apps**, and
-  Windows may reset defaults after a feature update.
-- **Wiina never silently takes over a default handler.** The Settings page
-  offers “关联视频格式 / 关联音频格式 / 关联全部支持格式”, a status line, an
-  “在默认应用中确认…” shortcut, and “取消 Wiina 关联”.
-- Unregistering removes only Wiina's own `Wiina.Video` / `Wiina.Audio` ProgIDs,
-  their `OpenWithProgids` values, and its `RegisteredApplications` entry; other
-  players' registrations are left alone.
-- Older Windows 10 builds expose the same Default Apps page, but the exact
-  layout differs.
-
+- Two modes exist. **Per-user** (default, no admin): `HKCU\Software\Classes`
+  ProgIDs, `OpenWithProgids`, Capabilities and `RegisteredApplications`.
+  **Machine-wide** (Settings → File associations → "Associate as
+  administrator…"): relaunches Wiina elevated and writes the same structures
+  under `HKLM\Software\Classes`, then best-effort clears the per-extension
+  `UserChoice`. Both make Wiina an eligible handler; Windows still asks the user
+  to confirm in **Settings → Apps → Default apps**, and defaults may be reset
+  after a feature update.
+- **Wiina never silently takes over a default handler.** The page offers
+  associate video / audio / all, a status line, "在默认应用中确认…", unregister,
+  and the admin action. Dismissing the UAC prompt is handled as a cancellation,
+  not an error loop.
+- Unregister removes only Wiina's own `Wiina.Video` / `Wiina.Audio` ProgIDs,
+  their `OpenWithProgids` values, `RegisteredApplications\Wiina` and
+  `HKCU\Software\Wiina`, in both HKCU and (when removable) HKLM. Other players'
+  registrations are untouched. `UserChoice` is a protected key: if Windows
+  denies the delete, the system default is simply left for the user to change.
+- Machine-wide registration affects every user on the PC; portable copies that
+  move after registering keep stale paths until re-registered or unregistered.
 ## Installer and portable uninstaller
 
 - The installer is unsigned, so SmartScreen may warn. It installs per user
@@ -235,3 +242,27 @@ Nothing here is hidden; these are known limitations of the v1 build.
 - Startup/memory numbers were measured with synthetic AVI clips (see
   `docs/performance.md`), not a representative codec matrix. Real-world 4K
   HEVC/AV1 files may use more memory/GPU and were not benchmarked here.
+
+## Shutdown path and hang analysis (fixed except staging flush)
+
+- Closing now stops UI timers first, saves settings once, detaches the video
+  panel before disposing mpv, stops the statistics refresh while the card is
+  hidden (`MainWindow.xaml.cs:2268-2299`), and calls
+  `ChromeBlur.SetActive(false)` + `ChromeBlur.Shutdown()` (worker joined for up
+  to one second) before the player is disposed, so the 8 Hz screenshot thread
+  can no longer touch a disposed mpv handle.
+- **Still open**: there is no per-event mpv callback detach step
+  (`MpvPlayer.Dispose()` stops its own event thread), and the staging-texture
+  flush buffer described in the task does not exist in the code. The report in
+  [../reports/hang-analysis-1.2.7.md](../reports/hang-analysis-1.2.7.md)
+  recommends these as the next step.
+- The two recorded `AppHangB1` events (1.2.5 and 1.2.6) both occurred during
+  shutdown while the GPU was in a `DXGI_ERROR_DEVICE_REMOVED` loop; no dumps
+  were captured.
+
+## Unsigned downloads
+
+- Neither artifact is code-signed, so SmartScreen and some antivirus heuristics
+  will warn. README explains "More info → Run anyway", unblocking the zip/setup,
+  and how to compare SHA-256 with the acceptance page. A warning means "unknown
+  publisher", not "malware detected".

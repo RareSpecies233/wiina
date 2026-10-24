@@ -1,11 +1,11 @@
 # 安装、卸载与分发
 
-Wiina 提供两种分发形式，二者使用**同一份载荷**（`artifacts/wiina-1.2.6-win-x64/`）：
+Wiina 提供两种分发形式，二者使用**同一份载荷**（`artifacts/wiina-1.2.7-win-x64/`）：
 
 | 形式 | 产物 | 卸载方式 |
 |---|---|---|
-| 便携 zip | `artifacts/wiina-1.2.6-win-x64.zip` | 同目录的 `Uninstall Wiina.exe` |
-| 按用户安装包 | `artifacts/Wiina-Setup-1.2.6-x64.exe` | 设置 → 应用 → Wiina → 卸载（Inno Setup 卸载器） |
+| 便携 zip | `artifacts/wiina-1.2.7-win-x64.zip` | 同目录的 `Uninstall Wiina.exe` |
+| 按用户安装包 | `artifacts/Wiina-Setup-1.2.7-x64.exe` | 设置 → 应用 → Wiina → 卸载（Inno Setup 卸载器） |
 
 > 产物的字节数与 SHA-256 以每次实际构建为准（`scripts/release.ps1` 会在结束时打印）；
 > 本文不记录具体哈希，避免复制过期数值。
@@ -23,7 +23,7 @@ Wiina 提供两种分发形式，二者使用**同一份载荷**（`artifacts/wi
   `Uninstall Wiina.exe`、`*.pdb`、`*.xml`——安装版用 Inno 自己的卸载器，不重复放便携卸载器。
 - **快捷方式**：开始菜单必选，桌面快捷方式可选（默认不勾）。
 - **安装后**：可直接启动 Wiina；应用数据仍写入 `%LOCALAPPDATA%\Wiina`，与便携版共用。
-- 产物名：`artifacts/Wiina-Setup-1.2.6-x64.exe`（`OutputBaseFilename=Wiina-Setup-{#MyAppVersion}-x64`）。
+- 产物名：`artifacts/Wiina-Setup-1.2.7-x64.exe`（`OutputBaseFilename=Wiina-Setup-{#MyAppVersion}-x64`）。
 
 ### 卸载：是否保留配置文件？
 
@@ -79,13 +79,13 @@ Wiina 提供两种分发形式，二者使用**同一份载荷**（`artifacts/wi
 
 ```powershell
 # 1) 便携 zip（内部先发布卸载器，再构建/校验 Wiina.dll 版本并打包）
-pwsh -File scripts/package.ps1 -Version 1.2.6
+pwsh -File scripts/package.ps1 -Version 1.2.7
 
 # 2) 安装包（在便携 zip 之后；没有 ISCC 时脚本会警告并跳过）
-pwsh -File scripts/release.ps1 -Version 1.2.6
+pwsh -File scripts/release.ps1 -Version 1.2.7
 
 # 只要便携 zip，跳过安装包
-pwsh -File scripts/release.ps1 -Version 1.2.6 -NoInstaller
+pwsh -File scripts/release.ps1 -Version 1.2.7 -NoInstaller
 ```
 
 `release.ps1` 的安装包流程：
@@ -110,3 +110,6 @@ ISCC 查找顺序：`PATH` 上的 `iscc` → `%LOCALAPPDATA%\Programs\Inno Setup
 - 便携卸载器删除自身目录依赖批处理重试；若其他进程占用文件，会以退出码 1 结束并提示
   手动删除。
 - 卸载只删除 Wiina 自己的键；其他播放器残留在同一扩展名下的 `OpenWithProgids` 值不受影响。
+
+- **未签名**：安装包没有代码签名，SmartScreen / 杀毒启发式可能提示；继续执行与 SHA-256 校验步骤见 README 顶部。安装包本身仍是按用户安装，与「文件关联 → 管理员一键关联」
+  的机器级注册是两件事。

@@ -1,12 +1,87 @@
 # Wiina release notes
 
-
-Release date (1.2.6): 2026-10-24
+Release date (1.2.7): 2026-10-24
 
 Windows-native, IINA-inspired mpv front end built with WinUI 3, Windows App
 SDK 2.5, and libmpv.
 
-## What's new in 1.2.6
+## What's new in 1.2.7
+
+### Timeline thumbnails now match IINA (pre-generated + disk cache)
+
+- After a file loads, the whole timeline is pre-generated once in the background
+  (one frame per 5-second bucket, 90 px tall) and stored under
+  `%LOCALAPPDATA%\Wiina\thumbnails\v2`: one JPEG per bucket plus an atomically
+  rewritten `index.json`, byte-budgeted LRU eviction (512 MB default) and a
+  format-version directory so older layouts are discarded. Hovering reads
+  disk/memory first; misses go to the single extraction worker and jump ahead of
+  the pre-generation backlog.
+- New settings: Ui → Thumbnails → Thumbnail cache (0–4096 MB, 64 MB steps,
+  default 512; 0 disables disk caching) and Clear thumbnail cache (reports the
+  freed size). Network/UNC sources stay memory-only.
+- Measured on a 1080p 23:40 HEVC file: cold pre-generation of 285 buckets took
+  14.1–14.9 s, warm start 0.3 s; hover 73 ms cold / 4 ms warm; 1.70 MB on disk
+  for 285 frames.
+
+### Floating OSC follows the sidebar animation; the cursor hides with the chrome
+
+- A sidebar that is already animating out no longer reports its full width, and
+  the floating OSC is re-positioned as the hide animation starts, so it no longer
+  waits for the panel and then snaps back.
+- Auto-hidden chrome hides the mouse pointer too (balanced `ShowCursor` count
+  plus a 1×1 transparent cursor), restored on movement, chrome reveal,
+  deactivation and close.
+
+### 0.5× / 1× / 2× use the real video resolution
+
+- `WindowSizing.ScaledVideoWindowSize` maps mpv's display size (rotation and
+  pixel aspect included) to 1:1 physical pixels, converts to DIP, keeps the
+  display aspect ratio and clamps to the work area; 1280×720 is only the no-video
+  fallback. Fit to screen picks the largest window with the video's aspect.
+
+### Fullscreen has no leftover border
+
+- DWM corner preference and border colour are set through one `SetWindowFrame`
+  call with a fullscreen > snapped > default priority; fullscreen always clears
+  the border and rounding, and the frame is re-applied when the presenter
+  changes. Ignored on Windows 10 (no-op).
+
+### Machine-wide file associations (admin mode)
+
+- Settings → File associations gains "Associate as administrator…": it relaunches
+  `Wiina.exe --associate-elevated-video --associate-elevated-audio` through UAC,
+  writes `HKLM\Software\Classes` ProgIDs/Capabilities/RegisteredApplications and
+  best-effort removes the per-extension `UserChoice`. Unregister removes Wiina's
+  own keys from both HKCU and HKLM. The per-user path stays; Windows still needs
+  the Default Apps confirmation.
+
+### Unsigned-download guidance
+
+- README now explains SmartScreen and antivirus false positives and how to
+  verify SHA-256.
+
+### Shutdown path and hang analysis
+
+- Close now stops every UI timer first, saves settings once, detaches the video
+  panel before disposing mpv, and stops refreshing the statistics card while it
+  is hidden. See `docs/reports/hang-analysis-1.2.7.md`; the report's
+  `ChromeBlur`-stop / handler-detach items are not implemented and are recorded
+  as such in the acceptance page.
+
+### Performance comparison
+
+- All 23 quality options apply live; only `vo` / `gpu-api` / `gpu-context` /
+  `d3d11-output-mode` are fixed at startup. See
+  `docs/reports/performance-vs-potplayer.md`.
+
+### Documentation
+
+- New acceptance page, hang analysis and PotPlayer comparison; README, known
+  issues, performance, accessibility, PLAN, installer, file associations and
+  reference pages refreshed. 711 tests pass (maintainer run; this docs pass did
+  not build).
+
+## 1.2.6 — previous release
 
 ### The OSC moves only when a panel would cover it
 
@@ -54,7 +129,7 @@ SDK 2.5, and libmpv.
   rows**, and no existing row id changed.
 - New: `docs/reference/settings-layout.md` (full 12-page / 122-row snapshot) and
   `docs/reference/iina-thumbnails.md` (how IINA pre-generates and caches
-  timeline thumbnails vs Wiina's live per-hover extraction; alignment is
+  timeline thumbnails vs live per-hover extraction at the time; alignment was
   **planned, not implemented**).
 - 668 tests pass (maintainer run; this docs pass did not build or re-run).
 

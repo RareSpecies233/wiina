@@ -277,6 +277,9 @@ public static class UiStrings
     public const string common_copy = "common.copy";
     public const string settings_clearHistoryTitle = "settings.clearHistoryTitle";
     public const string settings_clearHistoryBody = "settings.clearHistoryBody";
+    public const string settings_thumbnailsClearedTitle = "settings.thumbnailsClearedTitle";
+    public const string settings_thumbnailsClearedBody = "settings.thumbnailsClearedBody";
+    public const string settings_thumbnailsClearedEmpty = "settings.thumbnailsClearedEmpty";
     public const string settings_resetAllTitle = "settings.resetAllTitle";
     public const string settings_resetAllBody = "settings.resetAllBody";
     public const string keybindings_conflictTitle = "keybindings.conflictTitle";
@@ -706,6 +709,7 @@ public static class UiStrings
         Add("stats.close", "关闭统计信息", "Close statistics");
         Add("settings.associate", "关联", "Associate");
         Add("settings.unassociate", "取消关联", "Unregister");
+        Add("settings.associateAdmin", "管理员关联", "Associate as admin");
         Add("settings.openSettings", "打开设置", "Open settings");
         Add("integration.statusNone", "未关联", "Not registered");
         Add("integration.statusVideo", "视频已注册（音频未注册）", "Video registered (audio not)");
@@ -727,6 +731,30 @@ public static class UiStrings
             "integration.removedBody",
             "只删除了 Wiina 自己写入的 ProgID 与 OpenWith 项，其他播放器的关联未受影响。",
             "Only Wiina's own ProgIDs and OpenWith entries were removed; other players are untouched.");
+        Add(
+            "integration.adminRegisteredTitle",
+            "已写入系统级关联",
+            "System-level associations written");
+        Add(
+            "integration.adminRegisteredBody",
+            "已写入系统级 ProgID、扩展名默认值与 RegisteredApplications，并清除了用户级 UserChoice。请打开一个支持的文件确认；Windows 仍可能要求你确认默认应用，这是系统保护。",
+            "Machine-level ProgIDs, extension defaults, and RegisteredApplications were written and per-user UserChoice was cleared. Open a supported file to confirm; Windows may still ask you to confirm the default app.");
+        Add(
+            "integration.adminCanceledTitle",
+            "已取消管理员关联",
+            "Admin association canceled");
+        Add(
+            "integration.adminCanceledBody",
+            "没有获得管理员权限，系统级关联未写入。你可以重试，或继续使用普通的“关联”按钮。",
+            "Administrator rights were not granted, so no machine-level associations were written. Retry, or keep using the normal Associate buttons.");
+        Add(
+            "integration.adminFailedTitle",
+            "管理员关联失败",
+            "Admin association failed");
+        Add(
+            "integration.adminFailedBody",
+            "写入系统级关联时出错。请确认已允许 UAC，或改用普通的“关联”按钮。",
+            "Writing the machine-level associations failed. Confirm the UAC prompt was accepted, or use the normal Associate buttons.");
         Add("ui.flipV", "垂直翻转", "Flip vertically");
         Add("ui.panY", "垂直平移", "Pan vertically");
         Add("ui.positionY", "垂直位置", "Vertical position");
@@ -881,6 +909,9 @@ public static class UiStrings
         Add("common.copy", "复制", "Copy");
         Add("settings.clearHistoryTitle", "清空播放历史", "Clear playback history");
         Add("settings.clearHistoryBody", "将删除最近文件列表与断点续播记录。此操作不可撤销。", "This removes the recent-files list and resume positions. It cannot be undone.");
+        Add("settings.thumbnailsClearedTitle", "缩略图缓存已清空", "Thumbnail cache cleared");
+        Add("settings.thumbnailsClearedBody", "已释放 {0} 的磁盘空间。", "Freed {0} of disk space.");
+        Add("settings.thumbnailsClearedEmpty", "没有可清除的缩略图缓存。", "There was no thumbnail cache to clear.");
         Add("settings.resetAllTitle", "重置所有设置", "Reset all settings");
         Add("settings.resetAllBody", "所有页面恢复默认值（按键绑定、窗口位置与播放历史不受影响）。", "All pages return to defaults (key bindings, window position, and playback history are unaffected).");
         Add("keybindings.conflictTitle", "快捷键冲突", "Shortcut conflict");

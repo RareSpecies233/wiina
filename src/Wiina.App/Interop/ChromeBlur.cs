@@ -76,6 +76,30 @@ internal sealed class ChromeBlur
     }
 
     /// <summary>
+    /// Stops the capture worker and waits briefly for it to exit. Called from
+    /// the window close path before the player is disposed so the worker can
+    /// never touch a disposed mpv handle (a known hang/crash source).
+    /// </summary>
+    public static void Shutdown()
+    {
+        ChromeBlur blur = Current;
+        blur._active = false;
+        blur._running = false;
+
+        Thread? thread = blur._thread;
+        if (thread is { IsAlive: true } && thread != Thread.CurrentThread)
+        {
+            thread.Join(TimeSpan.FromSeconds(1));
+        }
+        blur._thread = null;
+
+        lock (blur._gate)
+        {
+            blur._layers.Clear();
+        }
+    }
+
+    /// <summary>
     /// Switch capture strategy. Solid never captures (the worker does not even
     /// create the Win2D device) and the chrome surfaces show their solid brush;
     /// the other modes capture a live frame.

@@ -245,6 +245,11 @@ public sealed partial class MainWindow
             {
                 host.CollapseInstant();
             }
+
+            // The panel still reports Visible at its full width while it slides
+            // out; placing the floating OSC now avoids waiting for the collapse
+            // to release the overlap clamp.
+            ApplyOscPosition();
         }
     }
 

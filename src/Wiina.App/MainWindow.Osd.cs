@@ -29,6 +29,7 @@ public sealed partial class MainWindow
     private ThumbnailService? _thumbnailService;
     private CancellationTokenSource? _thumbnailCts;
     private long _thumbnailRequest;
+    private string? _thumbnailPregenPath;
     private TimelineControl? _previewTimeline;
     private double _previewRatio;
     private double _previewPointerX;
@@ -437,11 +438,16 @@ public sealed partial class MainWindow
 
         try
         {
+            var hoverClock = System.Diagnostics.Stopwatch.StartNew();
             ThumbnailFrame? frame = await GetThumbnailService().GetAsync(
                 _currentPath,
                 seconds,
+                _oscVm.Duration,
                 90,
                 cts.Token);
+            Trace(
+                $"thumbnail hover {seconds:0.0}s resolved in " +
+                $"{hoverClock.ElapsedMilliseconds} ms");
             if (cts.IsCancellationRequested ||
                 request != _thumbnailRequest ||
                 !ThumbnailPeek.IsShowing ||
@@ -491,7 +497,46 @@ public sealed partial class MainWindow
         _thumbnailService ??= new ThumbnailService(
             Math.Clamp(_settings.ThumbnailCacheCount, 1, 240),
             Math.Clamp(_settings.ThumbnailBucketSeconds, 1, 30),
-            Trace);
+            Trace,
+            Path.Combine(App.DataFolder, "thumbnails"),
+            Math.Clamp(_settings.ThumbnailCacheMegabytes, 0, 4096));
+
+    /// <summary>
+    /// Warms the on-disk thumbnail cache for the file that just opened. Runs
+    /// once per file, on the service's background worker, and stops as soon as
+    /// another file starts loading.
+    /// </summary>
+    private void StartThumbnailPreGeneration()
+    {
+        if (!_settings.ThumbnailPreviewEnabled
+            || _settings.ThumbnailCacheMegabytes <= 0
+            || string.IsNullOrWhiteSpace(_currentPath)
+            || IsUrlPath(_currentPath)
+            || string.Equals(
+                _thumbnailPregenPath,
+                _currentPath,
+                StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        double duration = _player?.GetPropertyDouble("duration") ?? 0;
+        if (duration <= 0)
+        {
+            // The duration property arrives after FileLoaded; retry from the
+            // property handler once it is known.
+            return;
+        }
+
+        _thumbnailPregenPath = _currentPath;
+        GetThumbnailService().StartPreGeneration(_currentPath, duration, 90);
+    }
+
+    private void StopThumbnailPreGeneration()
+    {
+        _thumbnailPregenPath = null;
+        _thumbnailService?.StopPreGeneration();
+    }
 
     private void PositionThumbnail()
     {
@@ -548,6 +593,7 @@ public sealed partial class MainWindow
         _thumbnailCts?.Cancel();
         _thumbnailCts?.Dispose();
         _thumbnailCts = null;
+        _thumbnailPregenPath = null;
         _thumbnailService?.Dispose();
         _thumbnailService = null;
         ThumbnailPeek.Hide();

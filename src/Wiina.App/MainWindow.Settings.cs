@@ -46,8 +46,10 @@ public sealed partial class MainWindow
 
     public void ClearThumbnailCache()
     {
+        long freed = 0;
         try
         {
+            freed = _thumbnailService?.ClearDiskCache() ?? 0;
             _thumbnailService?.Dispose();
         }
         catch
@@ -56,7 +58,16 @@ public sealed partial class MainWindow
         }
 
         _thumbnailService = null;
+        _thumbnailPregenPath = null;
         HideTimePreview();
+
+        string title = Loc.T("settings.thumbnailsClearedTitle");
+        ShowOsd(
+            title,
+            freed > 0
+                ? Loc.T("settings.thumbnailsClearedBody").Replace(
+                    "{0}", FormatBytes(freed))
+                : Loc.T("settings.thumbnailsClearedEmpty"));
     }
 
     public string GetRendererInfo()
@@ -136,8 +147,32 @@ public sealed partial class MainWindow
                 if (!_settings.ThumbnailPreviewEnabled)
                 {
                     HideTimePreview();
+                    StopThumbnailPreGeneration();
+                }
+                else
+                {
+                    StartThumbnailPreGeneration();
                 }
 
+                break;
+            case "ui.thumbnail-cache-mb":
+                _thumbnailService?.SetDiskCacheLimit(
+                    Math.Clamp(_settings.ThumbnailCacheMegabytes, 0, 4096));
+                if (_settings.ThumbnailCacheMegabytes <= 0)
+                {
+                    StopThumbnailPreGeneration();
+                }
+                else
+                {
+                    StartThumbnailPreGeneration();
+                }
+
+                break;
+            case "ui.thumbnail-cache-clear":
+                // The action row itself runs ClearThumbnailCache through the
+                // settings window; this keeps the row correct if it is ever
+                // applied without a picker (tests, settings import).
+                ClearThumbnailCache();
                 break;
 
             // ---- mpv-backed rows -------------------------------------------

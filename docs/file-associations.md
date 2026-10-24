@@ -1,12 +1,14 @@
-# 文件关联（按用户注册）
+# 文件关联（按用户 / 管理员注册）
 
 Wiina 是 **unpackaged**（非 MSIX）应用，因此不能使用 MSIX 清单里的
-`uap:FileTypeAssociation`。v1.2.3 起，设置中的第 12 页「文件关联」改为**只写当前用户**
-（`HKCU`）的注册表项，把 Wiina 登记为常见视频/音频格式的**可用处理程序**，并出现在
-Windows 的“默认应用”里。
+`uap:FileTypeAssociation`。v1.2.3 起，设置中的第 12 页「文件关联」把 Wiina 登记为常见视频/音频格式的
+**可用处理程序**，并让它出现在 Windows 的“默认应用”里。v1.2.7 起提供两种注册范围：
 
-- 不需要管理员权限，不写 `HKLM`，不修改其他播放器的注册。
-- **不会静默抢占默认程序**：Windows 仍要求用户在“默认应用”中确认，这是系统设计。
+- **按用户（默认，无需管理员）**：只写 `HKCU\Software\Classes` 下 Wiina 自己的项，不影响其他用户与系统默认。
+- **按机器（管理员，1.2.7 新增）**：经 UAC 提权后写 `HKLM\Software\Classes`，让本机所有用户都能看到 Wiina，
+  并尽力清除对应扩展名的 `UserChoice`。
+
+两种方式都**不会静默抢占默认程序**：Windows 仍要求用户在“默认应用”中确认，这是系统设计。
 
 ## 注册了什么
 
@@ -45,10 +47,25 @@ Windows 的“默认应用”里。
 | 关联全部支持格式 | 同时注册视频与音频；重复执行是幂等的 |
 | 取消 Wiina 关联 | 只删除 Wiina 自己写入的 ProgID、`OpenWithProgids` 值、`Software\Wiina` 与 `RegisteredApplications\Wiina` |
 | 在默认应用中确认… | 打开 `ms-settings:defaultapps` |
+| 管理员一键关联… | 1.2.7 新增：UAC 提权后写 HKLM，并尽力清除 `UserChoice` |
 
 写入完成后调用 `SHChangeNotify(SHCNE_ASSOCCHANGED)` 通知资源管理器，因此“打开方式”
 列表通常无需重启即可看到 Wiina。
 
+## 管理员模式（HKLM，1.2.7）
+
+设置 → 文件关联 → **管理员一键关联…**：
+
+1. 用 `runas` 启动 `Wiina.exe --associate-elevated-video --associate-elevated-audio`；
+   用户取消 UAC 时视为取消（错误 1223），提示后刷新状态，不进入错误循环。
+2. 在提权进程中调用 `FileAssociationService.RegisterElevated`，写
+   `HKLM\Software\Classes` 下的 `Wiina.Video` / `Wiina.Audio`、`.ext\OpenWithProgids`、
+   `HKLM\Software\Wiina\Capabilities` 与 `RegisteredApplications\Wiina`。
+3. 尽力删除对应扩展名的 `UserChoice`（Windows 保护该键时删除会失败，但不影响上面两步），
+   然后调用 `SHChangeNotify(SHCNE_ASSOCCHANGED)`。
+
+机器级注册对所有用户生效，也会在系统“默认应用”里出现 Wiina；真正设为默认仍需用户确认。
+卸载/取消关联会同时清理 HKCU 与 HKLM 中 Wiina 自己的项，不触碰其他播放器。
 ## 为什么 Windows 还要确认
 
 Windows 10/11 不允许应用通过注册表**直接**成为某扩展名的默认程序（否则任何安装包都能
@@ -72,16 +89,16 @@ Windows 功能更新、用户手动更改或其他播放器安装都可能重置
 
 ## 约束与边界
 
-- **仅当前用户**：切换 Windows 用户后需要在该用户下重新关联。
+- **按用户模式**：只影响当前用户，切换 Windows 用户后需要在该用户下重新关联；**管理员模式**写入 HKLM 后对所有用户可见。
 - **便携版可移动**：`shell\open\command` 写入的是当前 `Wiina.exe` 的绝对路径
   （`Environment.ProcessPath`）。移动解压目录后，旧路径失效，需要在设置页重新执行关联。
 - **没有 MSIX 身份**：因此不能使用 `uap:FileTypeAssociation`，也不能出现在 Store 的
   “默认应用”推荐位。
-- **不写 `HKLM`**：不需要管理员权限，也不会影响系统级默认。
+- **默认不写 `HKLM`**：按用户模式不需要管理员权限；只有显式点击「管理员一键关联…」并通过 UAC 才会写机器级键。
 - **不做文件类型图标替换**：`DefaultIcon` 指向 `Wiina.exe,0`，不注册自定义图标资源。
 
 ## 验证
 
 `FileAssociationCatalogTests`（`tests/Wiina.Core.Tests`）覆盖扩展名清单、注册计划的键值
 形状、`OpenWithProgids` 二进制标记，以及取消关联只涉及自有 ProgID 的白名单。整套测试
-在 Release 下共 659 项通过（见 [v1.2.5 验收](acceptance/v1.2.5.md)）。
+在 Release 下共 711 项通过（见 [v1.2.7 验收](acceptance/v1.2.7.md)）。

@@ -1,8 +1,8 @@
-# Performance measurements (v1.2.6)
+# Performance measurements (v1.2.7)
 
 Measured on the development machine on 2026-10-19 (Asia/Hong_Kong), at v1.0.0.
 The numbers below are the historical baseline; they were **not** re-measured
-for 1.2.4 or 1.2.5 (see “What changed in 1.2.4” and “What changed in 1.2.5” for
+for 1.2.4 through 1.2.7 (see the per-version notes below for
 the known deltas). Numbers are what
 this machine produced; they are not universal guarantees.
 
@@ -70,6 +70,35 @@ scenarios (peak 265.7 MB at 4K). Private bytes exceed 300 MB at 4K because the
 GPU/driver surfaces and the video swapchain are charged to the process; this is
 reported honestly rather than trimmed by a smaller measurement window.
 
+## What changed in 1.2.7
+
+- **Thumbnail pre-generation runs once per file, off the UI thread.** After load,
+  the single extraction worker walks the timeline in 5 s buckets at 90 px tall
+  and writes JPEGs through `ThumbnailDiskCache`; hovering then costs a disk/memory
+  lookup instead of a seek+decode. Measured on the maintainer's 1080p 23:40 HEVC
+  file: 285 buckets in 14.1–14.9 s cold, 0.3 s when the cache is warm; hover
+  73 ms cold / 4 ms warm; 1.70 MB on disk (~6 KB per frame).
+- **Disk cost is bounded by configuration, not by file length.** Default budget
+  512 MB (Ui → Thumbnails → Thumbnail cache, 0–4096 MB), byte-based LRU, one
+  `index.json` rewritten atomically per batch; format-version directory
+  (`thumbnails\v2`) means old layouts are discarded rather than migrated.
+- **Cursor hiding is a state change, not a loop.** `WindowInterop.SetCursorVisible`
+  balances a single `ShowCursor` call per transition and swaps in one cached 1×1
+  transparent cursor; pointer movement re-applies the hidden state, so there is
+  no per-frame work.
+- **The 0.5×/1×/2× sizing is one read + one move.** `video-params/dw|dh` is read
+  when the command runs, converted once and clamped; no per-resize tracking.
+- **Frame style is cached per presenter/state.** `SetWindowFrame` is called when
+  the state changes (snap, fullscreen, presenter change), not on every resize
+  message.
+- **Settings: 12 pages / 125 rows in 1.2.7** (three new rows: thumbnail cache
+  size, clear cache, administrator association). Page construction still shows no
+  visible stall.
+- **Tests: 711 passed / 0 failed** (maintainer's Release verification; this docs
+  pass did not build or re-run them).
+- Startup, memory, blur and 1080p/4K numbers were not re-measured for 1.2.7; the
+  1.0.0 baseline and the 1.2.4/1.2.5/1.2.6 notes above remain the last measured
+  values.
 ## What changed in 1.2.6
 
 - **Auto-hide idle tracking is one monotonic clock, not polling.** The main
@@ -85,7 +114,7 @@ reported honestly rather than trimmed by a smaller measurement window.
   cached `audio-device-list` (mpv pushes it on start and when the device set
   changes) when the settings page is built and on explicit refresh; selection
   goes out as one mpv `audio-device` command.
-- **Settings: 12 pages / 122 rows in 1.2.6** (one new row: auto-hide delay).
+- **Settings: 12 pages / 122 rows in 1.2.6** (one new row: auto-hide delay; 1.2.7 adds three more, see above).
   Building a page still shows no visible stall.
 - **Tests: 668 passed / 0 failed** (maintainer's release verification; the docs
   pass did not build or re-run them).

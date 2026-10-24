@@ -317,6 +317,13 @@ public sealed partial class SidebarHost : UserControl
             : Visibility.Collapsed;
     }
 
+    /// <summary>
+    /// True while the panel is sliding out. The host stays Visible at its full
+    /// width until the animation ends, so the shell must not treat it as
+    /// covering the video surface during that window.
+    /// </summary>
+    public bool IsHiding => _hiding;
+
     public void ShowInstant()
     {
         _animTimer.Stop();

@@ -241,8 +241,79 @@ public partial class App : Application
         return paths;
     }
 
+    /// <summary>
+    /// Handles the one-shot elevated registration flags
+    /// (<c>--associate-elevated-video</c> / <c>--associate-elevated-audio</c>).
+    /// Returns true when this process is the registration helper, in which case
+    /// the caller must not create any window.
+    /// </summary>
+    private static bool TryRunElevatedAssociation()
+    {
+        bool video = false;
+        bool audio = false;
+        foreach (string argument in Environment.GetCommandLineArgs())
+        {
+            if (string.Equals(argument, "--associate-elevated-video", StringComparison.OrdinalIgnoreCase))
+            {
+                video = true;
+            }
+            else if (string.Equals(argument, "--associate-elevated-audio", StringComparison.OrdinalIgnoreCase))
+            {
+                audio = true;
+            }
+        }
+
+        if (!video && !audio)
+        {
+            return false;
+        }
+
+        RunElevatedAssociation(video, audio);
+        return true;
+    }
+
+    private static void RunElevatedAssociation(bool video, bool audio)
+    {
+        int exitCode = 0;
+        try
+        {
+            FileAssociationService.RegisterElevated(video, audio);
+            LogAssociationRun(
+                $"elevated file association registration succeeded (video={video}, audio={audio})");
+        }
+        catch (Exception ex)
+        {
+            exitCode = 1;
+            LogAssociationRun(
+                $"elevated file association registration failed (video={video}, audio={audio}): {ex}");
+        }
+
+        Environment.Exit(exitCode);
+    }
+
+    private static void LogAssociationRun(string message)
+    {
+        try
+        {
+            File.AppendAllText(
+                TraceLogPath,
+                $"[{DateTimeOffset.Now:O}] {message}{Environment.NewLine}");
+        }
+        catch
+        {
+            // Logging must never break the registration helper.
+        }
+    }
+
     protected override void OnLaunched(LaunchActivatedEventArgs args)
     {
+        // The elevated helper mode is a console-style one-shot: it must finish
+        // before any window or welcome experience is created.
+        if (TryRunElevatedAssociation())
+        {
+            return;
+        }
+
         try
         {
             // Welcome is a standalone launcher: do not create an empty player

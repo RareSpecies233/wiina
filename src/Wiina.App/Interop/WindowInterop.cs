@@ -74,27 +74,51 @@ internal static class WindowInterop
     }
 
     /// <summary>
+    /// DWM frame decoration styles the app drives explicitly. The default style
+    /// is the normal rounded window, <see cref="Snapped"/> removes the 1 px
+    /// border while the window is flush against a monitor edge, and
+    /// <see cref="Fullscreen"/> forces the borderless, square-cornered surface
+    /// so a fullscreen presenter never shows an outline ring at high DPI.
+    /// </summary>
+    public enum WindowFrameStyle
+    {
+        Default,
+        Snapped,
+        Fullscreen,
+    }
+
+    /// <summary>
+    /// Applies the DWM frame decoration for <paramref name="style"/>.
+    /// <see cref="WindowFrameStyle.Default"/> restores the system border and
+    /// rounded corners; the other styles suppress both (ignored on Windows 10,
+    /// where the calls are a no-op). Cosmetic only: never throws.
+    /// </summary>
+    public static void SetWindowFrame(Window window, WindowFrameStyle style)
+    {
+        try
+        {
+            nint hwnd = Microsoft.UI.Win32Interop.GetWindowFromWindowId(window.AppWindow.Id);
+            bool flush = style != WindowFrameStyle.Default;
+            int corner = flush ? DWMWCP_DONOTROUND : DWMWCP_ROUND;
+            _ = DwmSetWindowAttribute(hwnd, DWMWA_WINDOW_CORNER_PREFERENCE, ref corner, sizeof(int));
+            int border = flush ? DWMWA_COLOR_NONE : DWMWA_COLOR_DEFAULT;
+            _ = DwmSetWindowAttribute(hwnd, DWMWA_BORDER_COLOR, ref border, sizeof(int));
+        }
+        catch
+        {
+            // Cosmetic only; never let it break dragging or the presenter switch.
+        }
+    }
+
+    /// <summary>
     /// Removes the DWM frame decoration while the window is snapped flush
     /// against a monitor edge: the 1 px border (which shows up as a light line
     /// between the window and the edge) is suppressed and the rounded corners
     /// are disabled, so the client area really touches the screen edge. Both
     /// attributes are ignored on Windows 10, where the call is a no-op.
     /// </summary>
-    public static void SetSnappedFrame(Window window, bool snapped)
-    {
-        try
-        {
-            nint hwnd = Microsoft.UI.Win32Interop.GetWindowFromWindowId(window.AppWindow.Id);
-            int corner = snapped ? DWMWCP_DONOTROUND : DWMWCP_ROUND;
-            _ = DwmSetWindowAttribute(hwnd, DWMWA_WINDOW_CORNER_PREFERENCE, ref corner, sizeof(int));
-            int border = snapped ? DWMWA_COLOR_NONE : DWMWA_COLOR_DEFAULT;
-            _ = DwmSetWindowAttribute(hwnd, DWMWA_BORDER_COLOR, ref border, sizeof(int));
-        }
-        catch
-        {
-            // Cosmetic only; never let it break dragging.
-        }
-    }
+    public static void SetSnappedFrame(Window window, bool snapped) =>
+        SetWindowFrame(window, snapped ? WindowFrameStyle.Snapped : WindowFrameStyle.Default);
 
     // Frame margins are measured from DWM once per DPI (and re-measured at the
     // start of every drag gesture), so WM_MOVING does not pay for two extra
@@ -264,20 +288,98 @@ internal static class WindowInterop
     }
 
     /// <summary>
-    /// Hide the pointer while the chrome is hidden. WinUI keeps resetting the
-    /// cursor on pointer moves, so callers re-apply this from PointerMoved.
+    /// True while the shell has hidden the pointer. WinUI keeps re-asserting the
+    /// arrow through WM_SETCURSOR (every mouse move, and again after a click), so
+    /// <see cref="SetCursor"/> alone never holds. The thread display counter is
+    /// the only state the platform does not reset, which is why hiding goes
+    /// through the balanced ShowCursor(FALSE/TRUE) calls as well.
+    /// </summary>
+    public static bool CursorHidden { get; private set; }
+
+    /// <summary>
+    /// Hide or restore the pointer. Hiding is idempotent and survives platform
+    /// cursor resets; restoring always balances the display counter back above
+    /// zero so a crashed/closed window cannot leave the desktop pointer hidden.
     /// </summary>
     public static void SetCursorVisible(bool visible)
     {
         try
         {
-            SetCursor(visible ? LoadCursor(0, IDC_ARROW) : 0);
+            if (visible)
+            {
+                if (CursorHidden)
+                {
+                    while (ShowCursor(true) < 0)
+                    {
+                    }
+
+                    CursorHidden = false;
+                }
+
+                SetCursor(LoadCursor(0, IDC_ARROW));
+            }
+            else
+            {
+                if (!CursorHidden)
+                {
+                    while (ShowCursor(false) >= 0)
+                    {
+                    }
+
+                    CursorHidden = true;
+                }
+
+                // The display counter does the work; the blank cursor also covers
+                // the frame between the platform's SetCursor and the counter.
+                SetCursor(GetBlankCursor());
+            }
         }
         catch
         {
+            CursorHidden = false;
             // Cursor feedback must never break playback.
         }
     }
+
+    /// <summary>
+    /// Lazily created 1x1 fully transparent cursor. The AND mask keeps every
+    /// screen pixel and the XOR mask clears nothing, so the cursor paints
+    /// nothing at all while still being a valid handle.
+    /// </summary>
+    private static nint GetBlankCursor()
+    {
+        if (_blankCursor == 0)
+        {
+            _blankCursor = CreateCursor(
+                GetModuleHandle(null),
+                0,
+                0,
+                1,
+                1,
+                new byte[] { 0xFF },
+                new byte[] { 0x00 });
+        }
+
+        return _blankCursor;
+    }
+
+    private static nint _blankCursor;
+
+    [DllImport("user32.dll")]
+    private static extern int ShowCursor(bool show);
+
+    [DllImport("user32.dll")]
+    private static extern nint CreateCursor(
+        nint hInst,
+        int xHotSpot,
+        int yHotSpot,
+        int nWidth,
+        int nHeight,
+        byte[] pvANDPlane,
+        byte[] pvXORPlane);
+
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode)]
+    private static extern nint GetModuleHandle(string? lpModuleName);
 
     /// <summary>
     /// True while the left mouse button is physically down. Used by the OSC

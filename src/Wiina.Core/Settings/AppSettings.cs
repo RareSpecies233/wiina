@@ -63,6 +63,9 @@ public sealed partial class AppSettings
 
     public int ThumbnailCacheCount { get; set; } = 60;
 
+    /// <summary>Disk budget for pre-generated thumbnails, in megabytes; 0 disables it.</summary>
+    public int ThumbnailCacheMegabytes { get; set; } = 512;
+
     // ---- Quick settings: video (persisted and re-applied on startup) ----
 
     public string VideoAspect { get; set; } = "no";

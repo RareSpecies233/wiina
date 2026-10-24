@@ -191,6 +191,10 @@ public sealed partial class MainWindow
                 RestoreVideoToMain();
                 CaptureNormalFrame();
                 SetTopmost(false);
+                // The snapped frame must not leak into fullscreen: fullscreen
+                // rebuilds the DWM frame and disables the edge magnet.
+                _snapSession.Reset();
+                _snapFrameEngaged = false;
                 AppWindow.SetPresenter(AppWindowPresenterKind.FullScreen);
                 return AppWindow.Presenter.Kind == AppWindowPresenterKind.FullScreen;
 
@@ -243,6 +247,9 @@ public sealed partial class MainWindow
         ApplyLayout();
         UpdateOsdPlacement();
         UpdateFullscreenStatus();
+        // Mode switches rebuild the DWM frame; re-assert the fullscreen/snapped
+        // style after the presenter state has settled (v1.2.7 fullscreen ring).
+        ApplyWindowFrame();
 
         if (pip)
         {

@@ -7,7 +7,35 @@ Wiina 把 [IINA](https://iina.io/) 在 macOS 上的**界面逻辑**（窗口层�
 [mpv](https://mpv.io/) 作为播放内核。视觉上不照搬 AppKit，而是按 Windows 11 Fluent 规范重新设计：Segoe UI Variable、
 Segoe Fluent Icons、播放器外框的可选视频毛玻璃（纯色档为不透明 accent 染色）、辅助窗口的 Mica/Acrylic、圆角与系统主题。
 
-## 状态（v1.2.6）
+## ⚠️ Windows SmartScreen / 杀毒软件提示
+
+Wiina 的发布包**没有代码签名**（个人项目无法承担可信证书费用），所以首次运行时可能遇到系统警告：
+
+- **便携版 zip**：从浏览器下载的 zip 会被标记为“来自 Internet”。解压后运行 `Wiina.exe`，如果出现
+  “Windows 已保护你的电脑”，点 **更多信息 → 仍要运行** 即可。
+- **安装包 setup.exe**：同样点 **更多信息 → 仍要运行**。若窗口只给出“不运行”，先右键安装包 →
+  属性 → 勾选“解除锁定”再运行。
+- **杀毒软件误报**：未签名的 WinUI + libmpv 应用偶尔被启发式引擎标记。Wiina 只读取你打开的媒体，
+  不驻留后台、不静默修改系统设置（文件关联只在设置页手动触发）；源码公开可审查：
+  <https://github.com/RareSpecies233/wiina>。
+
+**校验下载是否完整、是否被替换**（推荐）：查看 [docs/acceptance/v1.2.7.md](docs/acceptance/v1.2.7.md)
+中 zip 与 setup 的 SHA-256，然后在本机对比：
+
+```powershell
+Get-FileHash .\wiina-1.2.7-win-x64.zip    -Algorithm SHA256
+Get-FileHash .\Wiina-Setup-1.2.7-x64.exe  -Algorithm SHA256
+```
+
+两个哈希都与发布记录一致，就说明文件未被篡改或损坏。提示来自“未知发布者”，并不代表检测到病毒；
+Wiina 不是恶意软件。
+
+> **English**: The binaries are unsigned, so SmartScreen may show “Windows protected your PC”.
+> Click **More info → Run anyway** for both the portable zip and the setup. Verify the SHA-256
+> against `docs/acceptance/v1.2.7.md` before running; the source is public at
+> <https://github.com/RareSpecies233/wiina>.
+
+## 状态（v1.2.7）
 
 - **Stage 0–8 已验收。** 播放管线、WinUI 标题栏、OSC、播放/轨道/字幕/章节/播放列表/历史、侧边栏与快速设置、
   OSD/缩略图、全屏/PiP/迷你模式/多窗口、12 页设置（含文件关联）/搜索/快捷键/菜单/欢迎与辅助窗口、
@@ -40,10 +68,41 @@ Segoe Fluent Icons、播放器外框的可选视频毛玻璃（纯色档为不�
 - **设置仍为 12 页**，新增自动隐藏延时一行后共 **122 行**，既有行 id 未变。
 - **新增参考文档**：[设置界面快照](docs/reference/settings-layout.md)（12 页 / 122 行，供重排对照）、
   [IINA 缩略图调研](docs/reference/iina-thumbnails.md)（IINA 预生成 + 磁盘缓存 vs Wiina 悬停实时抽帧；
-  对齐**尚未实施**）。
+  1.2.7 起已实现预生成 + 磁盘缓存）。
 - 测试 668 项通过；产物 `wiina-1.2.6-win-x64.zip` / `Wiina-Setup-1.2.6-x64.exe`。
 - 文档同步：[v1.2.6 验收](docs/acceptance/v1.2.6.md)。
 
+### v1.2.7：缩略图缓存、管理员关联与关闭稳定性
+
+- **时间轴缩略图对齐 IINA**：文件加载完成后在后台**一次性预生成**整条时间轴的缩略图（每 5 秒一格、90 px 高），
+  写入 `%LOCALAPPDATA%\Wiina\thumbnails\v2`（每格一张 JPEG + 原子重写的 `index.json`，按字节 LRU 清理，
+  默认预算 512 MB）。悬停时先查磁盘/内存缓存，未命中再由同一个提取 worker 插队取帧；再次打开同一文件基本即时显示。
+  设置 → 界面 → 缩略图新增「缩略图磁盘缓存」（0–4096 MB，0 = 关闭）与「清除缩略图缓存」。
+  网络/UNC 源只走内存缓存，不落盘。实测 1080p 23:40 文件：冷启动预生成 285 格 14.1–14.9 s，热缓存 0.3 s；
+  悬停冷 73 ms、热 4 ms，285 格共 1.70 MB。
+- **收起侧栏时浮动 OSC 跟手**：侧栏滑出动画期间不再先被夹住再回弹——正在隐藏的侧栏视为 0 让位
+  （`SidebarHost.IsHiding`），隐藏动画开始时立即重算 OSC 位置。
+- **光标随外框一起消失**：自动隐藏 OSC/标题栏时同步隐藏鼠标指针（平衡的 `ShowCursor` 计数 + 全透明光标），
+  移动、显示外框、失焦与关闭时恢复，不再出现“控制条淡出但箭头还在”。
+- **0.5× / 1× / 2× 使用真实视频分辨率**：新增 `WindowSizing.ScaledVideoWindowSize`，按 mpv 的显示尺寸
+  （含旋转/像素比）换算物理像素后得到窗口的 DIP 尺寸，保持显示宽高比并夹到工作区；无视频时回退 1280×720，
+  「适应屏幕」同样按视频比例选择最大窗口。
+- **全屏不再有细边框**：圆角与边框色统一由 `WindowInterop.SetWindowFrame` 控制，全屏优先于吸附；
+  切换全屏/presenter 后重新应用。Windows 10 上相关 DWM 属性被忽略（无副作用）。
+- **文件关联支持管理员模式**：设置 → 文件关联新增「管理员一键关联…」，经 UAC 提权后写
+  `HKLM\Software\Classes`（ProgID、Capabilities、RegisteredApplications），并尽力清除对应扩展名的
+  `UserChoice`；取消关联会同时清理 HKCU 与 HKLM 中 Wiina 自己的项。按用户（HKCU）模式保留；
+  Windows 仍要求在“默认应用”中最终确认。
+- **未签名下载说明**：README 顶部新增 SmartScreen / 杀毒误报的继续方法与 SHA-256 校验步骤。
+- **关闭路径与卡死分析**：关闭时先停所有 UI 定时器、设置只保存一次、先解绑视频面板再释放 mpv；
+  统计面板隐藏时不再刷新。完整分析见 [卡死分析报告](docs/reports/hang-analysis-1.2.7.md)
+  （报告中列出的 `ChromeBlur` 停止/事件解绑等项尚未落地，结果见验收页的如实记录）。
+- **性能对照**：画质预设 23 项均实时生效，只有 `vo` / `gpu-api` / `gpu-context` / `d3d11-output-mode`
+  在启动期固定；与 PotPlayer 的差距主要来自 composition swapchain、8 Hz 毛玻璃回读与常驻 headless mpv，
+  见 [性能对照](docs/reports/performance-vs-potplayer.md)。
+- 测试 711 项通过（新增缩略图磁盘缓存与缩放尺寸测试）；产物 `wiina-1.2.7-win-x64.zip` /
+  `Wiina-Setup-1.2.7-x64.exe`（大小与 SHA-256 以验收页构建后记录为准）。
+- 文档同步：[v1.2.7 验收](docs/acceptance/v1.2.7.md)。
 ### v1.2.5：主题同步、纯色档修复与画质管理
 
 - **主题即时同步到所有窗口**：在设置、快速菜单或任一窗口切换深/浅色，播放窗口（标题栏 + 浮动 OSC）、
@@ -245,14 +304,16 @@ Segoe Fluent Icons、播放器外框的可选视频毛玻璃（纯色档为不�
 
 发布包有两种形式，都不需要单独安装 .NET 或 Windows App Runtime：
 
-1. **便携 zip**：获取 `artifacts/wiina-1.2.6-win-x64.zip`，解压到任意可写目录，运行 `Wiina.exe`；
+1. **便携 zip**：获取 `artifacts/wiina-1.2.7-win-x64.zip`，解压到任意可写目录，运行 `Wiina.exe`；
    卸载时运行同目录的 `Uninstall Wiina.exe`（可保留配置）。
-2. **安装包**：获取 `artifacts/Wiina-Setup-1.2.6-x64.exe`，按当前用户安装（默认
+2. **安装包**：获取 `artifacts/Wiina-Setup-1.2.7-x64.exe`，按当前用户安装（默认
    `%LOCALAPPDATA%\Programs\Wiina`，无需管理员），从“设置 → 应用”卸载；卸载时询问
    「是否保留配置文件？」，默认保留。
 
 设置、日志与插件目录位于 `%LOCALAPPDATA%\Wiina`。首次启动可拖入文件/文件夹/URL，或使用欢迎窗口打开媒体。
 安装包、卸载行为与静默参数见 [docs/installer.md](docs/installer.md)。
+
+文件关联可在设置 → 文件关联按当前用户（HKCU）或管理员（HKLM，需 UAC）注册；两种方式都需要在 Windows「默认应用」中最终确认，详见 [docs/file-associations.md](docs/file-associations.md)。
 
 ## 构建
 
@@ -288,16 +349,16 @@ powershell -ExecutionPolicy Bypass -File tools/fetch-libmpv.ps1
 测试覆盖设置/搜索/菜单规则、快捷键、OSC/OSD、播放列表/历史、滤镜/EQ、窗口布局/几何、边缘吸附、
 文件关联注册计划，以及 Stage 11 的本地化目录完整性、语言解析/持久化取值、打包清单与无障碍元数据契约；
 1.2.4 起还包括 DWM 可见边框换算（`FrameMarginsTests`）、画质预设归一化（`QualitySettingsTests`）与
-小窗渲染尺寸（`RenderSizeTests`）；1.2.5 扩展了画质 profile 的序列化/默认值测试；1.2.6 增加 OSC 可见性状态机测试（`OscVisibilityControllerTests`）。当前 668 项测试在 Release 下全部通过。
+小窗渲染尺寸（`RenderSizeTests`）；1.2.5 扩展了画质 profile 的序列化/默认值测试；1.2.6 增加 OSC 可见性状态机测试（`OscVisibilityControllerTests`）。1.2.7 增加缩略图磁盘缓存（`ThumbnailDiskCacheTests`）与按视频尺寸缩放（`WindowSizingScaledSizeTests`）。当前 711 项测试在 Release 下全部通过。
 
 ## 打包（可复现）
 
 ```powershell
 # 便携 zip（先构建 src/Wiina.Uninstall，再打包并校验卸载器与 Wiina.dll 版本）
-pwsh -File scripts/package.ps1 -Version 1.2.6
+pwsh -File scripts/package.ps1 -Version 1.2.7
 
 # 安装包（在便携 zip 之后；需要 Inno Setup 6 的 ISCC.exe）
-pwsh -File scripts/release.ps1 -Version 1.2.6
+pwsh -File scripts/release.ps1 -Version 1.2.7
 ```
 
 `package.ps1` 会：用 `dotnet build -c Release -r win-x64 --self-contained -p:Platform=x64 -t:Rebuild`
@@ -305,11 +366,11 @@ pwsh -File scripts/release.ps1 -Version 1.2.6
 应用出现 XBF parse 失败）→ 单独发布 `src/Wiina.Uninstall` 并把 `Uninstall Wiina.exe` 放进载荷 →
 复制构建输出、`third_party/libmpv/libmpv-2.dll`、`LICENSE`、`NOTICE`、`README.md` 并生成
 `SOURCE.txt`（源码地址 + 提交 + 构建时间）→ 校验必需文件与**待打包 `Wiina.dll` 的版本** →
-生成 `artifacts/wiina-1.2.6-win-x64.zip`。
+生成 `artifacts/wiina-1.2.7-win-x64.zip`。
 
 `release.ps1` 在便携 zip 之后解压同一份载荷到 `artifacts/publish`，用
 `%LOCALAPPDATA%\Programs\Inno Setup 6\ISCC.exe`（或 PATH / Program Files 中的 ISCC）编译
-`installer/wiina.iss`，输出 `artifacts/Wiina-Setup-1.2.6-x64.exe`，并打印两个产物的
+`installer/wiina.iss`，输出 `artifacts/Wiina-Setup-1.2.7-x64.exe`，并打印两个产物的
 大小与 SHA-256。`artifacts/` 与 `third_party/libmpv/` 均被 gitignore，仓库不提交二进制。
 缺少任一必需文件、卸载器或版本不匹配时脚本直接失败。
 
@@ -334,6 +395,7 @@ pwsh -File scripts/release.ps1 -Version 1.2.6
 ## 文档
 
 - [实施计划（历史，v1 前）](docs/PLAN.md) — 阶段、范围、验收标准；当前行为以本 README 与验收页为准
+- [v1.2.7 验收](docs/acceptance/v1.2.7.md) — 缩略图预生成/磁盘缓存、管理员关联、真实分辨率缩放与全屏边框的验证记录
 - [v1.2.6 验收](docs/acceptance/v1.2.6.md) — OSC 避让/自动隐藏、音频设备下拉与参考文档的验证记录
 - [v1.2.5 验收](docs/acceptance/v1.2.5.md) — 第三轮 4 项修复 + 画质选项清单的验证记录
 - [v1.2.4 验收](docs/acceptance/v1.2.4.md) — 第二轮 10 项用户问题的验证清单
@@ -341,8 +403,8 @@ pwsh -File scripts/release.ps1 -Version 1.2.6
 - [Stage 11 验收](docs/acceptance/stage-11.md) — §19.2 清单与结果
 - [无障碍与本地化说明](docs/accessibility.md)
 - [性能测量](docs/performance.md)
-- [设置界面快照](docs/reference/settings-layout.md) — 12 页 / 122 行的完整设置清单与窗口动作
-- [IINA 缩略图调研](docs/reference/iina-thumbnails.md) — 上游实现、Wiina 现状与差距（对齐未实施）
+- [设置界面快照](docs/reference/settings-layout.md) — 12 页 / 125 行的完整设置清单与窗口动作（1.2.6 快照，1.2.7 差异见验收页）
+- [IINA 缩略图调研](docs/reference/iina-thumbnails.md) — 上游实现、Wiina 现状与 1.2.7 对齐实现
 - [文件关联](docs/file-associations.md) — 按用户注册、默认应用确认与取消
 - [安装与卸载](docs/installer.md) — Inno Setup 按用户安装、卸载保留配置与便携卸载器
 - [发布说明](docs/release/notes.md) · [已知问题](docs/release/known-issues.md)

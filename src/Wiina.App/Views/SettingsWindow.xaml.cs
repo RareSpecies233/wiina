@@ -1,4 +1,6 @@
 using System.Collections.Generic;
+using System.ComponentModel;
+using System.Diagnostics;
 using System.IO;
 using Microsoft.UI.Text;
 using Microsoft.UI.Windowing;
@@ -796,6 +798,7 @@ public sealed partial class SettingsWindow : Window
         "choose-screenshot-folder" => Loc.T("settings.choose"),
         "associate-video" or "associate-audio" or "associate-all" =>
             Loc.T("settings.associate"),
+        "associate-admin" => Loc.T("settings.associateAdmin"),
         "unregister-associations" => Loc.T("settings.unassociate"),
         "open-default-apps" => Loc.T("settings.openSettings"),
         "open-data-folder" or "open-config-folder" or "open-log-folder" or
@@ -1160,6 +1163,57 @@ public sealed partial class SettingsWindow : Window
                     await ShowMessageAsync(
                         Loc.T("integration.registeredTitle"),
                         Loc.T("integration.registeredBody"));
+                    break;
+                }
+
+                case "associate-admin":
+                {
+                    string executable = Environment.ProcessPath
+                        ?? throw new InvalidOperationException("Cannot resolve the Wiina executable path.");
+                    try
+                    {
+                        using Process? process = Process.Start(new ProcessStartInfo
+                        {
+                            FileName = executable,
+                            Arguments = "--associate-elevated-video --associate-elevated-audio",
+                            WorkingDirectory = System.IO.Path.GetDirectoryName(executable) ?? string.Empty,
+                            UseShellExecute = true,
+                            Verb = "runas",
+                        });
+                        if (process is null)
+                        {
+                            await ShowMessageAsync(
+                                Loc.T("integration.adminFailedTitle"),
+                                Loc.T("integration.adminFailedBody"));
+                            break;
+                        }
+
+                        await process.WaitForExitAsync();
+                        bool succeeded = process.ExitCode == 0;
+                        RefreshRows();
+                        await ShowMessageAsync(
+                            Loc.T(succeeded
+                                ? "integration.adminRegisteredTitle"
+                                : "integration.adminFailedTitle"),
+                            Loc.T(succeeded
+                                ? "integration.adminRegisteredBody"
+                                : "integration.adminFailedBody"));
+                    }
+                    catch (Win32Exception ex) when (ex.NativeErrorCode == 1223)
+                    {
+                        // ERROR_CANCELLED: the user dismissed the UAC prompt.
+                        RefreshRows();
+                        await ShowMessageAsync(
+                            Loc.T("integration.adminCanceledTitle"),
+                            Loc.T("integration.adminCanceledBody"));
+                    }
+                    catch (Exception ex)
+                    {
+                        await ShowMessageAsync(
+                            Loc.T("integration.adminFailedTitle"),
+                            Loc.T("integration.adminFailedBody") + Environment.NewLine + ex.Message);
+                    }
+
                     break;
                 }
 

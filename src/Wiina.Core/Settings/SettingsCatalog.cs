@@ -253,6 +253,19 @@ public static class SettingsCatalog
             settings => settings.ThumbnailCacheCount,
             (settings, value) => settings.ThumbnailCacheCount = (int)Math.Round(Math.Clamp(value, 10, 240)),
             "thumbnail cache 缩略图 缓存"));
+        rows.Add(NumberRow(
+            "ui.thumbnail-cache-mb", SettingsPageId.Ui, "缩略图",
+            "缩略图磁盘缓存", "0 关闭磁盘缓存；超出上限时按最近最少使用自动清理。",
+            0, 4096, 64, " MB",
+            settings => settings.ThumbnailCacheMegabytes,
+            (settings, value) => settings.ThumbnailCacheMegabytes =
+                (int)Math.Round(Math.Clamp(value, 0, 4096)),
+            "thumbnail disk cache megabytes 缩略图 磁盘 缓存 空间"));
+        rows.Add(ActionRow(
+            "ui.thumbnail-cache-clear", SettingsPageId.Ui, "缩略图",
+            "清除缩略图缓存", "删除磁盘与内存中缓存的缩略图，并报告释放的空间。",
+            "clear-thumbnails",
+            "clear thumbnail cache 缩略图 清除 缓存"));
 
         // --------------------------------------------------------------- Video
         rows.Add(BoolRow(
@@ -862,8 +875,8 @@ public static class SettingsCatalog
         rows.Add(InfoRow(
             "integration.status", SettingsPageId.Integration, "文件关联",
             "当前关联状态",
-            "只写入当前用户（HKCU），不需要管理员权限；Windows 仍会要求在“默认应用”中确认。",
-            "file association status registry 关联 状态 默认应用",
+            "Wiina 已写入 Windows 的默认应用注册；下次打开支持的文件并选择 Wiina 时点“始终”，Windows 就会记住。若想让资源管理器直接使用 Wiina，可用下方的“管理员一键关联”。",
+            "file association status registry 关联 状态 默认应用 always 始终",
             settings => string.Empty));
         rows.Add(ActionRow(
             "integration.associate-video", SettingsPageId.Integration, "关联格式",
@@ -883,6 +896,12 @@ public static class SettingsCatalog
             "同时注册视频与音频；重复执行是安全的。",
             "associate-all",
             "associate all video audio 关联 全部 格式"));
+        rows.Add(ActionRow(
+            "integration.associate-admin", SettingsPageId.Integration, "关联格式",
+            "管理员一键关联…",
+            "写入系统级 ProgID 与扩展名默认值，并清除用户级 UserChoice，让资源管理器直接使用 Wiina。需要管理员权限（UAC）；Windows 仍可能要求再次确认。",
+            "associate-admin",
+            "admin elevated association 管理员 一键 关联 系统 UAC 默认"));
         rows.Add(ActionRow(
             "integration.unregister", SettingsPageId.Integration, "维护",
             "取消 Wiina 关联",
