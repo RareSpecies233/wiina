@@ -3,16 +3,18 @@ using System.Text;
 namespace Wiina.Uninstall;
 
 /// <summary>
-/// Portable uninstaller (issue 8). The portable zip has no installer, so this
+/// Portable uninstaller (issues 8/9). The portable zip has no installer, so this
 /// executable is the uninstall entry point shipped next to <c>Wiina.exe</c>:
 ///
 /// 1. confirm the uninstall (default No — it deletes files);
-/// 2. ask whether to keep the per-user settings (default Yes), matching the
+/// 2. always remove the file associations Wiina registered (HKCU, plus HKLM
+///    when this process has the rights) — this is never asked, because leaving
+///    a broken ProgID behind is strictly worse than removing a working one;
+/// 3. ask whether to keep the per-user settings (default Yes), matching the
 ///    installer's uninstall prompt and a silent uninstall's keep-by-default;
-/// 3. optionally remove the HKCU file associations Wiina registered;
-/// 4. optionally delete <c>%LOCALAPPDATA%\Wiina</c> (settings, history,
-///    plugins, mpv config, logs, crash log) — never any user media;
-/// 5. schedule deletion of the portable folder after this process exits.
+///    only an explicit No deletes <c>%LOCALAPPDATA%\Wiina</c> (settings,
+///    history, plugins, mpv config, logs, crash log) — never any user media;
+/// 4. schedule deletion of the portable folder after this process exits.
 ///
 /// Exit codes: 0 = done or cancelled, 1 = the folder could not be removed
 /// automatically (the user is told to delete it manually).
@@ -54,12 +56,7 @@ internal static class Program
         bool keepConfig = options.KeepConfig ??
             (options.Silent || AskKeepConfig(configDirectory));
 
-        bool hasAssociations = RegistryCleanup.HasRegistration();
-        bool removeAssociations = options.RemoveAssociations ??
-            (options.Silent ? hasAssociations : hasAssociations && AskRemoveAssociations());
-
         log.Add($"keepConfig: {keepConfig}");
-        log.Add($"removeAssociations: {removeAssociations} (registered: {hasAssociations})");
         log.Add($"selfDelete: {!options.NoSelfDelete}");
         log.Add($"dryRun: {options.DryRun}");
 
@@ -72,12 +69,9 @@ internal static class Program
                 log.Add($"dry-run: would delete {configDirectory}");
             }
 
-            if (removeAssociations)
-            {
-                log.Add(@"dry-run: would delete HKCU\Software\Classes\Wiina.Video and Wiina.Audio");
-                log.Add(@"dry-run: would remove Wiina values from HKCU\Software\Classes\.<ext>\OpenWithProgids");
-                log.Add(@"dry-run: would delete HKCU\Software\Wiina and the RegisteredApplications\Wiina value");
-            }
+            log.Add(RegistryCleanup.HasRegistration()
+                ? "dry-run: would remove the Wiina file associations from HKCU and HKLM"
+                : "dry-run: no Wiina file associations are registered");
 
             if (!options.NoSelfDelete)
             {
@@ -99,6 +93,18 @@ internal static class Program
         }
 
         // --------------------------------------------------------- deletions
+        // Associations are always removed, whether or not the config is kept:
+        // a leftover Wiina.Video/Wiina.Audio ProgID would point at a folder
+        // that is about to disappear.
+        int registryRemoved = RegistryCleanup.RemoveAll(log);
+        log.Add($"registry: {registryRemoved} item(s) removed");
+
+        int machineLeftovers = RegistryCleanup.MachineLeftovers();
+        if (machineLeftovers > 0)
+        {
+            log.Add($"registry: {machineLeftovers} machine-wide item(s) still need administrator rights");
+        }
+
         bool configRemoved = true;
         if (!keepConfig)
         {
@@ -107,12 +113,6 @@ internal static class Program
             {
                 log.Add("config: deletion failed; some files are probably in use");
             }
-        }
-
-        if (removeAssociations)
-        {
-            int removed = RegistryCleanup.RemoveAll(log);
-            log.Add($"registry: {removed} item(s) removed");
         }
 
         // ---------------------------------------------------------- self delete
@@ -149,14 +149,23 @@ internal static class Program
             message.Append("\n\nSome settings files could not be deleted because they are in use.");
         }
 
+        if (machineLeftovers > 0)
+        {
+            message.Append("\n\n部分文件关联写入了系统（HKLM）注册表，需要管理员权限才能删除。\n");
+            message.Append("如确认要清理，请右键卸载程序 →“以管理员身份运行”。");
+            message.Append("\n\nSome Wiina file associations were registered machine-wide (HKLM) and need");
+            message.Append(" administrator rights to remove. Run the uninstaller as administrator to clean them up.");
+        }
+
         if (!scheduled && !options.DryRun)
         {
             log.Add("self-delete: could not be scheduled; the folder was left in place");
         }
 
         // Only keep a diagnostic log when something needs explaining: silent
-        // runs, a refused self-delete or settings that could not be removed.
-        bool needsLog = options.Silent || !scheduled || !configRemoved;
+        // runs, a refused self-delete, settings that could not be removed or
+        // machine-wide associations that need an elevated uninstall.
+        bool needsLog = options.Silent || !scheduled || !configRemoved || machineLeftovers > 0;
         string? logPath = needsLog ? WriteLog(log) : null;
         if (logPath is not null)
         {
@@ -202,22 +211,11 @@ internal static class Program
             "重新安装后可以继续使用。\n" +
             "否(No)：删除下面的文件夹。\n" +
             $"{configDirectory}\n\n" +
+            "Wiina 注册的文件关联始终会被移除，不会影响其他播放器。\n\n" +
             "Keep your Wiina settings?\n\n" +
             "Yes: keep settings, playback history, plugins, mpv config and logs.\n" +
-            "No: delete the folder above.",
-            "Wiina",
-            defaultYes: true);
-
-    private static bool AskRemoveAssociations() =>
-        NativeMethods.Ask(
-            "是否移除 Wiina 的文件关联？\n\n" +
-            "是(Yes)：移除 Wiina 在 当前用户 注册表里创建的视频/音频关联，\n" +
-            "不会影响其他播放器。\n" +
-            "否(No)：保留现有文件关联。\n\n" +
-            "Remove Wiina's file associations?\n\n" +
-            "Yes: remove the per-user registry entries Wiina created\n" +
-            "(other players are unaffected).\n" +
-            "No: leave the associations in place.",
+            "No: delete the folder above.\n\n" +
+            "Wiina's file associations are always removed; other players are unaffected.",
             "Wiina",
             defaultYes: true);
 

@@ -1,11 +1,101 @@
 # Wiina release notes
 
-Release date (1.2.7): 2026-10-24
+Release date (1.3.0): 2026-10-24
 
 Windows-native, IINA-inspired mpv front end built with WinUI 3, Windows App
 SDK 2.5, and libmpv.
 
-## What's new in 1.2.7
+## What's new in 1.3.0
+
+### The settings window got a layout pass
+
+Eleven pages, 126 rows: the utilities page is folded into Advanced (diagnostics,
+tools, folders), the six thumbnail rows moved to Video → 缩略图, the screenshot
+folder moved to Video → 截图, "open URL" moved to General → 播放与历史, and the
+new "system media keys" toggle lives on Controls. Row ids are unchanged, so
+`settings-layout.md` deep links and quick-settings still work.
+
+### Key binding editor rebuilt
+
+The editor is now searchable and category-grouped, with a read-only built-in
+list for Wiina, mpv and IINA profiles, custom profiles (new/rename/delete),
+chord recording with explicit conflict handling (replace or cancel), buffered
+edits behind an explicit Save plus an unsaved-close confirmation, JSON
+import/export and a per-profile reset. The default profile stays Wiina.
+
+### Portable mpv.net configuration export
+
+`resources/mpvnet/` now carries a configuration for mpv.net users:
+`wiina.conf` (mpv options plus a `[wiina]` profile, loaded with
+`profile=wiina`), `wiina-input.conf` (the Wiina key bindings), and a README
+explaining where each file goes. The same bindings are embedded in Wiina as
+`src/Wiina.Core/Input/wiina-defaults.conf`. This is an interop export, not a
+supported second player: Wiina's side panels, composition rendering and custom
+UI do not exist in mpv.net, and mpv.net/stock mpv cannot load Wiina's settings.
+
+### System media keys (SMTC)
+
+A new Controls → 键盘 → 系统媒体键 toggle registers Wiina with the Windows
+System Media Transport Controls, so play/pause/next/previous and the
+media-key overlay work while Wiina is running. The setting applies immediately.
+
+### Frame-drop detection restored
+
+A 3-second sliding window with a 12-second cooldown shows a transient
+`Wiina · 丢帧 N 帧/分（总计 M）` OSD when frames start dropping, independently of
+the statistics panel (which used to own that switch). The statistics panel also
+gained 丢帧 / 解码丢帧 / 丢帧速率 rows and falls back from `frame-drop-count` to
+`vo-drop-frame-count` when the composition renderer leaves the former empty.
+
+### Timeline thumbnails: slow mode
+
+Video → 缩略图 → 慢速预览图模式（单核） runs the thumbnail worker on one
+low-priority thread and skips whole-file pre-generation; the disk cache is
+still used, only the first hover of a bucket is slower. Width, bucket and cache
+size rows now sit together on the Video page.
+
+### Cursor hiding is still limited in WinUI 3
+
+The intent was for the pointer to disappear together with the chrome, but this
+release does not achieve it. Investigation proved that the desktop cursor over a
+WinUI 3 client area is owned by CoreMessaging: `WM_SETCURSOR` overrides,
+thread-level `SetCursor(blank)`, and a reflected `UIElement.ProtectedCursor =
+null` all leave the arrow visible (`GetCursorInfo` still reports 0x10019 and
+`InputSystemCursorShape` has no "none" value). The root cause, the three inert
+mechanisms, and the next route (embedded transparent `.cur` +
+`InputDesktopResourceCursor`) are documented in known-issues. Chrome hiding,
+click-to-hide, focus-loss hiding and the auto-hide delay itself are unaffected.
+
+### Crash log path
+
+The crash dialog's "collect logs" buttons now do what they say: one opens the
+log folder, the other copies the log path. Logs stay under
+`%LOCALAPPDATA%\Wiina\logs` and are never uploaded anywhere.
+### No-border fullscreen
+
+Fullscreen asks DWM to drop the window-corner rounding and the border colour,
+so the video reaches the screen edge; the style is restored on exit and
+re-applied after presenter or DPI changes. Windows 10 ignores the attributes.
+
+### Installer upgrade behaviour
+
+The per-user installer upgrades in place without a restart prompt and keeps
+`%LOCALAPPDATA%\Wiina` and the HKCU file associations. Only an explicit
+"do not keep settings" answer in the uninstaller removes them.
+
+### Stability notes
+
+The 1.2.7 close-path fix (`ChromeBlur.Shutdown`, called from `OnClosed` before
+the mpv player is destroyed) is carried forward. DXGI device-lost recovery is
+**not** implemented; the freeze analysis remains a report, not a fix list.
+
+### Documentation
+
+`docs/reference/settings-layout.md` is refreshed for the 11-page layout,
+`docs/reference/iina-shortcuts.md` compares the Wiina/mpv/IINA defaults,
+`resources/mpvnet/README.md` explains the export, and the
+test suite is at 761 tests.
+## 1.2.7 — previous release
 
 ### Timeline thumbnails now match IINA (pre-generated + disk cache)
 
@@ -23,14 +113,15 @@ SDK 2.5, and libmpv.
   14.1–14.9 s, warm start 0.3 s; hover 73 ms cold / 4 ms warm; 1.70 MB on disk
   for 285 frames.
 
-### Floating OSC follows the sidebar animation; the cursor hides with the chrome
+### Floating OSC follows the sidebar animation (cursor hiding is still limited)
 
 - A sidebar that is already animating out no longer reports its full width, and
   the floating OSC is re-positioned as the hide animation starts, so it no longer
   waits for the panel and then snaps back.
-- Auto-hidden chrome hides the mouse pointer too (balanced `ShowCursor` count
-  plus a 1×1 transparent cursor), restored on movement, chrome reveal,
-  deactivation and close.
+- Cursor hiding was attempted with `WM_SETCURSOR`, thread-level `SetCursor` and
+  `ProtectedCursor`, but WinUI 3's CoreMessaging keeps the arrow visible. The
+  limitation, the three inert mechanisms and the next resource-based route are
+  in known-issues; this item is not claimed as fixed.
 
 ### 0.5× / 1× / 2× use the real video resolution
 

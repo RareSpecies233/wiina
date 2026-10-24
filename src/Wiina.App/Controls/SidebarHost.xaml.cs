@@ -220,7 +220,29 @@ public sealed partial class SidebarHost : UserControl
         ChaptersPageTab.IsChecked = false;
         PluginsPageTab.IsChecked = false;
 
+        // Destinations reuse the same host and WinUI restores a scroll offset
+        // after a visibility cycle, so rewind every list before showing the
+        // next one.
+        ResetScrollOffsets(this);
         UpdatePageChecks(SettingsContent.CurrentPage, type ?? SidebarType.Settings);
+    }
+
+    /// <summary>
+    /// Sets the vertical offset of every <see cref="ScrollViewer"/> in the
+    /// subtree back to zero without animating.
+    /// </summary>
+    private static void ResetScrollOffsets(DependencyObject root)
+    {
+        for (int index = 0; index < VisualTreeHelper.GetChildrenCount(root); index++)
+        {
+            DependencyObject child = VisualTreeHelper.GetChild(root, index);
+            if (child is ScrollViewer viewer)
+            {
+                viewer.ChangeView(null, 0, null, disableAnimation: true);
+            }
+
+            ResetScrollOffsets(child);
+        }
     }
 
     public void SetPage(QuickSettingsPage page)

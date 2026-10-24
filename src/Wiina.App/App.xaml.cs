@@ -460,9 +460,31 @@ public partial class App : Application
     public static bool IsMediaTarget(MainWindow window) =>
         ReferenceEquals(ActiveWindow, window);
 
+    /// <summary>
+    /// Re-registers or releases SystemMediaTransportControls to match
+    /// <see cref="AppSettings.MediaKeysEnabled"/>. Applied live by the settings
+    /// window; the old semantics were "always on".
+    /// </summary>
+    public static void ApplyMediaKeysSetting()
+    {
+        if (Settings.MediaKeysEnabled)
+        {
+            EnsureMediaSession();
+        }
+        else
+        {
+            ShutdownMediaSession();
+        }
+    }
+
     private static void EnsureMediaSession()
     {
         if (_mediaSession is not null)
+        {
+            return;
+        }
+
+        if (!Settings.MediaKeysEnabled)
         {
             return;
         }

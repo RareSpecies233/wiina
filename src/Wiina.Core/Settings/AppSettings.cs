@@ -66,6 +66,13 @@ public sealed partial class AppSettings
     /// <summary>Disk budget for pre-generated thumbnails, in megabytes; 0 disables it.</summary>
     public int ThumbnailCacheMegabytes { get; set; } = 512;
 
+    /// <summary>
+    /// Slow thumbnail mode: one low-priority worker extracts frames one at a
+    /// time and nothing is pre-generated up front, so weak devices stay smooth
+    /// at the cost of a slower first hover.
+    /// </summary>
+    public bool ThumbnailSlowMode { get; set; }
+
     // ---- Quick settings: video (persisted and re-applied on startup) ----
 
     public string VideoAspect { get; set; } = "no";
@@ -214,6 +221,12 @@ public sealed partial class AppSettings
 
     /// <summary>Reverse the wheel direction for volume/seek gestures.</summary>
     public bool InvertWheelDirection { get; set; }
+
+    /// <summary>
+    /// Registers SystemMediaTransportControls and handles the keyboard media
+    /// keys; off means Wiina never claims them (other apps stay in charge).
+    /// </summary>
+    public bool MediaKeysEnabled { get; set; } = true;
 
     /// <summary>User key bindings; empty means the documented defaults.</summary>
     public List<KeyBindingSetting> KeyBindings { get; set; } = new();

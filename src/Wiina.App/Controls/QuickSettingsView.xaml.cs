@@ -15,9 +15,9 @@ namespace Wiina.App.Controls;
 public enum QuickSettingKey
 {
     Theme,
-    Animations,
     Layout,
     AlwaysOnTop,
+    Speed,
     LockAspect,
     OscPosition,
     OscAutoHide,
@@ -86,6 +86,15 @@ public sealed class QuickSettingChangedEventArgs : EventArgs
 /// </summary>
 public sealed partial class QuickSettingsView : UserControl
 {
+    /// <summary>
+    /// Presets offered by the layout page. The video page slider is
+    /// continuous between 0.5× and 4×.
+    /// </summary>
+    private static readonly double[] SpeedPresets =
+    {
+        0.5, 0.75, 1, 1.25, 1.5, 2, 2.5, 3, 4,
+    };
+
     private readonly List<TrackInfo> _tracks = new();
     private bool _loading;
     private bool _hasMedia;
@@ -110,6 +119,41 @@ public sealed partial class QuickSettingsView : UserControl
 
     public QuickSettingsPage CurrentPage => _page;
 
+    /// <summary>
+    /// Mirrors the player's current rate into both speed controls without
+    /// raising a change event; the shell owns the mpv rate.
+    /// </summary>
+    public void SetSpeed(double speed)
+    {
+        double clamped = Math.Clamp(speed, SpeedPresets[0], SpeedPresets[^1]);
+        _loading = true;
+        try
+        {
+            SpeedSlider.Value = clamped;
+            SpeedPresetBox.SelectedIndex = NearestSpeedPreset(clamped);
+        }
+        finally
+        {
+            _loading = false;
+        }
+
+        UpdateRangeLabels();
+    }
+
+    private static int NearestSpeedPreset(double speed)
+    {
+        int nearest = 0;
+        for (int i = 1; i < SpeedPresets.Length; i++)
+        {
+            if (Math.Abs(SpeedPresets[i] - speed) < Math.Abs(SpeedPresets[nearest] - speed))
+            {
+                nearest = i;
+            }
+        }
+
+        return nearest;
+    }
+
     private void SetupStaticOptions()
     {
         // Set the range in code so Minimum is never applied while Maximum is
@@ -118,6 +162,9 @@ public sealed partial class QuickSettingsView : UserControl
         SidebarWidthSlider.Minimum = 300;
         OsdSizeSlider.Maximum = 500;
         OsdSizeSlider.Minimum = 1;
+        SpeedSlider.Maximum = 4;
+        SpeedSlider.Minimum = 0.5;
+        SpeedSlider.StepFrequency = 0.05;
 
         ApplyLocalizedChoices();
 
@@ -130,6 +177,10 @@ public sealed partial class QuickSettingsView : UserControl
         CropBox.SelectedValuePath = "Aspect";
 
         RotationBox.ItemsSource = QuickSettings.Rotations;
+
+        SpeedPresetBox.ItemsSource = SpeedPresets
+            .Select(speed => $"{speed:0.##}×")
+            .ToArray();
 
         SubtitleColorBox.ItemsSource = QuickSettings.SubtitleColors;
         SubtitleColorBox.DisplayMemberPath = "Label";
@@ -186,7 +237,6 @@ public sealed partial class QuickSettingsView : UserControl
         try
         {
             ThemeBox.SelectedIndex = Math.Clamp((int)settings.Theme, 0, 2);
-            AnimationsSwitch.IsOn = settings.AnimationsEnabled;
             LayoutBox.SelectedIndex = settings.Layout == WindowLayoutMode.Docked ? 1 : 0;
             AlwaysOnTopSwitch.IsOn = settings.AlwaysOnTop;
             LockAspectSwitch.IsOn = settings.LockAspectRatio;
@@ -445,6 +495,10 @@ public sealed partial class QuickSettingsView : UserControl
     public void ShowPage(QuickSettingsPage page)
     {
         _page = page;
+        // Only one page block is visible at a time, but the scroll viewer is
+        // shared: without rewinding it the next page opens at the previous
+        // page's offset.
+        PageScroll.ChangeView(null, 0, null, disableAnimation: true);
         LayoutPage.Visibility = page == QuickSettingsPage.Layout
             ? Visibility.Visible
             : Visibility.Collapsed;
@@ -589,6 +643,7 @@ public sealed partial class QuickSettingsView : UserControl
         SubtitleDelayText.Text = Loc.F("quick.seconds", $"{SubtitleDelaySlider.Value:+0.0;-0.0;0.0}");
         SubtitlePositionText.Text = $"{Math.Round(SubtitlePositionSlider.Value)}";
         SubtitleScaleText.Text = $"{SubtitleScaleSlider.Value:0.00}×";
+        SpeedValueText.Text = $"{SpeedSlider.Value:0.##}×";
     }
 
     private static double SidebarStateWidth(double width) =>
@@ -669,6 +724,16 @@ public sealed partial class QuickSettingsView : UserControl
         {
             case nameof(ThemeBox):
                 Raise(QuickSettingKey.Theme, number: ThemeBox.SelectedIndex);
+                break;
+            case nameof(SpeedPresetBox):
+                if (SpeedPresetBox.SelectedIndex >= 0 &&
+                    SpeedPresetBox.SelectedIndex < SpeedPresets.Length)
+                {
+                    Raise(
+                        QuickSettingKey.Speed,
+                        number: SpeedPresets[SpeedPresetBox.SelectedIndex]);
+                }
+
                 break;
             case nameof(LayoutBox):
                 Raise(QuickSettingKey.Layout, number: LayoutBox.SelectedIndex);
@@ -763,9 +828,6 @@ public sealed partial class QuickSettingsView : UserControl
 
         switch (element.Name)
         {
-            case nameof(AnimationsSwitch):
-                Raise(QuickSettingKey.Animations, flag: AnimationsSwitch.IsOn);
-                break;
             case nameof(AlwaysOnTopSwitch):
                 Raise(QuickSettingKey.AlwaysOnTop, flag: AlwaysOnTopSwitch.IsOn);
                 break;
@@ -858,6 +920,9 @@ public sealed partial class QuickSettingsView : UserControl
         {
             case nameof(SidebarWidthSlider):
                 Raise(QuickSettingKey.SidebarWidth, number: SidebarWidthSlider.Value);
+                break;
+            case nameof(SpeedSlider):
+                Raise(QuickSettingKey.Speed, number: SpeedSlider.Value);
                 break;
             case nameof(OsdSizeSlider):
                 Raise(QuickSettingKey.OsdSize, number: OsdSizeSlider.Value);

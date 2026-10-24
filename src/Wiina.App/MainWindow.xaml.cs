@@ -19,6 +19,7 @@ using Wiina.App.ViewModels;
 using Wiina.Core.Models;
 using Wiina.App.Localization;
 using Wiina.Core.Osd;
+using Wiina.Core.Playback;
 using Wiina.Core.Settings;
 using Wiina.Core.State;
 using Wiina.Core.Text;
@@ -63,7 +64,10 @@ public sealed partial class MainWindow : Window
     private AppSettings _settings;
     private MpvPlayer? _player;
     private DispatcherQueueTimer? _statsTimer;
-    private long _lastDroppedFrames;
+    private DispatcherQueueTimer? _cursorHideTimer;
+
+    private bool _protectedCursorHidden;
+    private int _cursorDiagTick;
     private nint _swapChain;
     private bool _started;
     private bool _closed;
@@ -154,6 +158,11 @@ public sealed partial class MainWindow : Window
         InitializeComponent();
         _settings = App.Settings;
 
+        // Settings are loaded before the window exists, so no SettingsChanged
+        // event has fired yet. Build the live key map from the saved bindings
+        // now; otherwise the compiled defaults stay active until the next save.
+        RebuildKeyMap();
+
         // Apply the saved capture mode before the chrome first becomes
         // visible: "Solid" must never arm the Win2D capture thread at all.
         ChromeBlur.SetMode(_settings.ChromeBlurMode);
@@ -191,6 +200,15 @@ public sealed partial class MainWindow : Window
         _statsTimer.IsRepeating = true;
         _statsTimer.Tick += OnStatsTick;
         _statsTimer.Start();
+
+        // WinUI keeps restoring the arrow from WM_SETCURSOR (and can bump the
+        // ShowCursor display counter), so while the chrome is hidden the blank
+        // cursor is re-asserted a few times per second. It costs one SetCursor
+        // call and only runs during hidden playback.
+        _cursorHideTimer = DispatcherQueue.CreateTimer();
+        _cursorHideTimer.Interval = TimeSpan.FromMilliseconds(120);
+        _cursorHideTimer.IsRepeating = true;
+        _cursorHideTimer.Tick += OnCursorHideTick;
 
         OscFloating.DataContext = _oscVm;
         OscBottom.DataContext = _oscVm;
@@ -240,7 +258,9 @@ public sealed partial class MainWindow : Window
                 // An inactive window must not hide the pointer: the user may be
                 // pointing at it while working in another app.
                 _windowActive = false;
+                _cursorHideTimer?.Stop();
                 WindowInterop.SetCursorVisible(true);
+                ApplyProtectedCursor(false);
                 CloseApplicationMenu();
 
                 // Losing focus keeps the chrome only in the docked layout and
@@ -575,26 +595,46 @@ public sealed partial class MainWindow : Window
             return;
         }
 
+        // Frame-drop detection is independent from the statistics card: the old
+        // implementation suppressed the OSD whenever the card was open.
+        FrameDropCounters counters;
+        bool paused;
         try
         {
-            long dropped = player.GetPropertyInt64("vo-drop-frame-count");
-            // The statistics card already shows the dropped-frame counter, so
-            // the transient mpv OSD is only useful while the card is closed.
-            if (_settings.FrameDropOsd && !_settings.ShowMpvStats &&
-                dropped > _lastDroppedFrames)
-            {
-                long delta = dropped - _lastDroppedFrames;
-                player.Command("show-text", $"Wiina · 丢帧 +{delta}（总计 {dropped}）", "1600");
-            }
-
-            _lastDroppedFrames = dropped;
+            counters = ReadFrameDropCounters(player);
+            paused = player.GetPropertyFlag("pause");
         }
         catch
         {
-            // Tracks/decoders disappear while switching files; try again next tick.
+            // Tracks/decoders disappear while switching files; try again next
+            // tick instead of reporting a bogus drop burst.
+            _frameDropDetector.Reset();
+            return;
         }
 
-        UpdateStatsPanel();
+        double now = _frameDropClock.Elapsed.TotalSeconds;
+        bool playing = !paused && !_seeking;
+        _frameDropDetector.Sample(now, counters, playing);
+        if (playing &&
+            _settings.FrameDropOsd &&
+            _frameDropDetector.TryTakeNotice(now, out FrameDropNotice notice))
+        {
+            // Report a rate, not a raw delta: one hiccup becomes a visible burst
+            // in a three-second window, which is exactly what the user cares about.
+            player.Command(
+                "show-text",
+                $"Wiina · 丢帧 {notice.PerMinute:0} 帧/分" +
+                $"（{notice.Seconds:0.#} 秒内 {notice.Drops} 帧，累计 {notice.TotalDrops}）",
+                "2200");
+            Trace(
+                $"[frame-drop] notice {notice.PerMinute:0}/min" +
+                $" drops={notice.Drops} window={notice.Seconds:0.##}");
+        }
+
+        if (_settings.ShowMpvStats)
+        {
+            UpdateStatsPanel();
+        }
     }
 
     private void OnAutoHideTick(DispatcherQueueTimer sender, object args)
@@ -714,16 +754,13 @@ public sealed partial class MainWindow : Window
     /// </summary>
     private void ReapplyHiddenCursor()
     {
-        if (!_windowActive ||
-            _chromeShown ||
-            _settings.Layout == WindowLayoutMode.Docked ||
-            !ChromeInteractionEnabled ||
-            !WindowInterop.IsCursorInsideWindow(this))
+        if (!ShouldHideCursor())
         {
             return;
         }
 
         WindowInterop.SetCursorVisible(false);
+        StartCursorHideTimer();
     }
 
     /// <summary>
@@ -734,12 +771,145 @@ public sealed partial class MainWindow : Window
     /// </summary>
     private void UpdateCursorForChrome()
     {
-        bool hidden = _windowActive &&
-            !_chromeShown &&
-            _settings.Layout != WindowLayoutMode.Docked &&
-            ChromeInteractionEnabled &&
-            WindowInterop.IsCursorInsideWindow(this);
+        bool hidden = ShouldHideCursor();
+        Trace($"[cursor] update hidden={hidden} {DescribeCursorBlockers()}");
         WindowInterop.SetCursorVisible(!hidden);
+        ApplyProtectedCursor(hidden);
+        if (hidden)
+        {
+            StartCursorHideTimer();
+        }
+        else
+        {
+            _cursorHideTimer?.Stop();
+        }
+    }
+
+    /// <summary>
+    /// Pushes the WinUI-level cursor state once per transition. The XAML cursor
+    /// is owned by the CoreMessaging input stack, which ignores SetCursor and
+    /// WM_SETCURSOR, so <c>ProtectedCursor</c> on the content root (and the video
+    /// host) is the only supported way to hide it. Reflection failures are
+    /// swallowed inside the interop helper.
+    /// </summary>
+    private void ApplyProtectedCursor(bool hidden)
+    {
+        if (_protectedCursorHidden == hidden)
+        {
+            return;
+        }
+
+        _protectedCursorHidden = hidden;
+        WindowInterop.SetProtectedCursor(RootGrid, hidden);
+        WindowInterop.SetProtectedCursor(VideoHost, hidden);
+        WindowInterop.SetProtectedCursor(FindCursorSurface(), hidden);
+        Trace($"[cursor] protected hidden={hidden}");
+    }
+
+    /// <summary>
+    /// The deepest element under the pointer is what WinUI asks for a cursor, so
+    /// the SwapChainPanel inside the video host must carry the same protected
+    /// cursor as the XAML root.
+    /// </summary>
+    private FrameworkElement FindCursorSurface()
+    {
+        if (_cursorSurface is not null)
+        {
+            return _cursorSurface;
+        }
+
+        _cursorSurface = VideoHost;
+        try
+        {
+            var queue = new Queue<DependencyObject>();
+            queue.Enqueue(VideoHost);
+            while (queue.Count > 0)
+            {
+                DependencyObject current = queue.Dequeue();
+                int count = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetChildrenCount(current);
+                for (int index = 0; index < count; index++)
+                {
+                    DependencyObject child = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetChild(current, index);
+                    if (child is SwapChainPanel panel)
+                    {
+                        _cursorSurface = panel;
+                        return _cursorSurface;
+                    }
+
+                    queue.Enqueue(child);
+                }
+            }
+        }
+        catch
+        {
+            // Visual tree walks are best effort; the video host covers the area.
+        }
+
+        return _cursorSurface;
+    }
+
+    private FrameworkElement? _cursorSurface;
+
+    /// <summary>
+    /// Whether the pointer may be hidden right now. It never hides while the
+    /// chrome (OSC, titlebar, sidebar) is up, while the pointer is over that
+    /// chrome, in the docked layout, when another window is active, or during
+    /// close.
+    /// </summary>
+    private bool ShouldHideCursor() =>
+        _windowActive &&
+        !_closed &&
+        !_chromeShown &&
+        // The pointer position over the chrome is only meaningful while the
+        // chrome is up: the auto-hide timer can fade the OSC out with the pointer
+        // resting on it, and a stale "over chrome" flag would then leave the
+        // cursor visible forever over a fully hidden player.
+        !_oscDragging &&
+        !_seeking &&
+        _settings.Layout != WindowLayoutMode.Docked &&
+        ChromeInteractionEnabled &&
+        WindowInterop.IsCursorInsideWindow(this);
+
+    private string DescribeCursorBlockers() =>
+        $"active={_windowActive} closed={_closed} chrome={_chromeShown} over={_pointerOverChrome} " +
+        $"drag={_oscDragging} seeking={_seeking} docked={_settings.Layout == WindowLayoutMode.Docked} " +
+        $"mode={_mode.Current} inside={WindowInterop.IsCursorInsideWindow(this)}";
+
+    private void StartCursorHideTimer()
+    {
+        if (_cursorHideTimer is { IsRunning: false })
+        {
+            _cursorHideTimer.Start();
+        }
+    }
+
+    /// <summary>
+    /// Keeps the hidden cursor hidden while playback runs untouched. The
+    /// WM_SETCURSOR subclass handles every mouse move; this timer also covers
+    /// hosts that stop sending it on a resting pointer, and re-hides after the
+    /// platform bumps the ShowCursor display counter back up.
+    /// </summary>
+    private void OnCursorHideTick(DispatcherQueueTimer sender, object args)
+    {
+        if (!ShouldHideCursor())
+        {
+            Trace($"[cursor] tick stop: {DescribeCursorBlockers()}");
+            sender.Stop();
+            if (!WindowInterop.CursorHidden && !_protectedCursorHidden)
+            {
+                return;
+            }
+
+            WindowInterop.SetCursorVisible(true);
+            ApplyProtectedCursor(false);
+            return;
+        }
+
+        WindowInterop.ReassertHiddenCursor();
+        if (_cursorDiagTick++ % 8 == 0)
+        {
+            WindowInterop.LogCursorState("tick");
+        }
     }
 
     private void ResetAutoHideTimer()
@@ -2214,6 +2384,173 @@ public sealed partial class MainWindow : Window
         }
     }
 
+    /// <summary>
+    /// Restores a maximized window under the cursor the way a native title-bar
+    /// drag does: the restored frame keeps its normal size and the cursor keeps
+    /// the same relative grab point it had on the maximized frame, so the window
+    /// does not jump away from the pointer. The content drag is then rebased on
+    /// the restored frame, so the same gesture continues and the edge magnet can
+    /// engage on the very next move. Returns true when the window was maximized
+    /// and has been restored.
+    /// </summary>
+    private bool TryRestoreFromMaximized(int cursorX, int cursorY)
+    {
+        if (AppWindow.Presenter is not OverlappedPresenter { State: OverlappedPresenterState.Maximized } presenter)
+        {
+            return false;
+        }
+
+        PointInt32 position = AppWindow.Position;
+        SizeInt32 size = AppWindow.Size;
+        (int restoreWidth, int restoreHeight) = RestoreFrameSize();
+        WindowRect? target = WindowSizing.RestoreUnderCursor(
+            new WindowRect(position.X, position.Y, position.X + size.Width, position.Y + size.Height),
+            new WindowRect(0, 0, restoreWidth, restoreHeight),
+            _dragStartCursorX,
+            _dragStartCursorY,
+            cursorX,
+            cursorY);
+        if (target is null)
+        {
+            return false;
+        }
+
+        presenter.Restore();
+        AppWindow.MoveAndResize(new RectInt32(
+            target.Value.Left, target.Value.Top, target.Value.Width, target.Value.Height));
+
+        // The normal frame can be larger than the monitor under the cursor
+        // (restored from a bigger display): keep it on screen. The clamped
+        // position is computed from the target instead of being read back, so
+        // the rebase never races the presenter/MoveAndResize bookkeeping.
+        RectInt32 workArea = CurrentWorkArea();
+        int placedX = Math.Clamp(
+            target.Value.Left,
+            workArea.X,
+            Math.Max(workArea.X, workArea.X + workArea.Width - target.Value.Width));
+        int placedY = Math.Clamp(
+            target.Value.Top,
+            workArea.Y,
+            Math.Max(workArea.Y, workArea.Y + workArea.Height - target.Value.Height));
+        if (placedX != target.Value.Left || placedY != target.Value.Top)
+        {
+            AppWindow.Move(new PointInt32(placedX, placedY));
+        }
+
+        _windowStartX = placedX;
+        _windowStartY = placedY;
+        _dragStartCursorX = cursorX;
+        _dragStartCursorY = cursorY;
+        _snapSession.Reset();
+        ApplySnapFrame(false);
+        Trace("window drag: restored from maximized under cursor");
+        return true;
+    }
+
+    /// <summary>
+    /// Size a maximized window restores to: the platform's normal placement
+    /// first (exactly what a title-bar drag would restore to), then the saved
+    /// window size, raised to the minimum window size.
+    /// </summary>
+    private (int Width, int Height) RestoreFrameSize()
+    {
+        int width = 0;
+        int height = 0;
+        if (TryGetNormalPlacement(out RectInt32 normal))
+        {
+            width = normal.Width;
+            height = normal.Height;
+        }
+
+        if (width <= 0 || height <= 0)
+        {
+            width = _settings.WindowWidth;
+            height = _settings.WindowHeight;
+        }
+
+        double scale = DisplayScale;
+        if (width <= 0)
+        {
+            width = (int)Math.Round(WindowSizing.FallbackVideoWidth * scale);
+        }
+
+        if (height <= 0)
+        {
+            height = (int)Math.Round(WindowSizing.FallbackVideoHeight * scale);
+        }
+
+        int minimumWidth = (int)Math.Round(WindowSizing.MinimumWidthDip * scale);
+        int minimumHeight = (int)Math.Round(WindowSizing.MinimumHeightDip * scale);
+        return (Math.Max(minimumWidth, width), Math.Max(minimumHeight, height));
+    }
+
+    /// <summary>
+    /// Normal placement of the window in physical pixels. A maximized window
+    /// reports the frame it will restore to, which is the same rectangle the
+    /// native title-bar drag uses.
+    /// </summary>
+    private bool TryGetNormalPlacement(out RectInt32 normal)
+    {
+        normal = default;
+        try
+        {
+            nint hwnd = Microsoft.UI.Win32Interop.GetWindowFromWindowId(AppWindow.Id);
+            var placement = new WindowPlacement
+            {
+                Length = System.Runtime.InteropServices.Marshal.SizeOf<WindowPlacement>(),
+            };
+            if (!GetWindowPlacement(hwnd, ref placement))
+            {
+                return false;
+            }
+
+            int width = placement.NormalPosition.Right - placement.NormalPosition.Left;
+            int height = placement.NormalPosition.Bottom - placement.NormalPosition.Top;
+            if (width <= 0 || height <= 0)
+            {
+                return false;
+            }
+
+            normal = new RectInt32(
+                placement.NormalPosition.Left, placement.NormalPosition.Top, width, height);
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
+    private struct WindowPlacement
+    {
+        public int Length;
+        public int Flags;
+        public int ShowCommand;
+        public PlacementPoint MinPosition;
+        public PlacementPoint MaxPosition;
+        public PlacementRect NormalPosition;
+    }
+
+    [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
+    private struct PlacementPoint
+    {
+        public int X;
+        public int Y;
+    }
+
+    [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
+    private struct PlacementRect
+    {
+        public int Left;
+        public int Top;
+        public int Right;
+        public int Bottom;
+    }
+
+    [System.Runtime.InteropServices.DllImport("user32.dll", SetLastError = true)]
+    private static extern bool GetWindowPlacement(nint hWnd, ref WindowPlacement placement);
+
     private void OnToggleSidebarAccel(KeyboardAccelerator sender, KeyboardAcceleratorInvokedEventArgs args)
     {
         args.Handled = true;
@@ -2270,10 +2607,12 @@ public sealed partial class MainWindow : Window
         _resizeTimer.Stop();
         _autoHideTimer.Stop();
         _statsTimer?.Stop();
+        _cursorHideTimer?.Stop();
         _settingsSaveTimer?.Stop();
         _settings.SidebarWidth = _sidebar.Width;
         SidebarHost.Log = null;
         WindowInterop.SetCursorVisible(true);
+        ApplyProtectedCursor(false);
 
         if (_pipWindow is { } pip)
         {

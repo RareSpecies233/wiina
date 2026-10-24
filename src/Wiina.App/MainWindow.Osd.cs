@@ -499,17 +499,20 @@ public sealed partial class MainWindow
             Math.Clamp(_settings.ThumbnailBucketSeconds, 1, 30),
             Trace,
             Path.Combine(App.DataFolder, "thumbnails"),
-            Math.Clamp(_settings.ThumbnailCacheMegabytes, 0, 4096));
+            Math.Clamp(_settings.ThumbnailCacheMegabytes, 0, 4096),
+            _settings.ThumbnailSlowMode);
 
     /// <summary>
     /// Warms the on-disk thumbnail cache for the file that just opened. Runs
     /// once per file, on the service's background worker, and stops as soon as
-    /// another file starts loading.
+    /// another file starts loading. Slow mode skips this entirely.
     /// </summary>
     private void StartThumbnailPreGeneration()
     {
-        if (!_settings.ThumbnailPreviewEnabled
-            || _settings.ThumbnailCacheMegabytes <= 0
+        if (!ThumbnailPolicy.AllowsPreGeneration(
+                _settings.ThumbnailPreviewEnabled,
+                _settings.ThumbnailSlowMode,
+                _settings.ThumbnailCacheMegabytes)
             || string.IsNullOrWhiteSpace(_currentPath)
             || IsUrlPath(_currentPath)
             || string.Equals(

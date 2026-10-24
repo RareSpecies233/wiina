@@ -57,6 +57,39 @@ public static class PlayerActions
     public const string OpenInNewWindow = "open-in-new-window";
     public const string CloseWindow = "close-window";
     public const string Quit = "quit";
+
+    // Actions added for the Wiina default profile (wiina-defaults.conf).
+    public const string Pause = "pause";
+    public const string Resume = "resume";
+    public const string EnterFullscreen = "enter-fullscreen";
+    public const string ToggleTopmost = "toggle-topmost";
+    public const string FitToScreen = "fit-to-screen";
+    public const string ShowProgress = "show-progress";
+    public const string CycleEdition = "cycle-edition";
+    public const string CycleVideo = "cycle-video";
+    public const string CycleAudio = "cycle-audio";
+    public const string CycleSubtitle = "cycle-subtitle";
+    public const string SecondarySubtitleVisibility = "secondary-subtitle-visibility";
+    public const string VideoPanel = "video-panel";
+    public const string AudioPanel = "audio-panel";
+    public const string SubtitlesPanel = "subtitles-panel";
+    public const string PlaylistPanel = "playlist-panel";
+    public const string ChapterPanel = "chapter-panel";
+    public const string AudioDelayIncrease05 = "audio-delay-increase-05";
+    public const string AudioDelayDecrease05 = "audio-delay-decrease-05";
+    public const string AudioDelayIncrease01 = "audio-delay-increase-01";
+    public const string AudioDelayDecrease01 = "audio-delay-decrease-01";
+    public const string AudioDelayReset = "audio-delay-reset";
+    public const string SubtitleDelayDecrease05 = "subtitle-delay-decrease-05";
+    public const string SubtitleDelayIncrease05 = "subtitle-delay-increase-05";
+    public const string SpeedSlower = "speed-slower";
+    public const string SpeedFaster = "speed-faster";
+    public const string VolumeUp2 = "volume-up-2";
+    public const string VolumeDown2 = "volume-down-2";
+    public const string SeekBack15 = "seek-back-15";
+    public const string SeekForward15 = "seek-forward-15";
+    public const string SeekBack600 = "seek-back-600";
+    public const string SeekForward600 = "seek-forward-600";
 }
 
 /// <summary>

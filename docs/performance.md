@@ -1,8 +1,8 @@
-# Performance measurements (v1.2.7)
+# Performance measurements (v1.3.0)
 
 Measured on the development machine on 2026-10-19 (Asia/Hong_Kong), at v1.0.0.
 The numbers below are the historical baseline; they were **not** re-measured
-for 1.2.4 through 1.2.7 (see the per-version notes below for
+for 1.2.4 through 1.3.0 (see the per-version notes below for
 the known deltas). Numbers are what
 this machine produced; they are not universal guarantees.
 
@@ -70,6 +70,13 @@ scenarios (peak 265.7 MB at 4K). Private bytes exceed 300 MB at 4K because the
 GPU/driver surfaces and the video swapchain are charged to the process; this is
 reported honestly rather than trimmed by a smaller measurement window.
 
+## What changed in 1.3.0
+
+1.3.0 adds no per-frame work. The settings reshuffle is a one-time catalog
+change; the key binding editor is modal; SMTC is event-driven; the frame-drop
+detector reuses one timer and a 3-second window; slow thumbnail mode *reduces*
+background I/O; and no new package references were added. Numbers below were
+not re-measured for 1.3.0.
 ## What changed in 1.2.7
 
 - **Thumbnail pre-generation runs once per file, off the UI thread.** After load,
@@ -82,10 +89,10 @@ reported honestly rather than trimmed by a smaller measurement window.
   512 MB (Ui → Thumbnails → Thumbnail cache, 0–4096 MB), byte-based LRU, one
   `index.json` rewritten atomically per batch; format-version directory
   (`thumbnails\v2`) means old layouts are discarded rather than migrated.
-- **Cursor hiding is a state change, not a loop.** `WindowInterop.SetCursorVisible`
-  balances a single `ShowCursor` call per transition and swaps in one cached 1×1
-  transparent cursor; pointer movement re-applies the hidden state, so there is
-  no per-frame work.
+- **Cursor hiding is attempted once per chrome transition, not per frame.** The
+  implementation is a state change (no loop), but under WinUI 3 the desktop
+  pointer is owned by CoreMessaging and the attempt is currently ineffective;
+  see known-issues for the root cause and the resource-based follow-up.
 - **The 0.5×/1×/2× sizing is one read + one move.** `video-params/dw|dh` is read
   when the command runs, converted once and clamped; no per-resize tracking.
 - **Frame style is cached per presenter/state.** `SetWindowFrame` is called when

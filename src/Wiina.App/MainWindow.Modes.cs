@@ -734,7 +734,7 @@ public sealed partial class MainWindow
 
     private bool OnAppCommand(int command)
     {
-        if (!App.IsMediaTarget(this))
+        if (!_settings.MediaKeysEnabled || !App.IsMediaTarget(this))
         {
             return false;
         }

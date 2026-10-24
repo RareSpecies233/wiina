@@ -3,7 +3,7 @@ using Wiina.Core.Settings;
 namespace Wiina.Core.Localization;
 
 /// <summary>
-/// English overlay for the twelve-page settings catalog. The zh-Hans strings
+/// English overlay for the eleven-page settings catalog. The zh-Hans strings
 /// stay in <see cref="SettingsCatalog"/> (the canonical data model), while this
 /// overlay supplies the English title, description and choice labels for every
 /// row/page/section. A unit test fails if a catalog row or page is missing here.
@@ -40,12 +40,14 @@ public static class SettingsLocalization
         ["ui.fullscreen-clock"] = new("Fullscreen clock", "Show the time in the bottom-left corner in fullscreen.", null),
         ["ui.fullscreen-battery"] = new("Fullscreen battery", "Show battery and charging state in the bottom-left corner in fullscreen.", null),
         ["ui.fullscreen-title"] = new("Show title in fullscreen", "Include the current media title in the bottom-left status line.", null),
-        ["ui.thumbnail-preview"] = new("Timeline thumbnails", "Show a time preview and video frame when hovering the progress bar.", null),
-        ["ui.thumbnail-width"] = new("Thumbnail width", "80–320 DIP; height follows the video aspect.", null),
-        ["ui.thumbnail-bucket"] = new("Thumbnail interval", "Cache buckets per second; larger saves memory but is less precise.", null),
-        ["ui.thumbnail-cache"] = new("Thumbnail cache size", "Number of thumbnails kept in memory.", null),
-        ["ui.thumbnail-cache-mb"] = new("Thumbnail disk cache", "Disk budget in megabytes; 0 disables the cache, and least-recently-used frames are evicted when the limit is exceeded.", null),
-        ["ui.thumbnail-cache-clear"] = new("Clear thumbnail cache", "Delete cached thumbnails on disk and in memory, then report the freed space.", null),
+        ["video.thumbnail-preview"] = new("Timeline thumbnails", "Show a time preview and video frame when hovering the progress bar.", null),
+        ["video.thumbnail-width"] = new("Thumbnail width", "80–320 DIP; height follows the video aspect.", null),
+        ["video.thumbnail-bucket"] = new("Thumbnail interval", "Cache buckets per second; larger saves memory but is less precise.", null),
+        ["video.thumbnail-cache"] = new("Thumbnail cache size", "Number of thumbnails kept in memory.", null),
+        ["video.thumbnail-cache-mb"] = new("Thumbnail disk cache", "Disk budget in megabytes; 0 disables the cache, and least-recently-used frames are evicted when the limit is exceeded.", null),
+        ["video.thumbnail-slow"] = new("Slow thumbnail mode (single core)", "Generate frames one at a time on a single low-priority worker and never pre-generate a whole file; weak devices stay responsive at the cost of a slower first hover.", null),
+        ["video.thumbnail-hint"] = new("Pre-generation heads-up", "After a file opens, Wiina walks the whole timeline in the background to fill the thumbnail cache. On weak devices that can steal CPU and cause brief stutter — turn on \"Slow thumbnail mode (single core)\" if it happens.", null),
+        ["video.thumbnail-cache-clear"] = new("Clear thumbnail cache", "Delete cached thumbnails on disk and in memory, then report the freed space.", null),
         ["video.hwdec"] = new("Hardware decoding", "Use auto-safe; falls back to software decoding when unsupported.", null),
         ["video.hwdec-mode"] = new("Hardware decoding mode", "mpv hwdec mode used when hardware decoding is on; auto-safe is safest.", null),
         ["video.deinterlace"] = new("Deinterlace", "Enable mpv deinterlacing for interlaced sources.", null),
@@ -107,7 +109,7 @@ public static class SettingsLocalization
         ["control.wheel-seek"] = new("Wheel seek step", "Seconds seeked per horizontal wheel notch.", null),
         ["control.invert-wheel"] = new("Invert wheel direction", "Wheel up lowers volume/seeks back, matching natural scrolling.", null),
         ["control.keybindings"] = new("Edit keyboard shortcuts", "Open the Key Bindings page to record, clear, import, or export shortcuts.", null),
-        ["control.media-keys"] = new("System media keys", "Enabled: play/pause, stop, previous, next, and seek.", null),
+        ["control.media-keys"] = new("System media keys", "Register SystemMediaTransportControls and respond to play/pause, stop, previous, next, and seek. Turning this off stops Wiina from claiming the media keys and applies immediately.", null),
         ["control.reset"] = new("Reset control settings", "Restore mouse actions, wheel steps, and direction to defaults.", null),
         ["keybindings.editor"] = new("Key bindings", "Record new chords, resolve conflicts, and import/export JSON; changes apply immediately and persist.", null),
         ["advanced.mpv-log"] = new("mpv log level", "Minimum level forwarded from libmpv to the Wiina log.", new[] { "Off (no)", "Info (info)", "Verbose (v)", "Debug (verbose)" }),
@@ -130,7 +132,6 @@ public static class SettingsLocalization
         ["plugin.install"] = new("Install plugin…", "Install from a folder or zip and review required permissions.", null),
         ["plugin.folder"] = new("Open plugin folder", @"%LOCALAPPDATA%\Wiina\plugins (currently creates an empty folder).", null),
         ["plugin.list"] = new("Installed plugins", "From Stage 9, shows plugin name, version, author, and permissions.", null),
-        ["utilities.font"] = new("Subtitle font", "Shares the setting with the Subtitles page; this is a shortcut.", null),
         ["utilities.open-url"] = new("Open URL…", "Validate an address and open it in the current playback window.", null),
         ["utilities.log-viewer"] = new("Log viewer", "View %TEMP% trace logs and crash logs; refresh, filter, or open the folder.", null),
         ["utilities.inspector"] = new("Inspector", "Show file/video/audio/subtitle technical properties for the current media.", null),
@@ -138,23 +139,22 @@ public static class SettingsLocalization
         ["subtitles.smart-autoload"] = new("Smart subtitles", "Automatically find sidecar subtitles next to the video and pick the preferred language.", null),
         ["subtitles.preferred-language"] = new("Preferred subtitle language", "Auto prefers Simplified Chinese, then Traditional Chinese, English, and Japanese.", new[] { "Auto", "Simplified Chinese", "Traditional Chinese", "English", "Japanese" }),
         ["audio.auto-external"] = new("Auto-load external audio", "Automatically load a same-name .mka next to the video; unrelated audio files are never loaded.", null),
-        ["control.key-profile"] = new("Keyboard profile", "Choose Default, IINA, or Custom. The IINA profile uses common IINA/mpv shortcuts; edits fork a named custom profile.", new[] { "Default", "IINA" }),
+        ["control.key-profile"] = new("Keyboard profile", "Choose Wiina, mpv, or IINA. Each profile ships its own defaults; edits fork a named custom profile.", new[] { "Wiina", "mpv", "IINA" }),
     };
 
     private static readonly Dictionary<string, (string Title, string Summary)> EnglishPages = new(StringComparer.Ordinal)
     {
         ["General"] = ("General", "Startup, appearance, and history"),
-        ["Ui"] = ("Interface", "Window layout, OSC, OSD, and thumbnails"),
-        ["Video"] = ("Video", "Hardware decoding, picture quality, aspect, crop, and transforms"),
+        ["Ui"] = ("Interface", "Window layout, OSC, and OSD"),
+        ["Video"] = ("Video", "Decoding, thumbnails, picture quality, aspect, crop, and transforms"),
         ["Audio"] = ("Audio", "Volume limits, delay, and output device"),
         ["Subtitles"] = ("Subtitles", "Font, color, position, and delay"),
         ["Network"] = ("Network", "Cache, proxy, and request headers"),
         ["Control"] = ("Controls", "Mouse, wheel, and keyboard entry points"),
         ["KeyBindings"] = ("Key Bindings", "Recording, conflict detection, import/export"),
-        ["Advanced"] = ("Advanced", "Diagnostics, folders, and maintenance"),
+        ["Advanced"] = ("Advanced", "Diagnostics, tools, folders, and maintenance"),
         ["Integration"] = ("File Associations", "Open video and audio with Wiina on Windows"),
         ["Plugin"] = ("Plugins", "Not implemented yet (Stage 9): placeholder and folder entry only"),
-        ["Utilities"] = ("Utilities", "Fonts, logs, inspector, and about"),
     };
 
     private static readonly Dictionary<string, string> EnglishSections = new(StringComparer.Ordinal)
@@ -171,6 +171,7 @@ public static class SettingsLocalization
         ["滤镜"] = "Filters",
         ["去 Logo"] = "Remove Logo",
         ["画面"] = "Picture",
+        ["截图"] = "Screenshots",
         ["重置"] = "Reset",
         ["音量与输出"] = "Volume & Output",
         ["延迟"] = "Delay",

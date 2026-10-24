@@ -136,6 +136,46 @@ public static class WindowSizing
         return ClampToWorkArea(widthDip, heightDip, workWidthDip, workHeightDip);
     }
 
+    /// <summary>
+    /// Outer frame of a window restored from the maximized state while the user
+    /// is dragging it: the cursor keeps the same relative grab point (the same
+    /// width/height ratio) it had on the maximized frame, so the restored window
+    /// lands under the cursor instead of jumping to a corner. Only the size of
+    /// <paramref name="restoreBounds"/> is used; its position is ignored because
+    /// the position follows the cursor. Returns null when the restore size is
+    /// unusable (the caller then keeps whatever frame it has).
+    /// </summary>
+    public static WindowRect? RestoreUnderCursor(
+        WindowRect maximizedBounds,
+        WindowRect restoreBounds,
+        int grabX,
+        int grabY,
+        int cursorX,
+        int cursorY)
+    {
+        if (restoreBounds.Width <= 0 || restoreBounds.Height <= 0)
+        {
+            return null;
+        }
+
+        // A maximized rectangle with no area (reporting race during a presenter
+        // switch) must not produce NaN ratios: centering under the cursor is the
+        // least surprising fallback.
+        double ratioX = 0.5;
+        double ratioY = 0.5;
+        if (maximizedBounds.Width > 0 && maximizedBounds.Height > 0)
+        {
+            ratioX = Math.Clamp(
+                (grabX - (double)maximizedBounds.Left) / maximizedBounds.Width, 0.0, 1.0);
+            ratioY = Math.Clamp(
+                (grabY - (double)maximizedBounds.Top) / maximizedBounds.Height, 0.0, 1.0);
+        }
+
+        int left = cursorX - (int)Math.Round(ratioX * restoreBounds.Width, MidpointRounding.AwayFromZero);
+        int top = cursorY - (int)Math.Round(ratioY * restoreBounds.Height, MidpointRounding.AwayFromZero);
+        return new WindowRect(left, top, left + restoreBounds.Width, top + restoreBounds.Height);
+    }
+
     private static bool IsValidScale(double value) =>
         value > 0 && !double.IsNaN(value) && !double.IsInfinity(value);
 

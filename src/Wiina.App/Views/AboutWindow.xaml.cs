@@ -2,7 +2,9 @@ using System.Reflection;
 using System.Text;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Input;
 using Windows.ApplicationModel.DataTransfer;
+using Windows.System;
 using Wiina.App.Localization;
 using Wiina.App.Services;
 using Wiina.Core;
@@ -21,12 +23,16 @@ public sealed partial class AboutWindow : Window
         RootGrid.RequestedTheme = App.ResolveTheme();
         WindowShell.Prepare(
             this,
-            440,
-            430,
+            460,
+            520,
             resizable: false,
             dark: App.IsDarkTheme,
-            minWidth: 440,
-            minHeight: 430);
+            minWidth: 460,
+            minHeight: 520,
+            extendTitleBar: true,
+            titleBar: DragRegion);
+
+        AddEscapeAccelerator();
 
         VersionText.Text = Loc.F("about.version", Branding.Version, Branding.Tagline);
         BuildInfo();
@@ -53,14 +59,14 @@ public sealed partial class AboutWindow : Window
         grid.Children.Add(new TextBlock
         {
             Text = label,
-            FontSize = 11,
-            Opacity = 0.6,
-            VerticalAlignment = VerticalAlignment.Center,
+            Style = (Style)Application.Current.Resources["CaptionTextStyle"],
+            VerticalAlignment = VerticalAlignment.Top,
+            Margin = new Thickness(0, 2, 0, 0),
         });
         var text = new TextBlock
         {
             Text = value,
-            FontSize = 12,
+            Style = (Style)Application.Current.Resources["BodyTextStyle"],
             TextWrapping = TextWrapping.Wrap,
             IsTextSelectionEnabled = true,
         };
@@ -113,4 +119,16 @@ public sealed partial class AboutWindow : Window
     }
 
     private void OnCloseClick(object sender, RoutedEventArgs e) => Close();
+
+    /// <summary>Esc closes the window, matching the other secondary windows.</summary>
+    private void AddEscapeAccelerator()
+    {
+        var escape = new KeyboardAccelerator { Key = VirtualKey.Escape };
+        escape.Invoked += (_, args) =>
+        {
+            args.Handled = true;
+            Close();
+        };
+        RootGrid.KeyboardAccelerators.Add(escape);
+    }
 }

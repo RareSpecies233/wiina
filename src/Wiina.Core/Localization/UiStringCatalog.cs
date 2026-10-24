@@ -294,6 +294,15 @@ public static class UiStrings
     public const string keybindings_imported = "keybindings.imported";
     public const string keybindings_importedPartial = "keybindings.importedPartial";
     public const string keybindings_exported = "keybindings.exported";
+    public const string keybindings_searchPlaceholder = "keybindings.searchPlaceholder";
+    public const string keybindings_searchEmpty = "keybindings.searchEmpty";
+    public const string keybindings_unsavedTitle = "keybindings.unsavedTitle";
+    public const string keybindings_unsavedBody = "keybindings.unsavedBody";
+    public const string keybindings_discard = "keybindings.discard";
+    public const string keybindings_builtInHint = "keybindings.builtInHint";
+    public const string keybindings_copyToCustom = "keybindings.copyToCustom";
+    public const string keybindings_copiedToCustom = "keybindings.copiedToCustom";
+    public const string keybindings_save = "keybindings.save";
     public const string menu_noRecent = "menu.noRecent";
     public const string menu_clearRecent = "menu.clearRecent";
     public const string menu_recentCleared = "menu.recentCleared";
@@ -317,6 +326,8 @@ public static class UiStrings
     public const string menu_loadExternalAudio = "menu.loadExternalAudio";
     public const string menu_keyboardProfile = "menu.keyboardProfile";
     public const string menu_profileDefault = "menu.profileDefault";
+    public const string menu_profileWiina = "menu.profileWiina";
+    public const string menu_profileMpv = "menu.profileMpv";
     public const string menu_profileIina = "menu.profileIina";
     public const string menu_profileCustom = "menu.profileCustom";
     public const string osd_controlsHint = "osd.controlsHint";
@@ -894,7 +905,7 @@ public static class UiStrings
         Add("keybindings.conflict", "该组合键已被“{0}”使用。", "That combination is already used by “{0}”.");
         Add("keybindings.windowTitle", "按键绑定", "Key Bindings");
         Add("keybindings.profile", "键盘方案", "Keyboard profile");
-        Add("keybindings.profileHint", "方案决定默认组合键。修改任意动作会自动切换到“自定义”并立即保存。", "The profile supplies the default chords. Editing any action switches to Custom and saves immediately.");
+        Add("keybindings.profileHint", "方案决定默认组合键。修改任意动作会自动切换到“自定义”，点“保存更改”后生效。", "The profile supplies the default chords. Editing any action switches to Custom; click Save changes to apply.");
         Add("keybindings.profileChanged", "已切换到“{0}”方案。", "Switched to the “{0}” profile.");
         Add("keybindings.cancelRecording", "取消录制", "Cancel recording");
         Add("common.save", "保存", "Save");
@@ -926,6 +937,15 @@ public static class UiStrings
         Add("keybindings.imported", "已导入 {0} 条绑定。", "Imported {0} bindings.");
         Add("keybindings.importedPartial", "已导入 {0} 条绑定；{1}", "Imported {0} bindings; {1}");
         Add("keybindings.exported", "已导出 {0}", "Exported {0}");
+        Add("keybindings.searchPlaceholder", "搜索动作或 mpv 命令…", "Search actions or mpv commands…");
+        Add("keybindings.searchEmpty", "没有匹配的动作。", "No matching actions.");
+        Add("keybindings.unsavedTitle", "未保存的更改", "Unsaved changes");
+        Add("keybindings.unsavedBody", "当前键盘方案有尚未保存的更改。关闭前要保存吗？", "The current keyboard profile has unsaved changes. Save before closing?");
+        Add("keybindings.discard", "不保存", "Discard");
+        Add("keybindings.builtInHint", "内置方案为只读；要修改请先“复制为自定义”。", "Built-in profiles are read-only. Choose “Copy to custom” to edit.");
+        Add("keybindings.copyToCustom", "复制为自定义", "Copy to custom");
+        Add("keybindings.copiedToCustom", "已从“{0}”复制出自定义方案。", "Copied “{0}” into a custom profile.");
+        Add("keybindings.save", "保存更改", "Save changes");
         Add("menu.noRecent", "（暂无记录）", "(No recent files)");
         Add("menu.clearRecent", "清除最近记录", "Clear recent files");
         Add("menu.recentCleared", "最近记录已清空", "Recent files cleared");
@@ -949,6 +969,8 @@ public static class UiStrings
         Add("menu.loadExternalAudio", "加载外部音频…", "Load External Audio…");
         Add("menu.keyboardProfile", "键盘方案", "Keyboard Profile");
         Add("menu.profileDefault", "默认", "Default");
+        Add("menu.profileWiina", "Wiina 默认", "Wiina Default");
+        Add("menu.profileMpv", "mpv 默认", "mpv Default");
         Add("menu.profileIina", "IINA", "IINA");
         Add("menu.profileCustom", "自定义", "Custom");
         Add("osd.controlsHint", "按 Ctrl+O 打开文件", "Press Ctrl+O to open a file");

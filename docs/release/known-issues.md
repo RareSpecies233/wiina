@@ -1,7 +1,74 @@
-# Known issues — Wiina v1.2.7
+# Known issues — Wiina v1.3.0
 
-Nothing here is hidden; these are known limitations of the v1.2.7 build.
+Nothing here is hidden; these are known limitations of the v1.3.0 build.
 
+## Settings layout in 1.3.0
+
+The 1.3.0 reshuffle is a layout change, not a behaviour change: row ids and
+settings keys are unchanged, so existing `settings.json` files and deep links
+keep working. The snapshot in `../reference/settings-layout.md` is the
+authoritative map; update it whenever the catalog changes.
+
+## Key binding editor
+
+- One chord per action; modifier+key only, no multi-stroke sequences.
+- Conflict handling is Wiina's own (mpv itself is last-wins). IINA's editor has
+  no conflict detection or export, so the IINA preset is a best-effort
+  translation; `../reference/iina-shortcuts.md` lists every deviation.
+- Built-in profiles are read-only by design; edits always land in a custom
+  profile.
+
+## System media keys
+
+SMTC integration means Windows can route media keys to Wiina only while Wiina
+is running. There is no per-device testing matrix here; hardware media keys
+were verified on one keyboard.
+
+## mpv.net configuration export
+
+`resources/mpvnet/` is a plain-text export of options and bindings. It is
+version-specific (mpv.net bundles its own libmpv), Wiina-only features are
+absent, and the Wiina side-panel commands are commented out because mpv.net has
+no side panels. Nothing is installed or patched by Wiina.
+
+## Frame-drop OSD
+
+Dropped-frame numbers come from mpv counters and are estimates; the rate is
+measured over a 3-second window with a 12-second cooldown, so a single bad
+frame does not spam the OSD. The statistics panel remains the detailed view.
+
+## Cursor auto-hide does not work under WinUI 3 (1.3.0)
+
+Status: known limitation, root-caused, not fixed in 1.3.0.
+
+The desktop pointer over a WinUI 3 client area is driven by CoreMessaging, not
+by the window procedure or the XAML thread. Three mechanisms were implemented
+and verified inert on a real 1080p playback session:
+
+- `WM_SETCURSOR` override plus subclassing every WinUI cursor host
+  (`Microsoft.UI.Content.DesktopChildSiteBridge`, `InputSiteWindowClass`,
+  `InputNonClientPointerSource`): 3 windows subclassed, 0 messages received.
+- A thread-level `WH_CALLWNDPROCRET` hook on the input/XAML thread: hook
+  installed, 0 pointer messages observed.
+- Reflected `UIElement.ProtectedCursor` on `RootGrid`, `VideoHost` and the inner
+  `SwapChainPanel`: the setter succeeds, but `null` means "default arrow" in
+  this WinAppSDK and `InputSystemCursorShape` has no "none" member.
+
+`GetCursorInfo` keeps returning the arrow (0x10019) immediately after a
+successful `SetCursor(blank)` on every candidate thread, so it cannot be used as
+an oracle; screenshots never contain the OS pointer either.
+
+Next route (requires a resource/csproj change): embed a 1×1 transparent `.cur`,
+load it via `InputDesktopResourceCursor.CreateFromResourceId`, and assign it to
+`ProtectedCursor`; alternatively adopt a WinAppSDK that exposes
+`InputCursor.CreateFromVisual`. Until then, use the Windows pointer settings if
+an always-hidden pointer is required.
+
+## Slow thumbnail mode
+
+Single-worker mode trades first-hover latency for lower CPU: pre-generation is
+skipped, and each hovered bucket is generated on demand (cache hits are still
+instant). The default mode (pre-generation) is unchanged.
 ## Scope decisions
 
 - **Plugins (Stage 9) are not implemented.** There is no plugin API, no
@@ -243,7 +310,7 @@ Nothing here is hidden; these are known limitations of the v1.2.7 build.
   `docs/performance.md`), not a representative codec matrix. Real-world 4K
   HEVC/AV1 files may use more memory/GPU and were not benchmarked here.
 
-## Shutdown path and hang analysis (fixed except staging flush)
+## Shutdown path and hang analysis (R1 shipped, R2 not implemented)
 
 - Closing now stops UI timers first, saves settings once, detaches the video
   panel before disposing mpv, stops the statistics refresh while the card is

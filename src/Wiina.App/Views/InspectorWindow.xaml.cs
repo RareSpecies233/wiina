@@ -1,8 +1,9 @@
 using System.Text;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
-using Microsoft.UI.Xaml.Media;
+using Microsoft.UI.Xaml.Input;
 using Windows.ApplicationModel.DataTransfer;
+using Windows.System;
 using Wiina.App.Localization;
 using Wiina.App.Services;
 using Wiina.Core.Models;
@@ -33,7 +34,11 @@ public sealed partial class InspectorWindow : Window
             resizable: true,
             dark: App.IsDarkTheme,
             minWidth: 480,
-            minHeight: 360);
+            minHeight: 360,
+            extendTitleBar: true,
+            titleBar: DragRegion);
+
+        AddEscapeAccelerator();
 
         _timer = DispatcherQueue.CreateTimer();
         _timer.Interval = TimeSpan.FromSeconds(1.5);
@@ -65,13 +70,7 @@ public sealed partial class InspectorWindow : Window
         {
             TitleText.Text = Loc.T("inspector.noWindow");
             ContentPanel.Children.Clear();
-            ContentPanel.Children.Add(new TextBlock
-            {
-                Text = Loc.T("inspector.noWindowBody"),
-                FontSize = 12,
-                TextWrapping = TextWrapping.Wrap,
-                Opacity = 0.7,
-            });
+            ContentPanel.Children.Add(BodyText(Loc.T("inspector.noWindowBody")));
             return;
         }
 
@@ -88,12 +87,7 @@ public sealed partial class InspectorWindow : Window
             ContentPanel.Children.Clear();
             if (rows.Count == 0)
             {
-                ContentPanel.Children.Add(new TextBlock
-                {
-                    Text = Loc.T("inspector.noMedia"),
-                    FontSize = 12,
-                    Opacity = 0.7,
-                });
+                ContentPanel.Children.Add(BodyText(Loc.T("inspector.noMedia")));
                 return;
             }
 
@@ -107,26 +101,17 @@ public sealed partial class InspectorWindow : Window
 
     private void RenderRows(IReadOnlyList<InspectorRow> rows)
     {
+        var cardStyle = (Style)RootGrid.Resources["InspectorCardStyle"];
         foreach (IGrouping<string, InspectorRow> group in rows.GroupBy(row => row.Section))
         {
             ContentPanel.Children.Add(new TextBlock
             {
                 Text = group.Key,
-                FontSize = 12,
-                FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
+                Style = (Style)Application.Current.Resources["SectionTitleStyle"],
                 Margin = new Thickness(0, 6, 0, 2),
             });
 
-            var card = new Border
-            {
-                Padding = new Thickness(12, 8, 12, 8),
-                CornerRadius = new CornerRadius(8),
-                BorderThickness = new Thickness(1),
-                BorderBrush = new SolidColorBrush(
-                    Windows.UI.Color.FromArgb(0x22, 0x80, 0x80, 0x80)),
-                Background = new SolidColorBrush(
-                    Windows.UI.Color.FromArgb(0x10, 0x80, 0x80, 0x80)),
-            };
+            var card = new Border { Style = cardStyle };
             var stack = new StackPanel { Spacing = 4 };
             foreach (InspectorRow row in group)
             {
@@ -139,14 +124,14 @@ public sealed partial class InspectorWindow : Window
                 grid.Children.Add(new TextBlock
                 {
                     Text = row.Name,
-                    FontSize = 11,
-                    Opacity = 0.62,
+                    Style = (Style)Application.Current.Resources["CaptionTextStyle"],
                     TextWrapping = TextWrapping.Wrap,
+                    VerticalAlignment = VerticalAlignment.Center,
                 });
                 var value = new TextBlock
                 {
                     Text = string.IsNullOrWhiteSpace(row.Value) ? "—" : row.Value,
-                    FontSize = 12,
+                    Style = (Style)Application.Current.Resources["BodyTextStyle"],
                     TextWrapping = TextWrapping.Wrap,
                     IsTextSelectionEnabled = true,
                 };
@@ -159,6 +144,13 @@ public sealed partial class InspectorWindow : Window
             ContentPanel.Children.Add(card);
         }
     }
+
+    private static TextBlock BodyText(string text) => new()
+    {
+        Text = text,
+        Style = (Style)Application.Current.Resources["BodyTextStyle"],
+        TextWrapping = TextWrapping.Wrap,
+    };
 
     private void OnRefreshClick(object sender, RoutedEventArgs e) => Refresh();
 
@@ -193,5 +185,17 @@ public sealed partial class InspectorWindow : Window
         var package = new DataPackage();
         package.SetText(builder.ToString());
         Clipboard.SetContent(package);
+    }
+
+    /// <summary>Esc closes the window, matching the other secondary windows.</summary>
+    private void AddEscapeAccelerator()
+    {
+        var escape = new KeyboardAccelerator { Key = VirtualKey.Escape };
+        escape.Invoked += (_, args) =>
+        {
+            args.Handled = true;
+            Close();
+        };
+        RootGrid.KeyboardAccelerators.Add(escape);
     }
 }

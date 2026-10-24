@@ -6,8 +6,11 @@
 
 - `IINA-macOS-UI-复刻规格.md` — 由维护者提供的规格（1230 行），基于
   [`iina/iina`](https://github.com/iina/iina) `develop` @ `5c15f81568b1f61f85219302843018e3c43c8d3b`（2026-10-16）。
-- `settings-layout.md` — 当前设置界面的完整快照（12 页 / 125 行；1.2.6 快照 122 行，1.2.7 增 3 行，含设置可打开的全部窗口与
-  快速设置侧栏），供下一版重排设置菜单时对照；修改设置结构后需同步更新。
+- `settings-layout.md` — 当前设置界面的完整快照（11 页 / 126 行 / 39 个分节；1.2.7 为 12 页 / 125 行，1.3.0
+  把工具页并入高级并调整缩略图行），含设置可打开的全部窗口与快速设置侧栏；修改设置结构后需同步更新。
+- `iina-shortcuts.md` — Wiina / mpv / IINA 默认键位对照与兼容性说明（基于 IINA 默认配置推导，不复制代码）。
+- `../reports/` — 两份维护者分析报告：`hang-analysis-1.2.7.md`（冻结/崩溃取证与修复建议）和
+  `performance-vs-potplayer.md`（画质选项与 PotPlayer 的逐项开销分析）。
 - `iina-thumbnails.md` — IINA 时间轴缩略图的实现调研与 Wiina 现状/差距分析；1.2.7 已按方案落地（预生成 + 磁盘缓存）。
 
 ## 来源与许可证

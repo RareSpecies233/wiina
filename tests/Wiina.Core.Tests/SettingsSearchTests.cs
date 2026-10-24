@@ -6,9 +6,9 @@ namespace Wiina.Core.Tests;
 public sealed class SettingsSearchTests
 {
     [Fact]
-    public void CatalogHasTwelvePagesInSpecOrder()
+    public void CatalogHasElevenPagesInSpecOrder()
     {
-        Assert.Equal(12, SettingsCatalog.Pages.Count);
+        Assert.Equal(11, SettingsCatalog.Pages.Count);
         Assert.Equal(
             new[]
             {
@@ -23,7 +23,6 @@ public sealed class SettingsSearchTests
                 SettingsPageId.Advanced,
                 SettingsPageId.Integration,
                 SettingsPageId.Plugin,
-                SettingsPageId.Utilities,
             },
             SettingsCatalog.Pages.Select(page => page.Id));
     }
@@ -74,8 +73,8 @@ public sealed class SettingsSearchTests
     {
         IReadOnlyList<SettingsSearchHit> hits =
             SettingsCatalog.SearchIndex.Search("thumbnail");
-        Assert.Contains(hits, hit => hit.Row?.Id == "ui.thumbnail-preview");
-        Assert.Contains(hits, hit => hit.Row?.Id == "ui.thumbnail-width");
+        Assert.Contains(hits, hit => hit.Row?.Id == "video.thumbnail-preview");
+        Assert.Contains(hits, hit => hit.Row?.Id == "video.thumbnail-width");
     }
 
     [Fact]
@@ -89,9 +88,97 @@ public sealed class SettingsSearchTests
     [Fact]
     public void SearchMatchesPageWhenNoRowMatches()
     {
-        IReadOnlyList<SettingsSearchHit> hits =
-            SettingsCatalog.SearchIndex.Search("工具");
-        Assert.Contains(hits, hit => hit.Page.Id == SettingsPageId.Utilities);
+        // A page whose summary matches but which has no rows at all still has to
+        // surface as a page-level hit (the old 工具 page used to cover this).
+        var page = new SettingsPageInfo(
+            SettingsPageId.Plugin, "插件", "尚未实现（Stage 9）", "\uEA86");
+        var index = new SettingsSearchIndex(
+            new[] { page },
+            Array.Empty<SettingsRowDefinition>());
+        IReadOnlyList<SettingsSearchHit> hits = index.Search("尚未实现");
+        SettingsSearchHit hit = Assert.Single(hits);
+        Assert.Null(hit.Row);
+        Assert.Equal(SettingsPageId.Plugin, hit.Page.Id);
+    }
+
+    [Fact]
+    public void ToolsRowsMovedToAdvancedAndUtilitiesPageIsGone()
+    {
+        Assert.DoesNotContain(
+            SettingsCatalog.Pages,
+            page => page.Id.ToString() == "Utilities");
+
+        foreach (string id in new[]
+                 {
+                     "utilities.log-viewer",
+                     "utilities.inspector",
+                     "utilities.about",
+                 })
+        {
+            SettingsRowDefinition row = Assert.Single(
+                SettingsCatalog.Rows,
+                row => row.Id == id);
+            Assert.Equal(SettingsPageId.Advanced, row.Page);
+            Assert.Equal("工具", row.Section);
+        }
+
+        Assert.DoesNotContain(SettingsCatalog.Rows, row => row.Id == "utilities.font");
+        Assert.Single(SettingsCatalog.Rows, row => row.Id == "subtitles.font");
+
+        SettingsRowDefinition openUrl = Assert.Single(
+            SettingsCatalog.Rows,
+            row => row.Id == "utilities.open-url");
+        Assert.Equal(SettingsPageId.General, openUrl.Page);
+
+        SettingsRowDefinition screenshot = Assert.Single(
+            SettingsCatalog.Rows,
+            row => row.Id == "general.screenshot-folder");
+        Assert.Equal(SettingsPageId.Video, screenshot.Page);
+    }
+
+    [Fact]
+    public void ThumbnailRowsLiveOnVideoPage()
+    {
+        foreach (SettingsRowDefinition row in SettingsCatalog.Rows
+                     .Where(row => row.Id.StartsWith("video.thumbnail", StringComparison.Ordinal)))
+        {
+            Assert.Equal(SettingsPageId.Video, row.Page);
+        }
+
+        // The Ui page no longer owns the thumbnail block.
+        Assert.DoesNotContain(SettingsCatalog.Rows, row => row.Id.StartsWith("ui.thumbnail", StringComparison.Ordinal));
+
+        // Maintenance keeps its clear-cache shortcut on the Advanced page.
+        SettingsRowDefinition clear = Assert.Single(
+            SettingsCatalog.Rows,
+            row => row.Id == "advanced.clear-thumbnails");
+        Assert.Equal(SettingsPageId.Advanced, clear.Page);
+        Assert.Equal(SettingsRowKind.Action, clear.Kind);
+
+        SettingsRowDefinition slow = Assert.Single(
+            SettingsCatalog.Rows,
+            row => row.Id == "video.thumbnail-slow");
+        Assert.Equal(SettingsRowKind.Toggle, slow.Kind);
+        var settings = new AppSettings();
+        Assert.False(settings.ThumbnailSlowMode);
+        slow.Apply(settings, true);
+        Assert.True(settings.ThumbnailSlowMode);
+        Assert.Equal(true, slow.Value(settings));
+    }
+
+    [Fact]
+    public void MediaKeysRowIsAToggleThatDefaultsToOn()
+    {
+        SettingsRowDefinition row = Assert.Single(
+            SettingsCatalog.Rows,
+            row => row.Id == "control.media-keys");
+        Assert.Equal(SettingsRowKind.Toggle, row.Kind);
+        Assert.Equal(SettingsPageId.Control, row.Page);
+        var settings = new AppSettings();
+        Assert.True(settings.MediaKeysEnabled);
+        row.Apply(settings, false);
+        Assert.False(settings.MediaKeysEnabled);
+        Assert.Equal(false, row.Value(settings));
     }
 
     [Fact]

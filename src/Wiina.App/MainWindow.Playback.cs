@@ -2134,7 +2134,7 @@ public sealed partial class MainWindow
                 Close();
                 return true;
             default:
-                return false;
+                return TryExecuteShortcutAction(action);
         }
     }
 
@@ -2258,6 +2258,16 @@ public sealed partial class MainWindow
             _windowDragging = true;
             VideoFrame.CapturePointer(e.Pointer);
             Trace("window drag started");
+
+            // A maximized window must restore like a native title-bar drag; the
+            // video surface is our own drag path, so it has to restore itself.
+            // The restore rebases the gesture and can drop the pointer capture,
+            // so the capture (and the drag) is re-taken afterwards.
+            if (WindowInterop.TryGetCursorPosition(out int restoreCursorX, out int restoreCursorY) &&
+                TryRestoreFromMaximized(restoreCursorX, restoreCursorY))
+            {
+                VideoFrame.CapturePointer(e.Pointer);
+            }
         }
 
         if (WindowInterop.TryGetCursorPosition(out int cursorX, out int cursorY))

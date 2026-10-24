@@ -248,6 +248,9 @@ public sealed partial class SettingsWindow : Window
             DispatcherQueue.TryEnqueue(() => HighlightRow(rowId));
         }
 
+        // The page rows are rebuilt in place; rewind the shared scroller so the
+        // next page does not inherit the previous page's offset.
+        PageScroll.ChangeView(null, 0, null, disableAnimation: true);
         AnimatePageChange();
     }
 
@@ -552,8 +555,13 @@ public sealed partial class SettingsWindow : Window
                     SmallChange = row.Step,
                     LargeChange = Math.Max(row.Step, row.Step * 5),
                     Value = Convert.ToDouble(value ?? 0),
-                    Width = 108,
-                    SpinButtonPlacementMode = NumberBoxSpinButtonPlacementMode.Inline,
+                    // Inline spin buttons take 32 DIP each and the focused text
+                    // box also reserves its clear button, which left no room for
+                    // the number at the old 108 DIP width (it read as blank
+                    // after a click). Compact moves the spinners into a popup.
+                    Width = 150,
+                    MinWidth = 120,
+                    SpinButtonPlacementMode = NumberBoxSpinButtonPlacementMode.Compact,
                     AcceptsExpression = false,
                 };
                 var wrap = new StackPanel

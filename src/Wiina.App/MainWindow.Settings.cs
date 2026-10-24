@@ -143,7 +143,7 @@ public sealed partial class MainWindow
                 UpdateOsdPlacement();
                 UpdateFullscreenStatus();
                 break;
-            case "ui.thumbnail-preview":
+            case "video.thumbnail-preview":
                 if (!_settings.ThumbnailPreviewEnabled)
                 {
                     HideTimePreview();
@@ -155,7 +155,22 @@ public sealed partial class MainWindow
                 }
 
                 break;
-            case "ui.thumbnail-cache-mb":
+            case "video.thumbnail-slow":
+                // Live apply: slow mode turns off whole-file pre-generation and
+                // throttles the single extraction worker; hover still reads the
+                // memory/disk caches, so nothing reloads.
+                _thumbnailService?.SetSlowMode(_settings.ThumbnailSlowMode);
+                if (_settings.ThumbnailSlowMode)
+                {
+                    StopThumbnailPreGeneration();
+                }
+                else
+                {
+                    StartThumbnailPreGeneration();
+                }
+
+                break;
+            case "video.thumbnail-cache-mb":
                 _thumbnailService?.SetDiskCacheLimit(
                     Math.Clamp(_settings.ThumbnailCacheMegabytes, 0, 4096));
                 if (_settings.ThumbnailCacheMegabytes <= 0)
@@ -168,11 +183,16 @@ public sealed partial class MainWindow
                 }
 
                 break;
-            case "ui.thumbnail-cache-clear":
+            case "video.thumbnail-cache-clear":
                 // The action row itself runs ClearThumbnailCache through the
                 // settings window; this keeps the row correct if it is ever
                 // applied without a picker (tests, settings import).
                 ClearThumbnailCache();
+                break;
+            case "control.media-keys":
+                // Registers or disposes the SMTC session (and the media-key
+                // handling that depends on it) without a restart.
+                App.ApplyMediaKeysSetting();
                 break;
 
             // ---- mpv-backed rows -------------------------------------------

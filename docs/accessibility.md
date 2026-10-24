@@ -1,9 +1,16 @@
 # Accessibility, localization, DPI and motion
 
-This document records what Wiina v1.2.7 implements, how it was checked, and
+This document records what Wiina v1.3.0 implements, how it was checked, and
 what is intentionally limited. It is a summary, not a certification.
 
 ## 1. Keyboard and focus
+
+- The key binding editor is reachable from Controls → 快捷键 and from the
+  command palette; its search box, profile picker, category list and recorder
+  are keyboard friendly, and the conflict dialog is a normal ContentDialog
+  (Enter/Space to confirm, Esc to cancel).
+- The 系统媒体键 toggle is a standard ToggleSwitch row with an automation name
+  and an on/off state announcement; it applies without restart.
 
 - The main window root is a tab stop; `F11` toggles fullscreen and `Esc` leaves
   fullscreen / closes transient chrome (`MainWindow.xaml` accelerators).
@@ -120,7 +127,7 @@ generic text containers mirror.
 
 ## 7. Localization coverage
 
-- Runtime catalog: 551 keys in `UiStringCatalog.cs`, each with a non-empty
+- Runtime catalog: 562 keys in `UiStringCatalog.cs`, each with a non-empty
   zh-Hans and English string. Coverage includes the title bar, OSC, OSD, menus,
   sidebars, quick settings, all 12 settings pages (titles, summaries, section
   headers, row titles/descriptions/choices), welcome/about/log/inspector/open-URL

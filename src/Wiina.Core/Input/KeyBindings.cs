@@ -86,6 +86,37 @@ public static class PlayerActionCatalog
         new(PlayerActions.WindowDouble, "窗口 2×", "窗口"),
         new(PlayerActions.WindowShrink, "缩小窗口", "窗口"),
         new(PlayerActions.WindowGrow, "放大窗口", "窗口"),
+        new(PlayerActions.Pause, "暂停", "播放"),
+        new(PlayerActions.Resume, "继续播放", "播放"),
+        new(PlayerActions.SpeedSlower, "速度 ÷1.1", "播放"),
+        new(PlayerActions.SpeedFaster, "速度 ×1.1", "播放"),
+        new(PlayerActions.CycleVideo, "切换视频轨", "播放"),
+        new(PlayerActions.CycleAudio, "切换音频轨", "播放"),
+        new(PlayerActions.CycleSubtitle, "切换字幕轨", "播放"),
+        new(PlayerActions.CycleEdition, "切换版本", "播放"),
+        new(PlayerActions.SeekBack15, "后退 15 秒", "跳转"),
+        new(PlayerActions.SeekForward15, "前进 15 秒", "跳转"),
+        new(PlayerActions.SeekBack600, "后退 10 分钟", "跳转"),
+        new(PlayerActions.SeekForward600, "前进 10 分钟", "跳转"),
+        new(PlayerActions.VolumeUp2, "音量 +2", "音量"),
+        new(PlayerActions.VolumeDown2, "音量 -2", "音量"),
+        new(PlayerActions.AudioDelayIncrease05, "音频延迟 +0.5", "音频"),
+        new(PlayerActions.AudioDelayDecrease05, "音频延迟 -0.5", "音频"),
+        new(PlayerActions.AudioDelayIncrease01, "音频延迟 +0.1", "音频"),
+        new(PlayerActions.AudioDelayDecrease01, "音频延迟 -0.1", "音频"),
+        new(PlayerActions.AudioDelayReset, "音频延迟归零", "音频"),
+        new(PlayerActions.SubtitleDelayDecrease05, "字幕延迟 -0.5", "字幕"),
+        new(PlayerActions.SubtitleDelayIncrease05, "字幕延迟 +0.5", "字幕"),
+        new(PlayerActions.SecondarySubtitleVisibility, "第二字幕显隐", "字幕"),
+        new(PlayerActions.EnterFullscreen, "进入全屏", "窗口"),
+        new(PlayerActions.ToggleTopmost, "窗口置顶", "窗口"),
+        new(PlayerActions.FitToScreen, "适应画面", "窗口"),
+        new(PlayerActions.ShowProgress, "显示进度", "界面"),
+        new(PlayerActions.VideoPanel, "视频面板", "界面"),
+        new(PlayerActions.AudioPanel, "音频面板", "界面"),
+        new(PlayerActions.SubtitlesPanel, "字幕面板", "界面"),
+        new(PlayerActions.PlaylistPanel, "播放列表面板", "界面"),
+        new(PlayerActions.ChapterPanel, "章节面板", "界面"),
     };
 
     private static readonly Dictionary<string, PlayerActionInfo> ByAction =
@@ -97,17 +128,42 @@ public static class PlayerActionCatalog
         Items.Select(item => item.Category).Distinct(StringComparer.Ordinal).ToArray();
 
     public static bool IsKnown(string? action) =>
-        !string.IsNullOrWhiteSpace(action) && ByAction.ContainsKey(action);
+        !string.IsNullOrWhiteSpace(action) &&
+        (ByAction.ContainsKey(action) || IsRawCommand(action));
 
-    public static string Label(string? action) =>
-        action is not null && ByAction.TryGetValue(action, out PlayerActionInfo? info)
+    /// <summary>True when the action is a raw <c>mpv:&lt;command&gt;</c> binding.</summary>
+    public static bool IsRawCommand(string? action) =>
+        action is not null &&
+        action.StartsWith("mpv:", StringComparison.Ordinal) &&
+        action.Length > 4;
+
+    /// <summary>Human-readable mpv command text for a raw action, or null.</summary>
+    public static string? RawCommand(string? action) =>
+        IsRawCommand(action) ? action![4..] : null;
+
+    public static string Label(string? action)
+    {
+        if (RawCommand(action) is { } command)
+        {
+            return "mpv 命令：" + command;
+        }
+
+        return action is not null && ByAction.TryGetValue(action, out PlayerActionInfo? info)
             ? info.Label
             : "未知动作";
+    }
 
-    public static string CategoryOf(string? action) =>
-        action is not null && ByAction.TryGetValue(action, out PlayerActionInfo? info)
+    public static string CategoryOf(string? action)
+    {
+        if (IsRawCommand(action))
+        {
+            return "mpv 命令";
+        }
+
+        return action is not null && ByAction.TryGetValue(action, out PlayerActionInfo? info)
             ? info.Category
             : "其他";
+    }
 
     public static PlayerActionInfo? Find(string? action) =>
         action is not null && ByAction.TryGetValue(action, out PlayerActionInfo? info)
@@ -126,17 +182,30 @@ public sealed class KeyBindingUserProfile
 
 public static class KeyBindingProfiles
 {
-    public const string Default = "Default";
+    /// <summary>The shipped default profile, generated from wiina-defaults.conf.</summary>
+    public const string Wiina = "Wiina";
+
+    /// <summary>Optional plain mpv profile.</summary>
+    public const string Mpv = "mpv";
+
     public const string Iina = "IINA";
+
+    /// <summary>Virtual name used by the editor for user-created profiles.</summary>
     public const string Custom = "Custom";
+
+    /// <summary>
+    /// The active profile when none is stored. Kept as <c>Default</c> so existing
+    /// settings/JSON keep compiling; its value is the Wiina profile.
+    /// </summary>
+    public const string Default = Wiina;
 
     /// <summary>
     /// Built-in profiles. "Custom" is intentionally absent: custom profiles are
     /// named user records and can be renamed or deleted.
     /// </summary>
-    public static IReadOnlyList<string> All { get; } = new[] { Default, Iina };
+    public static IReadOnlyList<string> All { get; } = new[] { Wiina, Mpv, Iina };
 
-    /// <summary>Normalizes persisted/user values; unknown values fall back to Default.</summary>
+    /// <summary>Normalizes persisted/user values; legacy names map to the new ids.</summary>
     public static string Normalize(string? value)
     {
         if (string.IsNullOrWhiteSpace(value))
@@ -144,42 +213,53 @@ public static class KeyBindingProfiles
             return Default;
         }
 
-        if (string.Equals(value.Trim(), Default, StringComparison.OrdinalIgnoreCase))
+        string trimmed = value.Trim();
+        if (Matches(trimmed, Wiina) ||
+            Matches(trimmed, "Default") ||
+            Matches(trimmed, "默认") ||
+            Matches(trimmed, "Wiina 默认"))
         {
-            return Default;
+            return Wiina;
         }
 
-        if (string.Equals(value.Trim(), Iina, StringComparison.OrdinalIgnoreCase))
+        if (Matches(trimmed, Mpv) || Matches(trimmed, "mpv 默认"))
+        {
+            return Mpv;
+        }
+
+        if (Matches(trimmed, Iina) || Matches(trimmed, "IINA 默认"))
         {
             return Iina;
         }
 
-        if (string.Equals(value.Trim(), Custom, StringComparison.OrdinalIgnoreCase))
-        {
-            return Custom;
-        }
-
-        // Any other non-empty name is a user-created profile.
-        return value.Trim();
+        // Note: "自定义" is deliberately *not* aliased. Older builds created
+        // real user profiles with that name, so treating it as a virtual id
+        // would make them unselectable in the profile picker.
+        return trimmed;
     }
+
+    private static bool Matches(string value, string candidate) =>
+        string.Equals(value, candidate, StringComparison.OrdinalIgnoreCase);
 
     public static bool IsKnown(string? value) => !string.IsNullOrWhiteSpace(value);
 
     public static string Label(string? value) =>
         Normalize(value) switch
         {
+            Wiina => "Wiina 默认",
+            Mpv => "mpv 默认",
             Iina => "IINA",
             Custom => "自定义",
-            Default => "默认",
             var custom => custom,
         };
 
     public static string LabelEnglish(string? value) =>
         Normalize(value) switch
         {
+            Wiina => "Wiina Default",
+            Mpv => "mpv Default",
             Iina => "IINA",
             Custom => "Custom",
-            Default => "Default",
             var custom => custom,
         };
 }
@@ -198,8 +278,44 @@ public static class KeyBindings
         DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
     };
 
-    /// <summary>Every documented default binding (one entry per chord).</summary>
+    /// <summary>
+    /// The "Wiina 默认" profile: the shipped wiina-defaults.conf, so the desktop
+    /// player starts with the same bindings as the author's mpv setup.
+    /// </summary>
     public static IReadOnlyList<KeyBindingSetting> CreateDefaults() =>
+        WiinaInputDefaults.Create();
+
+    /// <summary>
+    /// Plain mpv profile: mpv's stock input.conf conventions, kept as an optional
+    /// alternative to the Wiina profile.
+    /// </summary>
+    public static IReadOnlyList<KeyBindingSetting> CreateMpvDefaults() =>
+        new List<KeyBindingSetting>
+        {
+            new(PlayerActions.PlayPause, "Space"),
+            new(PlayerActions.PlayPause, "P"),
+            new(PlayerActions.SeekBack5, "Left"),
+            new(PlayerActions.SeekForward5, "Right"),
+            new(PlayerActions.SeekBack1, "Shift+Left"),
+            new(PlayerActions.SeekForward1, "Shift+Right"),
+            new(PlayerActions.SeekForward600, "Up"),
+            new(PlayerActions.SeekBack600, "Down"),
+            new(PlayerActions.VolumeDown2, "9"),
+            new(PlayerActions.VolumeUp2, "0"),
+            new(PlayerActions.Mute, "M"),
+            new(PlayerActions.Quit, "Q"),
+            new(PlayerActions.ToggleFullscreen, "F"),
+            new(PlayerActions.SubtitleVisibility, "V"),
+            new(PlayerActions.ShowProgress, "O"),
+            new(PlayerActions.Screenshot, "S"),
+            new(PlayerActions.FramePrevious, ","),
+            new(PlayerActions.FrameNext, "."),
+        };
+
+    /// <summary>
+    /// IINA profile, corrected against docs/reference/iina-shortcuts.md §4.1/4.2.
+    /// </summary>
+    public static IReadOnlyList<KeyBindingSetting> CreateIinaDefaults() =>
         new List<KeyBindingSetting>
         {
             new(PlayerActions.PlayPause, "Space"),
@@ -207,107 +323,64 @@ public static class KeyBindings
             new(PlayerActions.Stop, "Ctrl+."),
             new(PlayerActions.SeekBack5, "Left"),
             new(PlayerActions.SeekForward5, "Right"),
-            new(PlayerActions.SeekBack1, "Shift+Left"),
-            new(PlayerActions.SeekForward1, "Shift+Right"),
-            new(PlayerActions.VolumeUp5, "Up"),
-            new(PlayerActions.VolumeDown5, "Down"),
-            new(PlayerActions.VolumeUp1, "Ctrl+Up"),
-            new(PlayerActions.VolumeDown1, "Ctrl+Down"),
-            new(PlayerActions.Mute, "Ctrl+M"),
-            new(PlayerActions.Mute, "M"),
             new(PlayerActions.FramePrevious, "Alt+Left"),
             new(PlayerActions.FrameNext, "Alt+Right"),
-            new(PlayerActions.SubtitleSeekPrevious, "Ctrl+Shift+Left"),
-            new(PlayerActions.SubtitleSeekNext, "Ctrl+Shift+Right"),
-            new(PlayerActions.SpeedHalf, "["),
-            new(PlayerActions.SpeedDouble, "]"),
-            new(PlayerActions.SpeedReset, "Ctrl+Backspace"),
-            new(PlayerActions.AbLoop, "Ctrl+L"),
-            new(PlayerActions.ChapterPrevious, "Ctrl+PageUp"),
-            new(PlayerActions.ChapterNext, "Ctrl+PageDown"),
-            new(PlayerActions.LoopMode, "Ctrl+Shift+R"),
-            new(PlayerActions.Open, "Ctrl+O"),
-            new(PlayerActions.OpenUrl, "Ctrl+Shift+O"),
+            new(PlayerActions.SubtitleSeekPrevious, "Shift+Left"),
+            new(PlayerActions.SubtitleSeekNext, "Shift+Right"),
+            new(PlayerActions.VolumeUp5, "Up"),
+            new(PlayerActions.VolumeDown5, "Down"),
+            new(PlayerActions.VolumeUp1, "Alt+Up"),
+            new(PlayerActions.VolumeDown1, "Alt+Down"),
+            new(PlayerActions.ToggleFullscreen, "F"),
+            new(PlayerActions.ToggleFullscreen, "Enter"),
+            new(PlayerActions.ExitFullscreen, "Esc"),
+            new(PlayerActions.ToggleTopmost, "Ctrl+T"),
+            new(PlayerActions.Mute, "M"),
+            new(PlayerActions.Mute, "Ctrl+/"),
             new(PlayerActions.Screenshot, "Ctrl+S"),
-            new(PlayerActions.Settings, "Ctrl+,"),
+            new(PlayerActions.Open, "O"),
             new(PlayerActions.PlaylistPrevious, "Ctrl+Left"),
             new(PlayerActions.PlaylistNext, "Ctrl+Right"),
-            new(PlayerActions.ToggleFullscreen, "F11"),
-            new(PlayerActions.ExitFullscreen, "Esc"),
-            new(PlayerActions.PictureInPicture, "Ctrl+Shift+P"),
-            new(PlayerActions.PictureInPicture, "Ctrl+P"),
-            new(PlayerActions.Sidebar, "Ctrl+Shift+B"),
-            new(PlayerActions.SidebarSettings, "Ctrl+Shift+S"),
-            new(PlayerActions.Layout, "Ctrl+Shift+L"),
-            new(PlayerActions.MusicMode, "Ctrl+Shift+M"),
-            new(PlayerActions.Theme, "Ctrl+Shift+T"),
-            new(PlayerActions.OscPosition, "Ctrl+Alt+O"),
-            new(PlayerActions.WindowHalf, "Ctrl+0"),
-            new(PlayerActions.WindowNormal, "Ctrl+1"),
-            new(PlayerActions.WindowDouble, "Ctrl+2"),
-            new(PlayerActions.WindowShrink, "Ctrl+-"),
-            new(PlayerActions.WindowGrow, "Ctrl+Plus"),
-            new(PlayerActions.NewWindow, "Ctrl+N"),
-            new(PlayerActions.OpenInNewWindow, "Ctrl+Shift+N"),
-            new(PlayerActions.CloseWindow, "Ctrl+W"),
-            new(PlayerActions.Quit, "Q"),
-            new(PlayerActions.Quit, "Ctrl+Q"),
+            new(PlayerActions.ChapterPrevious, "Ctrl+PageUp"),
+            new(PlayerActions.ChapterNext, "Ctrl+PageDown"),
+            new(PlayerActions.AbLoop, "Ctrl+L"),
+            new(PlayerActions.LoopMode, "Ctrl+Shift+L"),
+            new(PlayerActions.SpeedHalf, "Ctrl+["),
+            new(PlayerActions.SpeedDouble, "Ctrl+]"),
+            new(PlayerActions.SpeedSlower, "Alt+Ctrl+["),
+            new(PlayerActions.SpeedFaster, "Alt+Ctrl+]"),
+            new(PlayerActions.SpeedReset, "Ctrl+\\"),
             new(PlayerActions.SubtitleVisibility, "V"),
             new(PlayerActions.SubtitleDelayDecrease, "Z"),
             new(PlayerActions.SubtitleDelayIncrease, "X"),
             new(PlayerActions.SubtitleDelayReset, "C"),
-            new(PlayerActions.SubtitleScaleIncrease, "G"),
-            new(PlayerActions.SubtitleScaleDecrease, "F"),
-            new(PlayerActions.SubtitlePositionUp, "R"),
-            new(PlayerActions.SubtitlePositionDown, "T"),
-        };
-
-    /// <summary>
-    /// IINA/mpv style profile. It is intentionally a complete replacement map
-    /// (single-key, media-player conventions) rather than a delta on top of the
-    /// default bindings.
-    /// </summary>
-    public static IReadOnlyList<KeyBindingSetting> CreateIinaDefaults() =>
-        new List<KeyBindingSetting>
-        {
-            new(PlayerActions.PlayPause, "Space"),
-            new(PlayerActions.SeekBack5, "Left"),
-            new(PlayerActions.SeekForward5, "Right"),
-            new(PlayerActions.SeekBack1, "Shift+Left"),
-            new(PlayerActions.SeekForward1, "Shift+Right"),
-            new(PlayerActions.VolumeUp5, "Up"),
-            new(PlayerActions.VolumeDown5, "Down"),
-            new(PlayerActions.ToggleFullscreen, "F"),
-            new(PlayerActions.ExitFullscreen, "Esc"),
-            new(PlayerActions.Mute, "M"),
-            // PlayerActions has no audio-track-cycle action; A is the audio
-            // mute key in IINA and mirrors M rather than inventing a new action.
-            new(PlayerActions.Mute, "A"),
-            new(PlayerActions.Screenshot, "S"),
-            new(PlayerActions.Open, "O"),
-            new(PlayerActions.PlaylistNext, "P"),
-            new(PlayerActions.ChapterNext, "C"),
-            new(PlayerActions.SubtitleVisibility, "V"),
-            new(PlayerActions.SpeedHalf, "["),
-            new(PlayerActions.SpeedDouble, "]"),
-            new(PlayerActions.SpeedReset, "Backspace"),
-            new(PlayerActions.SubtitleDelayDecrease, "J"),
-            new(PlayerActions.SubtitleDelayIncrease, "K"),
-            new(PlayerActions.PlaylistPrevious, "Ctrl+Left"),
-            new(PlayerActions.PlaylistNext, "Ctrl+Right"),
-            new(PlayerActions.ChapterPrevious, "Ctrl+PageUp"),
-            new(PlayerActions.ChapterNext, "Ctrl+PageDown"),
+            new(PlayerActions.SubtitleScaleIncrease, "Shift+G"),
+            new(PlayerActions.SubtitleScaleDecrease, "Shift+F"),
+            new(PlayerActions.SubtitlePositionDown, "R"),
+            new(PlayerActions.SubtitlePositionUp, "Shift+R"),
+            new(PlayerActions.AudioDelayIncrease05, "Shift+9"),
+            new(PlayerActions.AudioDelayDecrease05, "Shift+0"),
+            new(PlayerActions.AudioDelayReset, "Shift+-"),
+            new(PlayerActions.WindowHalf, "Ctrl+0"),
+            new(PlayerActions.WindowNormal, "Ctrl+1"),
+            new(PlayerActions.WindowDouble, "Ctrl+2"),
+            new(PlayerActions.WindowShrink, "Ctrl+-"),
+            new(PlayerActions.WindowGrow, "Ctrl+="),
+            new(PlayerActions.FitToScreen, "Ctrl+3"),
             new(PlayerActions.Settings, "Ctrl+,"),
             new(PlayerActions.PictureInPicture, "Ctrl+Shift+P"),
             new(PlayerActions.CloseWindow, "Ctrl+W"),
             new(PlayerActions.Quit, "Q"),
         };
 
-    /// <summary>Defaults for a profile (IINA gets its own preset).</summary>
+    /// <summary>Defaults for a profile.</summary>
     public static IReadOnlyList<KeyBindingSetting> CreateProfileDefaults(string? profile) =>
-        KeyBindingProfiles.Normalize(profile) == KeyBindingProfiles.Iina
-            ? CreateIinaDefaults()
-            : CreateDefaults();
+        KeyBindingProfiles.Normalize(profile) switch
+        {
+            KeyBindingProfiles.Mpv => CreateMpvDefaults(),
+            KeyBindingProfiles.Iina => CreateIinaDefaults(),
+            _ => CreateDefaults(),
+        };
 
     /// <summary>Defaults per action (used by the per-action reset button).</summary>
     public static IReadOnlyList<string> DefaultChords(string action) =>
@@ -330,22 +403,39 @@ public static class KeyBindings
     /// </summary>
     public static IReadOnlyList<KeyBindingSetting> Resolve(
         IEnumerable<KeyBindingSetting>? stored) =>
-        Resolve(stored, KeyBindingProfiles.Default);
+        ResolveStored(stored);
 
     /// <summary>
-    /// Resolves the active map for a profile. The IINA profile is a fixed,
-    /// complete preset; Default/Custom use the stored bindings (or the built-in
+    /// Resolves the active map for a profile. The built-in profiles are fixed,
+    /// complete presets; custom profiles use the stored bindings (or the shipped
     /// defaults when nothing valid is stored).
     /// </summary>
     public static IReadOnlyList<KeyBindingSetting> Resolve(
         IEnumerable<KeyBindingSetting>? stored,
         string? profile)
     {
-        if (KeyBindingProfiles.Normalize(profile) == KeyBindingProfiles.Iina)
+        string normalizedProfile = KeyBindingProfiles.Normalize(profile);
+        if (normalizedProfile == KeyBindingProfiles.Wiina)
+        {
+            return CreateDefaults();
+        }
+
+        if (normalizedProfile == KeyBindingProfiles.Mpv)
+        {
+            return CreateMpvDefaults();
+        }
+
+        if (normalizedProfile == KeyBindingProfiles.Iina)
         {
             return CreateIinaDefaults();
         }
 
+        return ResolveStored(stored);
+    }
+
+    private static IReadOnlyList<KeyBindingSetting> ResolveStored(
+        IEnumerable<KeyBindingSetting>? stored)
+    {
         var resolved = new List<KeyBindingSetting>();
         bool any = false;
         if (stored is not null)
@@ -368,13 +458,16 @@ public static class KeyBindings
 
     /// <summary>Builds a lookup map; later entries win for duplicate chords.</summary>
     public static KeyMap BuildKeyMap(IEnumerable<KeyBindingSetting>? stored) =>
-        BuildKeyMap(stored, KeyBindingProfiles.Default);
+        BuildKeyMapFrom(ResolveStored(stored));
 
     /// <summary>Builds a lookup map for the selected profile.</summary>
-    public static KeyMap BuildKeyMap(IEnumerable<KeyBindingSetting>? stored, string? profile)
+    public static KeyMap BuildKeyMap(IEnumerable<KeyBindingSetting>? stored, string? profile) =>
+        BuildKeyMapFrom(Resolve(stored, profile));
+
+    private static KeyMap BuildKeyMapFrom(IEnumerable<KeyBindingSetting> bindings)
     {
         var map = new KeyMap();
-        foreach (KeyBindingSetting binding in Resolve(stored, profile))
+        foreach (KeyBindingSetting binding in bindings)
         {
             if (KeyChord.TryParse(binding.Chord, out KeyChord chord))
             {
@@ -383,6 +476,31 @@ public static class KeyBindings
         }
 
         return map;
+    }
+
+    /// <summary>
+    /// Returns the first chord bound to each action for the active profile.
+    /// The menu uses this so accelerator text follows the effective custom
+    /// bindings instead of the static catalog text.
+    /// </summary>
+    public static IReadOnlyDictionary<string, KeyChord> PrimaryChords(
+        IEnumerable<KeyBindingSetting>? stored,
+        string? profile)
+    {
+        var result = new Dictionary<string, KeyChord>(StringComparer.Ordinal);
+        foreach (KeyBindingSetting binding in Resolve(stored, profile))
+        {
+            if (result.ContainsKey(binding.Action) ||
+                !KeyChord.TryParse(binding.Chord, out KeyChord chord) ||
+                chord.IsEmpty)
+            {
+                continue;
+            }
+
+            result[binding.Action] = chord;
+        }
+
+        return result;
     }
 
     /// <summary>

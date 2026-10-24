@@ -1,7 +1,9 @@
+using System.Diagnostics;
 using System.Globalization;
 using System.IO;
 using Microsoft.UI.Xaml;
 using Wiina.App.Controls;
+using Wiina.Core.Playback;
 using Wiina.Mpv;
 
 namespace Wiina.App;
@@ -14,7 +16,10 @@ namespace Wiina.App;
 /// </summary>
 public sealed partial class MainWindow
 {
-    private long _lastStatsDroppedFrames;
+    private readonly FrameDropDetector _frameDropDetector = new();
+    private readonly Stopwatch _frameDropClock = Stopwatch.StartNew();
+    private string? _dropCounterProperty;
+    private bool _dropCountersLogged;
     private bool _statsPanelWired;
 
     private void InitializeStatsPanel()
@@ -118,20 +123,15 @@ public sealed partial class MainWindow
             ? $"{speed:0.##}×"
             : "1×");
 
-        long dropped = Int(player, "vo-drop-frame-count");
-        _lastStatsDroppedFrames = dropped;
-        Add(rows, "播放", "丢帧", $"{dropped}");
-        long decoderDropped = Int(player, "decoder-dropped");
-        if (decoderDropped > 0)
-        {
-            Add(rows, "播放", "解码丢帧", decoderDropped.ToString(CultureInfo.InvariantCulture));
-        }
-
-        long mistimed = Int(player, "mistimed-frame-count");
-        if (mistimed > 0)
-        {
-            Add(rows, "播放", "晚到帧", mistimed.ToString(CultureInfo.InvariantCulture));
-        }
+        FrameDropCounters counters = _frameDropDetector.LastCounters;
+        bool paused = player.GetPropertyFlag("pause");
+        Add(rows, "播放", "丢帧", counters.Dropped.ToString(CultureInfo.InvariantCulture));
+        Add(rows, "播放", "解码丢帧", counters.DecoderDropped.ToString(CultureInfo.InvariantCulture));
+        Add(rows, "播放", "晚到帧", counters.Mistimed.ToString(CultureInfo.InvariantCulture));
+        Add(rows, "播放", "延迟帧", counters.Delayed.ToString(CultureInfo.InvariantCulture));
+        Add(rows, "播放", "丢帧速率", _frameDropDetector.HasWindow && !paused
+            ? $"{_frameDropDetector.PerMinute:0} 帧/分（{_frameDropDetector.WindowSeconds:0.#} 秒窗口）"
+            : null);
 
         double avsync = Number(player, "avsync");
         Add(rows, "播放", "音画同步", $"{avsync * 1000:0} ms");
@@ -142,6 +142,8 @@ public sealed partial class MainWindow
         Add(rows, "渲染", "GPU 上下文", Str(player, "gpu-context"));
         double displayFps = Number(player, "display-fps");
         Add(rows, "渲染", "显示器刷新率", displayFps > 0 ? $"{displayFps:0.##} Hz" : null);
+        double presentedFps = Number(player, "estimated-vf-fps");
+        Add(rows, "渲染", "实际帧率", presentedFps > 0 ? $"{presentedFps:0.##} fps" : null);
         Add(rows, "渲染", "视频输出", Str(player, "current-vo"));
         Add(rows, "渲染", "色彩矩阵", Str(player, "video-params/colormatrix"));
         Add(rows, "渲染", "色彩范围", Str(player, "video-params/colorlevels"));
@@ -198,6 +200,72 @@ public sealed partial class MainWindow
         catch
         {
             return 0;
+        }
+    }
+
+    /// <summary>
+    /// Reads every drop counter mpv exposes. The video output is gpu-next on a
+    /// d3d11 composition swapchain: it can leave <c>frame-drop-count</c> at zero
+    /// and report jank through <c>mistimed-frame-count</c> instead, which is why
+    /// the old single-counter check looked broken.
+    /// </summary>
+    private FrameDropCounters ReadFrameDropCounters(MpvPlayer player) => new(
+        Int(player, DropCounterProperty(player)),
+        Int(player, "mistimed-frame-count"),
+        Int(player, "vo-delayed-frame-count"),
+        Int(player, "decoder-dropped"));
+
+    /// <summary>
+    /// Picks the drop counter this mpv build actually exposes. mpv renamed
+    /// <c>vo-drop-frame-count</c> to <c>frame-drop-count</c>; reading a missing
+    /// property silently yields 0, so the old code could never notice that the
+    /// name it used was gone.
+    /// </summary>
+    private string DropCounterProperty(MpvPlayer player)
+    {
+        if (_dropCounterProperty is { } cached)
+        {
+            return cached;
+        }
+
+        string chosen = "frame-drop-count";
+        try
+        {
+            if (string.IsNullOrWhiteSpace(player.GetPropertyString("frame-drop-count")) &&
+                !string.IsNullOrWhiteSpace(player.GetPropertyString("vo-drop-frame-count")))
+            {
+                chosen = "vo-drop-frame-count";
+            }
+        }
+        catch
+        {
+            // Keep the modern name; a failed probe must not break playback.
+        }
+
+        _dropCounterProperty = chosen;
+        if (!_dropCountersLogged)
+        {
+            _dropCountersLogged = true;
+            Trace(
+                $"[frame-drop] counters drop={chosen}" +
+                $" mistimed={Has(player, "mistimed-frame-count")}" +
+                $" delayed={Has(player, "vo-delayed-frame-count")}" +
+                $" decoder={Has(player, "decoder-dropped")}");
+        }
+
+        return chosen;
+    }
+
+    private static string Has(MpvPlayer player, string property)
+    {
+        try
+        {
+            string? value = player.GetPropertyString(property);
+            return string.IsNullOrWhiteSpace(value) ? "missing" : value;
+        }
+        catch
+        {
+            return "missing";
         }
     }
 

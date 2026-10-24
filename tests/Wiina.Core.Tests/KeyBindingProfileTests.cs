@@ -9,22 +9,40 @@ namespace Wiina.Core.Tests;
 public sealed class KeyBindingProfileTests
 {
     [Fact]
-    public void IinaProfileUsesOnlyKnownPlayerActions()
+    public void DefaultProfileIsTheWiinaProfile()
     {
-        foreach (KeyBindingSetting binding in KeyBindings.CreateIinaDefaults())
+        Assert.Equal(KeyBindingProfiles.Wiina, KeyBindingProfiles.Default);
+        Assert.Equal(3, KeyBindingProfiles.All.Count);
+        Assert.Contains(KeyBindingProfiles.Wiina, KeyBindingProfiles.All);
+        Assert.Contains(KeyBindingProfiles.Mpv, KeyBindingProfiles.All);
+        Assert.Contains(KeyBindingProfiles.Iina, KeyBindingProfiles.All);
+    }
+
+    [Theory]
+    [InlineData(KeyBindingProfiles.Wiina)]
+    [InlineData(KeyBindingProfiles.Mpv)]
+    [InlineData(KeyBindingProfiles.Iina)]
+    public void BuiltInProfilesUseOnlyKnownPlayerActions(string profile)
+    {
+        foreach (KeyBindingSetting binding in KeyBindings.CreateProfileDefaults(profile))
         {
             Assert.True(
                 PlayerActionCatalog.IsKnown(binding.Action),
-                $"Unknown IINA action: {binding.Action}");
+                $"Unknown action in {profile}: {binding.Action}");
             Assert.False(string.IsNullOrWhiteSpace(binding.Chord));
         }
     }
 
-    [Fact]
-    public void IinaProfileHasNoDuplicateChords()
+    [Theory]
+    [InlineData(KeyBindingProfiles.Wiina)]
+    [InlineData(KeyBindingProfiles.Mpv)]
+    [InlineData(KeyBindingProfiles.Iina)]
+    public void BuiltInProfilesHaveNoDuplicateChords(string profile)
     {
-        var duplicates = KeyBindings.CreateIinaDefaults()
-            .GroupBy(binding => KeyBindings.NormalizeChord(binding.Chord), StringComparer.OrdinalIgnoreCase)
+        var duplicates = KeyBindings.CreateProfileDefaults(profile)
+            .GroupBy(
+                binding => KeyBindings.NormalizeChord(binding.Chord),
+                StringComparer.OrdinalIgnoreCase)
             .Where(group => group.Count() > 1)
             .Select(group => group.Key)
             .ToArray();
@@ -32,60 +50,54 @@ public sealed class KeyBindingProfileTests
         Assert.Empty(duplicates);
     }
 
-    [Theory]
-    [InlineData("Space", PlayerActions.PlayPause)]
-    [InlineData("Left", PlayerActions.SeekBack5)]
-    [InlineData("Right", PlayerActions.SeekForward5)]
-    [InlineData("Up", PlayerActions.VolumeUp5)]
-    [InlineData("Down", PlayerActions.VolumeDown5)]
-    [InlineData("F", PlayerActions.ToggleFullscreen)]
-    [InlineData("M", PlayerActions.Mute)]
-    [InlineData("S", PlayerActions.Screenshot)]
-    [InlineData("O", PlayerActions.Open)]
-    [InlineData("P", PlayerActions.PlaylistNext)]
-    [InlineData("C", PlayerActions.ChapterNext)]
-    [InlineData("V", PlayerActions.SubtitleVisibility)]
-    [InlineData("A", PlayerActions.Mute)]
-    [InlineData("[", PlayerActions.SpeedHalf)]
-    [InlineData("]", PlayerActions.SpeedDouble)]
-    [InlineData("J", PlayerActions.SubtitleDelayDecrease)]
-    [InlineData("K", PlayerActions.SubtitleDelayIncrease)]
-    public void IinaMapBindsExpectedChord(string chord, string expectedAction)
+    [Fact]
+    public void WiinaProfileComesFromTheShippedConfFile()
     {
-        KeyMap map = KeyBindings.BuildKeyMap(null, KeyBindingProfiles.Iina);
+        KeyMap map = KeyBindings.BuildKeyMap(null, KeyBindingProfiles.Wiina);
 
-        Assert.True(map.TryGetAction(KeyChord.Parse(chord), out string? action));
-        Assert.Equal(expectedAction, action);
+        Assert.Equal(PlayerActions.PlayPause, ActionFor(map, "Space"));
+        Assert.Equal(PlayerActions.Screenshot, ActionFor(map, "Ctrl+S"));
+        Assert.Equal(PlayerActions.LoopMode, ActionFor(map, "Ctrl+Shift+L"));
+        Assert.Equal(PlayerActions.ChapterNext, ActionFor(map, "Ctrl+Shift+."));
+        Assert.Equal(PlayerActions.SeekForward600, ActionFor(map, "Shift+PageUp"));
+        Assert.Equal(PlayerActions.PlayPause, ActionFor(map, "MediaPlayPause"));
+        Assert.Equal(PlayerActions.Quit, ActionFor(map, "MediaPower"));
+        Assert.Equal(PlayerActions.ToggleFullscreen, ActionFor(map, "F"));
+        Assert.Equal(PlayerActions.SubtitleScaleDecrease, ActionFor(map, "Shift+F"));
+        Assert.False(map.TryGetAction(KeyChord.Parse("F11"), out _));
     }
 
     [Fact]
-    public void DefaultProfileKeepsExistingBindings()
+    public void IinaProfileUsesCorrectedMappings()
     {
-        KeyMap map = KeyBindings.BuildKeyMap(null, KeyBindingProfiles.Default);
+        KeyMap map = KeyBindings.BuildKeyMap(null, KeyBindingProfiles.Iina);
 
-        Assert.True(map.TryGetAction(KeyChord.Parse("Space"), out string? action));
-        Assert.Equal(PlayerActions.PlayPause, action);
-        Assert.True(map.TryGetAction(KeyChord.Parse("F11"), out action));
-        Assert.Equal(PlayerActions.ToggleFullscreen, action);
-        Assert.True(map.TryGetAction(KeyChord.Parse("F"), out action));
-        Assert.Equal(PlayerActions.SubtitleScaleDecrease, action);
-        Assert.True(map.TryGetAction(KeyChord.Parse("Ctrl+,"), out action));
-        Assert.Equal(PlayerActions.Settings, action);
+        Assert.Equal(PlayerActions.PlayPause, ActionFor(map, "Space"));
+        Assert.Equal(PlayerActions.PlayPause, ActionFor(map, "P"));
+        Assert.Equal(PlayerActions.Screenshot, ActionFor(map, "Ctrl+S"));
+        Assert.Equal(PlayerActions.SubtitleSeekPrevious, ActionFor(map, "Shift+Left"));
+        Assert.Equal(PlayerActions.SubtitleSeekNext, ActionFor(map, "Shift+Right"));
+        Assert.Equal(PlayerActions.SubtitleDelayReset, ActionFor(map, "C"));
+        Assert.Equal(PlayerActions.SubtitleDelayDecrease, ActionFor(map, "Z"));
+        Assert.Equal(PlayerActions.SubtitleDelayIncrease, ActionFor(map, "X"));
+        Assert.Equal(PlayerActions.ToggleTopmost, ActionFor(map, "Ctrl+T"));
+        Assert.Equal(PlayerActions.ToggleFullscreen, ActionFor(map, "F"));
+
+        // IINA did not bind A; it must not silently mute.
+        Assert.False(map.TryGetAction(KeyChord.Parse("A"), out _));
     }
 
     [Fact]
     public void SwitchingProfileRebuildsDifferentMap()
     {
-        KeyMap defaultMap = KeyBindings.BuildKeyMap(null, KeyBindingProfiles.Default);
+        KeyMap wiinaMap = KeyBindings.BuildKeyMap(null, KeyBindingProfiles.Wiina);
         KeyMap iinaMap = KeyBindings.BuildKeyMap(null, KeyBindingProfiles.Iina);
 
-        Assert.True(defaultMap.TryGetAction(KeyChord.Parse("P"), out string? defaultAction));
-        Assert.True(iinaMap.TryGetAction(KeyChord.Parse("P"), out string? iinaAction));
-        Assert.Equal(PlayerActions.PlayPause, defaultAction);
-        Assert.Equal(PlayerActions.PlaylistNext, iinaAction);
+        Assert.Equal(PlayerActions.PlayPause, ActionFor(wiinaMap, "P"));
+        Assert.Equal(PlayerActions.PlayPause, ActionFor(iinaMap, "P"));
 
-        Assert.True(defaultMap.TryGetAction(KeyChord.Parse("F11"), out _));
-        Assert.False(iinaMap.TryGetAction(KeyChord.Parse("F11"), out _));
+        Assert.Equal(PlayerActions.Settings, ActionFor(iinaMap, "Ctrl+,"));
+        Assert.False(wiinaMap.TryGetAction(KeyChord.Parse("Ctrl+,"), out _));
     }
 
     [Fact]
@@ -98,8 +110,7 @@ public sealed class KeyBindingProfileTests
 
         KeyMap map = KeyBindings.BuildKeyMap(stored, KeyBindingProfiles.Iina);
 
-        Assert.True(map.TryGetAction(KeyChord.Parse("Space"), out string? action));
-        Assert.Equal(PlayerActions.PlayPause, action);
+        Assert.Equal(PlayerActions.PlayPause, ActionFor(map, "Space"));
         Assert.False(map.TryGetAction(KeyChord.Parse("Ctrl+Space"), out _));
     }
 
@@ -107,27 +118,24 @@ public sealed class KeyBindingProfileTests
     public void CustomProfileRetainsEdits()
     {
         IReadOnlyList<KeyBindingSetting> edited = KeyBindings.SetBinding(
-            KeyBindings.CreateIinaDefaults(),
+            KeyBindings.CreateDefaults(),
             PlayerActions.PlayPause,
             "Ctrl+Space");
 
-        KeyMap map = KeyBindings.BuildKeyMap(edited, KeyBindingProfiles.Custom);
+        KeyMap map = KeyBindings.BuildKeyMap(edited, "我的方案");
 
-        Assert.True(map.TryGetAction(KeyChord.Parse("Ctrl+Space"), out string? action));
-        Assert.Equal(PlayerActions.PlayPause, action);
+        Assert.Equal(PlayerActions.PlayPause, ActionFor(map, "Ctrl+Space"));
         Assert.False(map.TryGetAction(KeyChord.Parse("Space"), out _));
-        Assert.Equal(KeyBindings.CreateIinaDefaults().Count, KeyBindings.Resolve(
-            edited,
-            KeyBindingProfiles.Custom).Count);
+        Assert.Equal(edited.Count, KeyBindings.Resolve(edited, "我的方案").Count);
     }
 
     [Fact]
-    public void CustomWithNoStoredBindingsUsesDefaultProfile()
+    public void CustomWithNoStoredBindingsUsesTheWiinaProfile()
     {
-        KeyMap map = KeyBindings.BuildKeyMap(null, KeyBindingProfiles.Custom);
+        KeyMap map = KeyBindings.BuildKeyMap(null, "我的方案");
 
-        Assert.True(map.TryGetAction(KeyChord.Parse("F11"), out string? action));
-        Assert.Equal(PlayerActions.ToggleFullscreen, action);
+        Assert.Equal(PlayerActions.PlayPause, ActionFor(map, "MediaPlayPause"));
+        Assert.Equal(PlayerActions.Screenshot, ActionFor(map, "Ctrl+S"));
     }
 
     [Fact]
@@ -135,10 +143,10 @@ public sealed class KeyBindingProfileTests
     {
         Assert.Equal(
             KeyBindings.CreateDefaults().Count,
-            KeyBindings.CreateProfileDefaults(KeyBindingProfiles.Default).Count);
+            KeyBindings.CreateProfileDefaults(KeyBindingProfiles.Wiina).Count);
         Assert.Equal(
-            KeyBindings.CreateDefaults().Count,
-            KeyBindings.CreateProfileDefaults(KeyBindingProfiles.Custom).Count);
+            KeyBindings.CreateMpvDefaults().Count,
+            KeyBindings.CreateProfileDefaults(KeyBindingProfiles.Mpv).Count);
         Assert.Equal(
             KeyBindings.CreateIinaDefaults().Count,
             KeyBindings.CreateProfileDefaults("iina").Count);
@@ -148,16 +156,29 @@ public sealed class KeyBindingProfileTests
     }
 
     [Theory]
-    [InlineData("Default", KeyBindingProfiles.Default)]
-    [InlineData("default", KeyBindingProfiles.Default)]
+    [InlineData("Default", KeyBindingProfiles.Wiina)]
+    [InlineData("default", KeyBindingProfiles.Wiina)]
+    [InlineData("默认", KeyBindingProfiles.Wiina)]
+    [InlineData("Wiina 默认", KeyBindingProfiles.Wiina)]
+    [InlineData("mpv", KeyBindingProfiles.Mpv)]
+    [InlineData("mpv 默认", KeyBindingProfiles.Mpv)]
     [InlineData("IINA", KeyBindingProfiles.Iina)]
     [InlineData("iina", KeyBindingProfiles.Iina)]
-    [InlineData("Custom", KeyBindingProfiles.Custom)]
-    [InlineData("custom", KeyBindingProfiles.Custom)]
     [InlineData("  iina  ", KeyBindingProfiles.Iina)]
     public void ProfileNamesNormalize(string value, string expected)
     {
         Assert.Equal(expected, KeyBindingProfiles.Normalize(value));
+    }
+
+    [Fact]
+    public void LegacyCustomProfileNamesArePreserved()
+    {
+        // Older builds stored user profiles literally called "自定义"; they must
+        // remain selectable instead of collapsing into a virtual profile id.
+        Assert.Equal("自定义", KeyBindingProfiles.Normalize("自定义"));
+        Assert.Equal("自定义 2", KeyBindingProfiles.Normalize("  自定义 2  "));
+        Assert.Equal("garbage", KeyBindingProfiles.Normalize("  garbage  "));
+        Assert.True(KeyBindingProfiles.IsKnown("garbage"));
     }
 
     [Theory]
@@ -169,18 +190,21 @@ public sealed class KeyBindingProfileTests
     }
 
     [Fact]
-    public void CustomProfileNamesArePreserved()
-    {
-        Assert.Equal("garbage", KeyBindingProfiles.Normalize("  garbage  "));
-        Assert.True(KeyBindingProfiles.IsKnown("garbage"));
-    }
-
-    [Fact]
     public void ProfileLabelsAreLocalized()
     {
+        Assert.Equal("Wiina 默认", KeyBindingProfiles.Label(KeyBindingProfiles.Wiina));
+        Assert.Equal("mpv 默认", KeyBindingProfiles.Label(KeyBindingProfiles.Mpv));
         Assert.Equal("IINA", KeyBindingProfiles.Label(KeyBindingProfiles.Iina));
+        Assert.Equal("Wiina Default", KeyBindingProfiles.LabelEnglish(KeyBindingProfiles.Wiina));
+        Assert.Equal("mpv Default", KeyBindingProfiles.LabelEnglish(KeyBindingProfiles.Mpv));
         Assert.Equal("IINA", KeyBindingProfiles.LabelEnglish(KeyBindingProfiles.Iina));
-        Assert.False(string.IsNullOrWhiteSpace(KeyBindingProfiles.Label(KeyBindingProfiles.Custom)));
-        Assert.Equal(2, KeyBindingProfiles.All.Count);
+        Assert.False(string.IsNullOrWhiteSpace(KeyBindingProfiles.Label("我的方案")));
+    }
+
+    private static string? ActionFor(KeyMap map, string chordText)
+    {
+        Assert.True(KeyChord.TryParse(chordText, out KeyChord chord), chordText);
+        Assert.True(map.TryGetAction(chord, out string? action), chordText);
+        return action;
     }
 }

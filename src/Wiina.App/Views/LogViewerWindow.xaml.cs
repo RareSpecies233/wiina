@@ -1,6 +1,8 @@
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Input;
 using Windows.ApplicationModel.DataTransfer;
+using Windows.System;
 using Wiina.App.Localization;
 using Wiina.App.Services;
 using Wiina.Core.Models;
@@ -26,7 +28,11 @@ public sealed partial class LogViewerWindow : Window
             resizable: true,
             dark: App.IsDarkTheme,
             minWidth: 520,
-            minHeight: 360);
+            minHeight: 360,
+            extendTitleBar: true,
+            titleBar: DragRegion);
+
+        AddEscapeAccelerator();
 
         FilterBox.ItemsSource = new[] { Loc.T("log.filterAll"), Loc.T("log.filterTrace"), Loc.T("log.filterCrash") };
         FilterBox.SelectedIndex = 0;
@@ -123,5 +129,17 @@ public sealed partial class LogViewerWindow : Window
         {
             Load();
         }
+    }
+
+    /// <summary>Esc closes the window, matching the other secondary windows.</summary>
+    private void AddEscapeAccelerator()
+    {
+        var escape = new KeyboardAccelerator { Key = VirtualKey.Escape };
+        escape.Invoked += (_, args) =>
+        {
+            args.Handled = true;
+            Close();
+        };
+        RootGrid.KeyboardAccelerators.Add(escape);
     }
 }

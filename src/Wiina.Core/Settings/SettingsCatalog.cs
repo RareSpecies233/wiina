@@ -7,7 +7,7 @@ using Wiina.Core.State;
 namespace Wiina.Core.Settings;
 
 /// <summary>
-/// The complete Stage 7 settings catalog: twelve pages, their sections and every
+/// The complete Stage 7 settings catalog: eleven pages, their sections and every
 /// row with a typed getter/setter over <see cref="AppSettings"/>. The WinUI
 /// window renders this list; keeping it in Core makes coverage, search ranking
 /// and round-trips testable without starting the app.
@@ -17,17 +17,16 @@ public static class SettingsCatalog
     private static readonly SettingsPageInfo[] PageList =
     {
         new(SettingsPageId.General, "通用", "启动、外观与历史记录", "\uE713"),
-        new(SettingsPageId.Ui, "界面", "窗口布局、OSC、OSD 与缩略图", "\uE790"),
-        new(SettingsPageId.Video, "视频", "硬件解码、画质、比例与画面变换", "\uE714"),
+        new(SettingsPageId.Ui, "界面", "窗口布局、OSC 与 OSD", "\uE790"),
+        new(SettingsPageId.Video, "视频", "解码、缩略图、画质与画面变换", "\uE714"),
         new(SettingsPageId.Audio, "音频", "音量上限、延迟与输出设备", "\uE767"),
         new(SettingsPageId.Subtitles, "字幕", "字体、颜色、位置与延迟", "\uE8D8"),
         new(SettingsPageId.Network, "网络", "缓存、代理与请求头", "\uE774"),
         new(SettingsPageId.Control, "控制", "鼠标、滚轮与键盘入口", "\uE765"),
         new(SettingsPageId.KeyBindings, "按键绑定", "录制、冲突检测与导入导出", "\uE765"),
-        new(SettingsPageId.Advanced, "高级", "诊断、文件夹与维护", "\uE7EF"),
+        new(SettingsPageId.Advanced, "高级", "诊断、工具、文件夹与维护", "\uE7EF"),
         new(SettingsPageId.Integration, "文件关联", "让 Windows 用 Wiina 打开视频与音频", "\uE71B"),
         new(SettingsPageId.Plugin, "插件", "尚未实现（Stage 9）：仅保留占位与文件夹入口", "\uEA86"),
-        new(SettingsPageId.Utilities, "工具", "字体、日志、检查器与关于", "\uE90F"),
     };
 
     private static readonly SettingsRowDefinition[] RowList = BuildRows();
@@ -99,6 +98,11 @@ public static class SettingsCatalog
             settings => settings.RestoreWindowPosition,
             (settings, value) => settings.RestoreWindowPosition = value,
             "window position restore 窗口 位置"));
+        rows.Add(ActionRow(
+            "utilities.open-url", SettingsPageId.General, "播放与历史",
+            "打开 URL…", "校验地址后交给当前播放窗口打开。",
+            "open-url-dialog",
+            "url open 地址"));
         rows.Add(ChoiceRow(
             "general.auto-playlist", SettingsPageId.General, "播放列表",
             "自动添加播放列表",
@@ -226,48 +230,60 @@ public static class SettingsCatalog
             settings => settings.FullscreenTitleEnabled,
             (settings, value) => settings.FullscreenTitleEnabled = value,
             "fullscreen title 全屏 标题"));
+        // --------------------------------------------------------------- Video
         rows.Add(BoolRow(
-            "ui.thumbnail-preview", SettingsPageId.Ui, "缩略图",
+            "video.thumbnail-preview", SettingsPageId.Video, "缩略图",
             "进度条缩略图", "悬停进度条时显示时间预览与视频帧。",
             settings => settings.ThumbnailPreviewEnabled,
             (settings, value) => settings.ThumbnailPreviewEnabled = value,
             "thumbnail preview 缩略图"));
         rows.Add(NumberRow(
-            "ui.thumbnail-width", SettingsPageId.Ui, "缩略图",
+            "video.thumbnail-width", SettingsPageId.Video, "缩略图",
             "缩略图宽度", "80–320 DIP；高度按视频比例计算。",
             80, 320, 10, " DIP",
             settings => settings.ThumbnailWidth,
             (settings, value) => settings.ThumbnailWidth = (int)Math.Round(Math.Clamp(value, 80, 320)),
             "thumbnail width 缩略图 宽度"));
         rows.Add(NumberRow(
-            "ui.thumbnail-bucket", SettingsPageId.Ui, "缩略图",
+            "video.thumbnail-bucket", SettingsPageId.Video, "缩略图",
             "缩略图间隔", "按秒分桶缓存，越大越省内存、精度越低。",
             1, 30, 1, " 秒",
             settings => settings.ThumbnailBucketSeconds,
             (settings, value) => settings.ThumbnailBucketSeconds = Math.Clamp(value, 1, 30),
             "thumbnail bucket interval 缩略图 间隔"));
         rows.Add(NumberRow(
-            "ui.thumbnail-cache", SettingsPageId.Ui, "缩略图",
+            "video.thumbnail-cache", SettingsPageId.Video, "缩略图",
             "缩略图缓存数量", "内存中保留的缩略图张数。",
             10, 240, 10, " 张",
             settings => settings.ThumbnailCacheCount,
             (settings, value) => settings.ThumbnailCacheCount = (int)Math.Round(Math.Clamp(value, 10, 240)),
             "thumbnail cache 缩略图 缓存"));
         rows.Add(NumberRow(
-            "ui.thumbnail-cache-mb", SettingsPageId.Ui, "缩略图",
+            "video.thumbnail-cache-mb", SettingsPageId.Video, "缩略图",
             "缩略图磁盘缓存", "0 关闭磁盘缓存；超出上限时按最近最少使用自动清理。",
             0, 4096, 64, " MB",
             settings => settings.ThumbnailCacheMegabytes,
             (settings, value) => settings.ThumbnailCacheMegabytes =
                 (int)Math.Round(Math.Clamp(value, 0, 4096)),
             "thumbnail disk cache megabytes 缩略图 磁盘 缓存 空间"));
+        rows.Add(BoolRow(
+            "video.thumbnail-slow", SettingsPageId.Video, "缩略图",
+            "慢速预览图模式（单核）",
+            "只用一个低优先级工作线程逐张生成，全片不做预生成；低配设备更不容易卡顿，首次悬停会稍慢。",
+            settings => settings.ThumbnailSlowMode,
+            (settings, value) => settings.ThumbnailSlowMode = value,
+            "slow thumbnail single core 慢速 缩略图 单核 低配 性能"));
+        rows.Add(InfoRow(
+            "video.thumbnail-hint", SettingsPageId.Video, "缩略图",
+            "预生成提示",
+            "打开文件后会在后台遍历整段视频生成缩略图。低配设备上这可能抢占 CPU 造成短暂卡顿——遇到卡顿就打开上面的“慢速预览图模式（单核）”。",
+            "hint pregeneration stutter lag 提示 预生成 卡顿 低配",
+            settings => "低配设备请留意卡顿"));
         rows.Add(ActionRow(
-            "ui.thumbnail-cache-clear", SettingsPageId.Ui, "缩略图",
+            "video.thumbnail-cache-clear", SettingsPageId.Video, "缩略图",
             "清除缩略图缓存", "删除磁盘与内存中缓存的缩略图，并报告释放的空间。",
             "clear-thumbnails",
             "clear thumbnail cache 缩略图 清除 缓存"));
-
-        // --------------------------------------------------------------- Video
         rows.Add(BoolRow(
             "video.hwdec", SettingsPageId.Video, "解码",
             "硬件解码", "使用 auto-safe；显卡/驱动不支持时自动回退软解。",
@@ -496,6 +512,13 @@ public static class SettingsCatalog
             settings => settings.VideoPanY,
             (settings, value) => settings.VideoPanY = QuickSettings.ClampPan(value),
             "pan vertical 平移"));
+        rows.Add(ActionRow(
+            "general.screenshot-folder", SettingsPageId.Video, "截图",
+            "截图文件夹",
+            "Ctrl+S 保存截图的目录（默认 图片\\Wiina Screenshots）。",
+            "choose-screenshot-folder",
+            "screenshot folder 截图 文件夹",
+            settings => GetScreenshotFolder(settings)));
         rows.Add(ActionRow(
             "video.reset", SettingsPageId.Video, "重置",
             "还原画面设置", "比例、裁剪、旋转、翻转、缩放与平移恢复默认。",
@@ -761,20 +784,24 @@ public static class SettingsCatalog
             "编辑键盘快捷键", "打开“按键绑定”页录制、清除或导入导出快捷键。",
             "open-keybindings",
             "keyboard shortcut 快捷键 键盘"));
-        rows.Add(InfoRow(
+        rows.Add(BoolRow(
             "control.media-keys", SettingsPageId.Control, "键盘",
-            "系统媒体键", "已启用：播放/暂停、停止、上一首、下一首与进度拖动。",
-            "media keys smtc 媒体键",
-            settings => "已启用（SystemMediaTransportControls）"));
+            "系统媒体键",
+            "注册 SystemMediaTransportControls，并响应播放/暂停、停止、上一首、下一首与进度拖动；关闭后不再占用媒体键，立即生效。",
+            settings => settings.MediaKeysEnabled,
+            (settings, value) => settings.MediaKeysEnabled = value,
+            "media keys smtc 媒体键 系统"));
         string[] keyProfiles = KeyBindingProfiles.All.ToArray();
+        string[] keyProfileLabels = keyProfiles.Select(KeyBindingProfiles.Label).ToArray();
         rows.Add(ChoiceRow(
             "control.key-profile", SettingsPageId.Control, "键盘",
-            "键盘方案", "默认或 IINA；在按键编辑器中修改会创建可命名的自定义方案。",
-            keyProfiles,
-            settings => IndexOf(settings.KeyBindingProfile, keyProfiles, 0),
+            "键盘方案",
+            "Wiina 默认来自随附的 wiina.txt（78 个常用绑定）；也可切换 mpv 默认或 IINA。在按键编辑器中修改会创建可命名的自定义方案。",
+            keyProfileLabels,
+            settings => IndexOf(KeyBindingProfiles.Normalize(settings.KeyBindingProfile), keyProfiles, 0),
             (settings, value) => settings.KeyBindingProfile =
                 keyProfiles[Math.Clamp(value, 0, keyProfiles.Length - 1)],
-            "keyboard profile iina 键盘方案 快捷键"));
+            "keyboard profile iina mpv wiina 键盘方案 快捷键 默认"));
         rows.Add(ActionRow(
             "control.reset", SettingsPageId.Control, "重置",
             "还原控制设置", "鼠标动作、滚轮步长与方向恢复默认。",
@@ -829,10 +856,20 @@ public static class SettingsCatalog
             "export-diagnostics",
             "diagnostics export 诊断 导出"));
         rows.Add(ActionRow(
-            "utilities.open-url", SettingsPageId.Advanced, "诊断",
-            "打开 URL…", "校验地址后交给当前播放窗口打开。",
-            "open-url-dialog",
-            "url open 地址"));
+            "utilities.log-viewer", SettingsPageId.Advanced, "工具",
+            "日志查看器", "查看 %TEMP% 跟踪日志与崩溃日志，可刷新、过滤、打开文件夹。",
+            "open-log-viewer",
+            "log viewer 日志"));
+        rows.Add(ActionRow(
+            "utilities.inspector", SettingsPageId.Advanced, "工具",
+            "检查器", "显示当前媒体的文件/视频/音频/字幕技术属性。",
+            "open-inspector",
+            "inspector technical info 检查器 技术信息"));
+        rows.Add(ActionRow(
+            "utilities.about", SettingsPageId.Advanced, "工具",
+            "关于 Wiina", "版本、许可证、mpv 与 WinUI 信息。",
+            "open-about",
+            "about version license 关于 版本"));
         rows.Add(ActionRow(
             "advanced.config-folder", SettingsPageId.Advanced, "文件夹",
             "打开配置文件夹", "%LOCALAPPDATA%\\Wiina（settings.json / mpv 子目录）。",
@@ -843,13 +880,6 @@ public static class SettingsCatalog
             "打开数据文件夹", "settings.json、history.json 与 mpv 配置所在的目录。",
             "open-data-folder",
             "data folder config 数据 配置"));
-        rows.Add(ActionRow(
-            "general.screenshot-folder", SettingsPageId.Advanced, "文件夹",
-            "截图文件夹",
-            "Ctrl+S 保存截图的目录（默认 图片\\Wiina Screenshots）。",
-            "choose-screenshot-folder",
-            "screenshot folder 截图 文件夹",
-            settings => GetScreenshotFolder(settings)));
         rows.Add(ActionRow(
             "advanced.log-folder", SettingsPageId.Advanced, "文件夹",
             "打开日志文件夹", "%LOCALAPPDATA%\\Wiina\\logs 与崩溃日志。",
@@ -942,29 +972,6 @@ public static class SettingsCatalog
             Keywords = "plugin list installed 插件 列表",
             Kind = SettingsRowKind.PluginList,
         });
-
-        // ----------------------------------------------------------- Utilities
-        rows.Add(FontRow(
-            "utilities.font", SettingsPageId.Utilities, "工具",
-            "字幕字体", "与“字幕”页共用同一设置，这里提供快速入口。",
-            settings => settings.SubtitleFont,
-            (settings, value) => settings.SubtitleFont = Text.FontNameValidation.Normalize(value),
-            "font picker 字体"));
-        rows.Add(ActionRow(
-            "utilities.log-viewer", SettingsPageId.Utilities, "工具",
-            "日志查看器", "查看 %TEMP% 跟踪日志与崩溃日志，可刷新、过滤、打开文件夹。",
-            "open-log-viewer",
-            "log viewer 日志"));
-        rows.Add(ActionRow(
-            "utilities.inspector", SettingsPageId.Utilities, "工具",
-            "检查器", "显示当前媒体的文件/视频/音频/字幕技术属性。",
-            "open-inspector",
-            "inspector technical info 检查器 技术信息"));
-        rows.Add(ActionRow(
-            "utilities.about", SettingsPageId.Utilities, "工具",
-            "关于 Wiina", "版本、许可证、mpv 与 WinUI 信息。",
-            "open-about",
-            "about version license 关于 版本"));
 
         return rows.ToArray();
     }

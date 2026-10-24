@@ -6,47 +6,63 @@
     xmlns:loc="using:Wiina.App.Localization"
 >
 
-    <Grid x:Name="RootGrid"
-          Background="{ThemeResource WindowTintBrush}"
-          Padding="24"
-          RowSpacing="12">
+    <Grid x:Name="RootGrid" Background="{ThemeResource WindowTintBrush}">
         <Grid.RowDefinitions>
-            <RowDefinition Height="Auto" />
+            <RowDefinition Height="40" />
             <RowDefinition Height="*" />
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
-        <StackPanel Grid.Row="0" Orientation="Horizontal" Spacing="14">
-            <!-- Brand tile: the packaged PNG is the yellow triangle only, so the
-                 white rounded tile is drawn here (matches the app icon). -->
-            <Border Width="68"
-                    Height="68"
-                    CornerRadius="15"
-                    Background="{ThemeResource BrandTileBrush}"
-                    BorderBrush="{ThemeResource CardBorderBrush}"
-                    BorderThickness="1">
-                <Image Source="ms-appx:///Assets/wiina.png"
-                       Width="50"
-                       Height="50"
-                       Stretch="Uniform"
-                       AutomationProperties.Name="Wiina" />
-            </Border>
-            <StackPanel VerticalAlignment="Center" Spacing="2">
-                <TextBlock Text="Wiina"
-                           FontSize="20"
-                           FontWeight="Bold"
-                           Foreground="{ThemeResource PrimaryTextBrush}" />
-                <TextBlock x:Name="VersionText"
-                           FontSize="12"
-                           Foreground="{ThemeResource SecondaryTextBrush}" />
-            </StackPanel>
-        </StackPanel>
+        <!-- Extended titlebar, same acrylic frame as the settings window. -->
+        <Grid x:Name="DragRegion"
+              Grid.Row="0"
+              Padding="18,0,140,0"
+              Background="Transparent">
+            <TextBlock loc:Loc.Text="about.title"
+                       VerticalAlignment="Center"
+                       FontSize="12"
+                       FontWeight="SemiBold"
+                       Foreground="{ThemeResource SecondaryTextBrush}" />
+        </Grid>
 
-        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
-            <StackPanel x:Name="InfoPanel" Spacing="7" />
+        <ScrollViewer Grid.Row="1"
+                      Padding="18,8,18,8"
+                      VerticalScrollBarVisibility="Auto">
+            <StackPanel Spacing="12">
+                <!-- Brand tile: the packaged PNG is the yellow triangle only, so
+                     the white rounded tile is drawn here (matches the app icon). -->
+                <Border Style="{StaticResource CardBorderStyle}" Padding="16">
+                    <StackPanel Orientation="Horizontal" Spacing="14">
+                        <Border Width="64"
+                                Height="64"
+                                CornerRadius="14"
+                                Background="{ThemeResource BrandTileBrush}"
+                                BorderBrush="{ThemeResource CardBorderBrush}"
+                                BorderThickness="1">
+                            <Image Source="ms-appx:///Assets/wiina.png"
+                                   Width="46"
+                                   Height="46"
+                                   Stretch="Uniform"
+                                   loc:Loc.AutomationName="ui.about" />
+                        </Border>
+                        <StackPanel VerticalAlignment="Center" Spacing="3">
+                            <TextBlock Text="Wiina"
+                                       FontSize="20"
+                                       FontWeight="Bold"
+                                       Foreground="{ThemeResource PrimaryTextBrush}" />
+                            <TextBlock x:Name="VersionText"
+                                       Style="{StaticResource CaptionTextStyle}" />
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+
+                <Border Style="{StaticResource CardBorderStyle}" Padding="14,12">
+                    <StackPanel x:Name="InfoPanel" Spacing="7" />
+                </Border>
+            </StackPanel>
         </ScrollViewer>
 
-        <Grid Grid.Row="2" ColumnSpacing="8">
+        <Grid Grid.Row="2" Padding="18,0,18,16" ColumnSpacing="8">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" />
@@ -54,15 +70,16 @@
             </Grid.ColumnDefinitions>
             <TextBlock loc:Loc.Text="ui.licenseShort"
                        Style="{StaticResource CaptionTextStyle}"
-                       VerticalAlignment="Center" />
+                       VerticalAlignment="Center"
+                       TextTrimming="CharacterEllipsis" />
             <Button Grid.Column="1"
                     loc:Loc.Content="ui.copyInfo"
+                    loc:Loc.AutomationName="ui.copyInfo"
                     Click="OnCopyClick" />
             <Button Grid.Column="2"
                     loc:Loc.Content="ui.close"
+                    loc:Loc.AutomationName="ui.close"
                     Click="OnCloseClick" />
         </Grid>
     </Grid>
 </Window>
-
-

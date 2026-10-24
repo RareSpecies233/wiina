@@ -223,6 +223,7 @@ public sealed partial class MainWindow
             host.SetWidth(_sidebar.Width);
             host.SetType(type);
             host.SetPage(_settings.QuickSettingsPage);
+            host.QuickSettings.SetSpeed(_oscVm.Speed);
             if (host.Visibility != Visibility.Visible)
             {
                 if (animate)
@@ -447,6 +448,18 @@ public sealed partial class MainWindow
     {
         SidebarLeading.QuickSettings.LoadFromSettings(_settings);
         SidebarTrailing.QuickSettings.LoadFromSettings(_settings);
+        SyncQuickSettingsSpeed();
+    }
+
+    /// <summary>
+    /// The playback rate lives in mpv, not in <see cref="AppSettings"/>, so the
+    /// quick-settings speed controls are refreshed from the view-model instead
+    /// of the settings object.
+    /// </summary>
+    private void SyncQuickSettingsSpeed()
+    {
+        SidebarLeading.QuickSettings.SetSpeed(_oscVm.Speed);
+        SidebarTrailing.QuickSettings.SetSpeed(_oscVm.Speed);
     }
 
     // ------------------------------------------------------- playlist actions
@@ -508,8 +521,9 @@ public sealed partial class MainWindow
                 _settings.Theme = (ThemeMode)Math.Clamp((int)e.Number, 0, 2);
                 ApplyTheme();
                 break;
-            case QuickSettingKey.Animations:
-                _settings.AnimationsEnabled = e.Flag;
+            case QuickSettingKey.Speed:
+                SetSpeed(e.Number);
+                SyncQuickSettingsSpeed();
                 break;
             case QuickSettingKey.Layout:
                 _settings.Layout = e.Number >= 1

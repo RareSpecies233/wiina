@@ -1,13 +1,15 @@
-# 许可证与合规审计（v1.2.7）
+# 许可证与合规审计（v1.3.0）
 
 > 结论先行：**Wiina 以 GPL-3.0-only 发布**。不复制 IINA 的 Swift/AppKit 源码、图片资产、SF Symbols 或应用图标；
 > 不把 mpv/libmpv 二进制提交进 git；发布包附带 mpv 的许可证文本与源码获取方式。
 > 本文件不是法律意见；发布前建议做一次人工复核。
 
-本文件自 v0.1 起随版本更新。当前状态对应 **v1.2.7**：插件系统、在线字幕、yt-dlp 均未实现（Stage 9/10 按维护者要求跳过），
+本文件自 v0.1 起随版本更新。当前状态对应 **v1.3.0**：插件系统、在线字幕、yt-dlp 均未实现（Stage 9/10 按维护者要求跳过），
 因此本文件中所有“（v1）”字样的集成条目都已改为**未使用**，不再作为分发内容或义务来源。
-v1.2.7 没有新增第三方依赖：缩略图磁盘缓存在本仓库实现（`src/Wiina.Core/Caching/ThumbnailDiskCache.cs`），
-管理员关联仍只调用 Win32/注册表 API；安装器使用 Inno Setup（构建期工具，见 `docs/installer.md`）。
+v1.3.0 没有新增第三方依赖，也没有复制第三方代码：mpv.net 配置导出只是把选项/键位文本写到
+`resources/mpvnet/`（mpv.net 本身不随包分发、不被调用）；键位对照文档
+`docs/reference/iina-shortcuts.md` 是从 IINA 默认配置推导出的行为描述（GPL-3.0 文档），不含源码；
+系统媒体键只调用 Windows SDK 的 SMTC API。安装器仍使用 Inno Setup（构建期工具，见 `docs/installer.md`）。
 
 ---
 
@@ -119,7 +121,7 @@ v1.2.7 没有新增第三方依赖：缩略图磁盘缓存在本仓库实现（`
 ## 7. 发布合规检查清单
 
 - [ ] `LICENSE`（GPL-3.0）在根目录与安装包内
-- [ ] `NOTICE` 包含 IINA、mpv、Windows App SDK、.NET、字体说明（已无 CommunityToolkit/CsWin32/Win2D）
+- [ ] `NOTICE` 包含 IINA、mpv、Windows App SDK、.NET、字体说明（已移除 CommunityToolkit/CsWin32；Win2D 1.3.2 自 1.2.4 起恢复）
 - [ ] `licenses/` 含 mpv 的 GPL/LGPL 文本与 Copyright；含第三方 NuGet 许可
 - [ ] 发布页提供对应源码（本仓库 tag + mpv 源码获取方式）
 - [ ] 安装包不包含 IINA 资产、SF Symbols、Segoe 字体文件

@@ -1,11 +1,11 @@
 # 安装、卸载与分发
 
-Wiina 提供两种分发形式，二者使用**同一份载荷**（`artifacts/wiina-1.2.7-win-x64/`）：
+Wiina 提供两种分发形式，二者使用**同一份载荷**（`artifacts/wiina-1.3.0-win-x64/`）：
 
 | 形式 | 产物 | 卸载方式 |
 |---|---|---|
-| 便携 zip | `artifacts/wiina-1.2.7-win-x64.zip` | 同目录的 `Uninstall Wiina.exe` |
-| 按用户安装包 | `artifacts/Wiina-Setup-1.2.7-x64.exe` | 设置 → 应用 → Wiina → 卸载（Inno Setup 卸载器） |
+| 便携 zip | `artifacts/wiina-1.3.0-win-x64.zip` | 同目录的 `Uninstall Wiina.exe` |
+| 按用户安装包 | `artifacts/Wiina-Setup-1.3.0-x64.exe` | 设置 → 应用 → Wiina → 卸载（Inno Setup 卸载器） |
 
 > 产物的字节数与 SHA-256 以每次实际构建为准（`scripts/release.ps1` 会在结束时打印）；
 > 本文不记录具体哈希，避免复制过期数值。
@@ -23,7 +23,7 @@ Wiina 提供两种分发形式，二者使用**同一份载荷**（`artifacts/wi
   `Uninstall Wiina.exe`、`*.pdb`、`*.xml`——安装版用 Inno 自己的卸载器，不重复放便携卸载器。
 - **快捷方式**：开始菜单必选，桌面快捷方式可选（默认不勾）。
 - **安装后**：可直接启动 Wiina；应用数据仍写入 `%LOCALAPPDATA%\Wiina`，与便携版共用。
-- 产物名：`artifacts/Wiina-Setup-1.2.7-x64.exe`（`OutputBaseFilename=Wiina-Setup-{#MyAppVersion}-x64`）。
+- 产物名：`artifacts/Wiina-Setup-1.3.0-x64.exe`（`OutputBaseFilename=Wiina-Setup-{#MyAppVersion}-x64`）。
 
 ### 卸载：是否保留配置文件？
 
@@ -79,13 +79,13 @@ Wiina 提供两种分发形式，二者使用**同一份载荷**（`artifacts/wi
 
 ```powershell
 # 1) 便携 zip（内部先发布卸载器，再构建/校验 Wiina.dll 版本并打包）
-pwsh -File scripts/package.ps1 -Version 1.2.7
+pwsh -File scripts/package.ps1 -Version 1.3.0
 
 # 2) 安装包（在便携 zip 之后；没有 ISCC 时脚本会警告并跳过）
-pwsh -File scripts/release.ps1 -Version 1.2.7
+pwsh -File scripts/release.ps1 -Version 1.3.0
 
 # 只要便携 zip，跳过安装包
-pwsh -File scripts/release.ps1 -Version 1.2.7 -NoInstaller
+pwsh -File scripts/release.ps1 -Version 1.3.0 -NoInstaller
 ```
 
 `release.ps1` 的安装包流程：
@@ -100,6 +100,20 @@ pwsh -File scripts/release.ps1 -Version 1.2.7 -NoInstaller
 ISCC 查找顺序：`PATH` 上的 `iscc` → `%LOCALAPPDATA%\Programs\Inno Setup 6\ISCC.exe`
 → `%ProgramFiles(x86)%\Inno Setup 6\ISCC.exe` → `%ProgramFiles%\Inno Setup 6\ISCC.exe`。
 未安装 Inno Setup 时只产出便携 zip，不影响发布。
+
+## 升级与保留数据
+
+- 安装包是**就地升级**：Inno 的 `CloseApplications=yes` 会在需要时关闭旧进程，
+  `RestartApplications=no` 不强行重启；升级不会改动 `%LOCALAPPDATA%\Wiina`。
+- 文件关联（HKCU 或管理员模式的 HKLM）在升级后保持；安装包不会静默抢占默认程序。
+- 只有卸载器里明确回答「否」（不保留配置文件）时，才删除设置与 Wiina 自己的关联键。
+
+## 导出 mpv.net 配置
+
+`resources/mpvnet/` 提供一份给 mpv.net 用户的手工配置：`wiina.conf`（mpv 选项 +
+`[wiina]` profile）与 `wiina-input.conf`（键位）。把 `wiina.conf` 合并进 mpv.net 的
+`mpv.conf`（或整体替换），并把 `wiina-input.conf` 放到同一目录；这两个文件不随安装包
+写入系统，也不会被 Wiina 自动安装。详见 `resources/mpvnet/README.md`。
 
 ## 已知限制
 

@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Globalization;
 using System.Runtime.InteropServices.WindowsRuntime;
 using Wiina.Core.Caching;
+using Wiina.Core.State;
 using Wiina.Mpv;
 using Windows.Graphics.Imaging;
 using Windows.Storage;
@@ -45,8 +46,10 @@ public sealed class ThumbnailService : IDisposable
     private TaskCompletionSource<bool>? _fileLoaded;
     private string? _loadedPath;
     private Task? _worker;
+    private Thread? _workerThread;
     private CancellationTokenSource? _pregenCts;
     private DateTime _lastInteractionUtc = DateTime.UtcNow;
+    private volatile bool _slowMode;
     private bool _disposed;
 
     public ThumbnailService(
@@ -54,8 +57,10 @@ public sealed class ThumbnailService : IDisposable
         double bucketSeconds = 5,
         Action<string>? log = null,
         string? diskCacheDirectory = null,
-        int diskCacheMegabytes = 512)
+        int diskCacheMegabytes = 512,
+        bool slowMode = false)
     {
+        _slowMode = slowMode;
         _bucketSeconds = double.IsFinite(bucketSeconds) && bucketSeconds > 0
             ? bucketSeconds
             : 5;
@@ -90,6 +95,45 @@ public sealed class ThumbnailService : IDisposable
 
     public bool TryGetCached(double seconds, out ThumbnailFrame frame) =>
         _cache.TryGet(seconds, out frame);
+
+    /// <summary>
+    /// Slow thumbnail mode: the single extraction worker waits between jobs and
+    /// whole-file pre-generation is skipped, so weak devices keep a core free.
+    /// Cached frames (memory and disk) are still served instantly, which is what
+    /// keeps the first hover usable. Safe to toggle while playback runs.
+    /// </summary>
+    public bool SlowMode
+    {
+        get => _slowMode;
+        set
+        {
+            if (_slowMode == value)
+            {
+                return;
+            }
+
+            _slowMode = value;
+            if (value)
+            {
+                StopPreGeneration();
+            }
+
+            ApplyWorkerPriority();
+
+            // Wake an idle worker so the new policy (or a queued job) takes
+            // effect without waiting for the next request.
+            try
+            {
+                _wake.Release();
+            }
+            catch (ObjectDisposedException)
+            {
+            }
+        }
+    }
+
+    /// <summary>Live-apply entry point used by the settings window.</summary>
+    public void SetSlowMode(bool enabled) => SlowMode = enabled;
 
     /// <summary>
     /// Requests a thumbnail for <paramref name="seconds"/>. Concurrent requests
@@ -199,6 +243,13 @@ public sealed class ThumbnailService : IDisposable
         int targetHeight = PreGenerationHeight)
     {
         StopPreGeneration();
+        if (_slowMode)
+        {
+            // Slow mode never walks the timeline up front; frames are extracted
+            // on demand while the user hovers.
+            return;
+        }
+
         if (_disposed
             || _disk is null
             || !IsLocalFile(mediaPath)
@@ -326,62 +377,108 @@ public sealed class ThumbnailService : IDisposable
             return;
         }
 
-        _worker = Task.Run(WorkerLoopAsync);
+        // A dedicated long-running thread (instead of a pool thread) lets slow
+        // mode really lower the extraction priority for hover jobs.
+        _worker = Task.Factory.StartNew(
+            WorkerLoop,
+            CancellationToken.None,
+            TaskCreationOptions.LongRunning,
+            TaskScheduler.Default);
     }
 
-    private async Task WorkerLoopAsync()
+    /// <summary>
+    /// Applies the current policy's priority to the extraction thread. Slow mode
+    /// runs below normal so the UI thread and mpv's render thread win the CPU;
+    /// normal mode restores the default priority. Best effort on purpose.
+    /// </summary>
+    private void ApplyWorkerPriority()
     {
-        while (true)
+        Thread? thread = _workerThread;
+        if (thread is null)
         {
-            Job? job;
-            lock (_gate)
+            return;
+        }
+
+        try
+        {
+            thread.Priority = _slowMode ? ThreadPriority.BelowNormal : ThreadPriority.Normal;
+        }
+        catch (Exception)
+        {
+            // Priority changes can be refused; extraction still throttles.
+        }
+    }
+
+    private void WorkerLoop()
+    {
+        _workerThread = Thread.CurrentThread;
+        _workerThread.IsBackground = true;
+        ApplyWorkerPriority();
+        try
+        {
+            while (true)
             {
-                if (_disposed)
+                Job? job;
+                lock (_gate)
                 {
-                    return;
+                    if (_disposed)
+                    {
+                        return;
+                    }
+
+                    job = TakeNextLocked();
                 }
 
-                job = TakeNextLocked();
-            }
+                if (job is null)
+                {
+                    try
+                    {
+                        _wake.Wait(250);
+                    }
+                    catch (ObjectDisposedException)
+                    {
+                        return;
+                    }
 
-            if (job is null)
-            {
+                    continue;
+                }
+
+                // Never let pre-generation compete with a fresh hover: the drag
+                // preview feels laggy if a background seek occupies mpv.
+                if (job.Background
+                    && (DateTime.UtcNow - _lastInteractionUtc).TotalMilliseconds < 1000)
+                {
+                    Thread.Sleep(120);
+                }
+
+                ThumbnailFrame? frame = null;
                 try
                 {
-                    await _wake.WaitAsync(250).ConfigureAwait(false);
+                    frame = ExtractAsync(job).GetAwaiter().GetResult();
                 }
-                catch (ObjectDisposedException)
+                catch (Exception ex)
                 {
-                    return;
+                    Log?.Invoke(
+                        $"thumbnail {job.Path} @ {job.Seconds:0.0}s: {ex.Message}");
                 }
 
-                continue;
-            }
+                job.Completion.TrySetResult(frame);
+                lock (_gate)
+                {
+                    _jobs.Remove(job.Id);
+                }
 
-            // Never let pre-generation compete with a fresh hover: the drag
-            // preview feels laggy if a background seek occupies mpv.
-            if (job.Background
-                && (DateTime.UtcNow - _lastInteractionUtc).TotalMilliseconds < 1000)
-            {
-                await Task.Delay(120).ConfigureAwait(false);
+                if (_slowMode)
+                {
+                    // One-core mode: leave the CPU alone between frames so
+                    // hovering still costs a single short spike.
+                    Thread.Sleep(ThumbnailPolicy.SlowModeCooldownMilliseconds);
+                }
             }
-
-            ThumbnailFrame? frame = null;
-            try
-            {
-                frame = await ExtractAsync(job).ConfigureAwait(false);
-            }
-            catch (Exception ex)
-            {
-                Log?.Invoke(
-                    $"thumbnail {job.Path} @ {job.Seconds:0.0}s: {ex.Message}");
-            }
-
-            job.Completion.TrySetResult(frame);
-            lock (_gate)
-            {
-                _jobs.Remove(job.Id);
-            }
+        }
+        finally
+        {
+            _workerThread = null;
         }
     }
 

@@ -13,9 +13,6 @@ internal sealed class UninstallOptions
     /// <summary>null: ask (or keep, in silent mode).</summary>
     public bool? KeepConfig { get; private set; }
 
-    /// <summary>null: ask (or remove, in silent mode).</summary>
-    public bool? RemoveAssociations { get; private set; }
-
     /// <summary>Leave the folder alone; useful when files are in use or for tests.</summary>
     public bool NoSelfDelete { get; private set; }
 
@@ -41,10 +38,10 @@ internal sealed class UninstallOptions
                     options.KeepConfig = false;
                     break;
                 case "--keep-associations":
-                    options.RemoveAssociations = false;
-                    break;
                 case "--remove-associations":
-                    options.RemoveAssociations = true;
+                    // Deprecated no-ops: associations are always removed now.
+                    // They stay accepted so older shortcuts/pipelines do not
+                    // fail on an unknown switch.
                     break;
                 case "--no-self-delete":
                     options.NoSelfDelete = true;

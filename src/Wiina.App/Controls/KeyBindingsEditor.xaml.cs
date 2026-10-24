@@ -6,10 +6,10 @@ using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 using Windows.Storage;
-using Windows.UI.ViewManagement;
 using Windows.Storage.Pickers;
 using Windows.System;
 using Windows.UI;
+using Windows.UI.ViewManagement;
 using Wiina.App.Interop;
 using Wiina.App.Localization;
 using Wiina.App.Services;
@@ -21,7 +21,9 @@ namespace Wiina.App.Controls;
 
 /// <summary>
 /// Key-binding editor shared by the standalone <see cref="Views.KeyBindingWindow"/>.
-/// Owns recording, conflict resolution, reset, profile switching and JSON I/O.
+/// Offers a searchable, category-grouped action list, IINA-style read-only
+/// built-in profiles, recording with conflict resolution, buffered edits with
+/// an explicit save, JSON import/export and per-profile reset.
 /// </summary>
 public sealed partial class KeyBindingsEditor : UserControl
 {
@@ -46,6 +48,9 @@ public sealed partial class KeyBindingsEditor : UserControl
     private Window? _host;
     private bool _recording;
     private bool _loading;
+    private bool _saving;
+    private bool _dirty;
+    private string _search = string.Empty;
 
     public KeyBindingsEditor()
     {
@@ -74,6 +79,24 @@ public sealed partial class KeyBindingsEditor : UserControl
     /// <summary>Supplies the owning window for file pickers.</summary>
     public void AttachWindow(Window window) => _host = window;
 
+    /// <summary>True when the editor holds edits that have not been saved yet.</summary>
+    public bool HasUnsavedChanges => _dirty;
+
+    /// <summary>
+    /// Prompts for unsaved edits before the host window closes. Returns true
+    /// when it is safe to close.
+    /// </summary>
+    public async Task<bool> ConfirmCloseAsync()
+    {
+        if (!_dirty || XamlRoot is null)
+        {
+            return true;
+        }
+
+        bool? save = await ShowUnsavedDialogAsync();
+        return save is not null;
+    }
+
     private void InitializePicker(object picker)
     {
         if (_host is not null)
@@ -84,6 +107,14 @@ public sealed partial class KeyBindingsEditor : UserControl
 
     private bool IsEnglish => string.Equals(Loc.CurrentLanguage, AppLanguage.English, StringComparison.OrdinalIgnoreCase);
 
+    private static string CurrentProfile =>
+        KeyBindingProfiles.Normalize(App.Settings.KeyBindingProfile);
+
+    private static bool IsBuiltInProfile(string? profile) =>
+        string.Equals(profile, KeyBindingProfiles.Wiina, StringComparison.Ordinal) ||
+        string.Equals(profile, KeyBindingProfiles.Mpv, StringComparison.Ordinal) ||
+        string.Equals(profile, KeyBindingProfiles.Iina, StringComparison.Ordinal);
+
     private void BuildProfileChoices()
     {
         _loading = true;
@@ -93,15 +124,19 @@ public sealed partial class KeyBindingsEditor : UserControl
             ProfileBox.Items.Clear();
             foreach (string profile in ProfileNames())
             {
-                ProfileBox.Items.Add(IsEnglish ? KeyBindingProfiles.LabelEnglish(profile) : KeyBindingProfiles.Label(profile));
+                ProfileBox.Items.Add(IsEnglish
+                    ? KeyBindingProfiles.LabelEnglish(profile)
+                    : KeyBindingProfiles.Label(profile));
             }
 
-            ProfileBox.SelectedIndex = selected;
+            ProfileBox.SelectedIndex = Math.Clamp(selected, 0, Math.Max(0, ProfileBox.Items.Count - 1));
         }
         finally
         {
             _loading = false;
         }
+
+        UpdateProfileState();
     }
 
     private static List<string> ProfileNames()
@@ -138,11 +173,19 @@ public sealed partial class KeyBindingsEditor : UserControl
         App.Settings.UserKeyProfiles.FirstOrDefault(profile =>
             string.Equals(profile.Name.Trim(), name?.Trim(), StringComparison.OrdinalIgnoreCase));
 
-    private void Reload()
+    private void Reload(bool resetDirty = true)
     {
-        _bindings = KeyBindings.Resolve(App.Settings.KeyBindings, App.Settings.KeyBindingProfile).ToList();
+        if (resetDirty)
+        {
+            _dirty = false;
+        }
+
+        _bindings = KeyBindings
+            .Resolve(App.Settings.KeyBindings, App.Settings.KeyBindingProfile)
+            .ToList();
         BuildActionList();
-        if (_selectedAction is not null && PlayerActionCatalog.IsKnown(_selectedAction))
+        if (_selectedAction is not null &&
+            _rows.Any(row => string.Equals(row.Action, _selectedAction, StringComparison.Ordinal)))
         {
             SelectAction(_selectedAction);
         }
@@ -150,20 +193,94 @@ public sealed partial class KeyBindingsEditor : UserControl
         {
             SelectAction(_rows.FirstOrDefault().Action);
         }
+
+        UpdateProfileState();
+    }
+
+    private List<PlayerActionInfo> VisibleActions()
+    {
+        var infos = new Dictionary<string, PlayerActionInfo>(StringComparer.Ordinal);
+        foreach (PlayerActionInfo info in PlayerActionCatalog.All)
+        {
+            infos[info.Action] = info;
+        }
+
+        foreach (KeyBindingSetting binding in _bindings)
+        {
+            if (!infos.ContainsKey(binding.Action))
+            {
+                infos[binding.Action] = new PlayerActionInfo(
+                    binding.Action,
+                    PlayerActionCatalog.Label(binding.Action),
+                    PlayerActionCatalog.CategoryOf(binding.Action));
+            }
+        }
+
+        IEnumerable<PlayerActionInfo> query = infos.Values;
+        if (!string.IsNullOrWhiteSpace(_search))
+        {
+            query = query.Where(info =>
+                info.Label.Contains(_search, StringComparison.OrdinalIgnoreCase) ||
+                info.Action.Contains(_search, StringComparison.OrdinalIgnoreCase));
+        }
+
+        return query
+            .OrderBy(info => CategoryIndex(info.Category))
+            .ThenBy(info => info.Label, StringComparer.Ordinal)
+            .ToList();
+    }
+
+    private static int CategoryIndex(string category)
+    {
+        IReadOnlyList<string> categories = PlayerActionCatalog.Categories;
+        for (int i = 0; i < categories.Count; i++)
+        {
+            if (string.Equals(categories[i], category, StringComparison.Ordinal))
+            {
+                return i;
+            }
+        }
+
+        return int.MaxValue;
     }
 
     private void BuildActionList()
     {
         ActionList.Children.Clear();
         _rows.Clear();
+        List<PlayerActionInfo> visible = VisibleActions();
+        if (visible.Count == 0)
+        {
+            ActionList.Children.Add(new TextBlock
+            {
+                Text = Loc.T("keybindings.searchEmpty"),
+                FontSize = 12,
+                Opacity = 0.65,
+                Margin = new Thickness(10, 12, 10, 12),
+                TextWrapping = TextWrapping.Wrap,
+            });
+            return;
+        }
+
         var byAction = _bindings
             .GroupBy(binding => binding.Action, StringComparer.Ordinal)
             .ToDictionary(group => group.Key, group => group.ToList(), StringComparer.Ordinal);
-
-        foreach (PlayerActionInfo info in PlayerActionCatalog.All
-                     .OrderBy(action => action.Category, StringComparer.Ordinal)
-                     .ThenBy(action => action.Label, StringComparer.Ordinal))
+        string? currentCategory = null;
+        foreach (PlayerActionInfo info in visible)
         {
+            if (!string.Equals(currentCategory, info.Category, StringComparison.Ordinal))
+            {
+                currentCategory = info.Category;
+                ActionList.Children.Add(new TextBlock
+                {
+                    Text = info.Category,
+                    FontSize = 11,
+                    FontWeight = FontWeights.SemiBold,
+                    Opacity = 0.6,
+                    Margin = new Thickness(10, _rows.Count == 0 ? 2 : 12, 10, 4),
+                });
+            }
+
             string action = info.Action;
             List<KeyBindingSetting> chords = byAction.TryGetValue(action, out List<KeyBindingSetting>? list)
                 ? list
@@ -211,7 +328,7 @@ public sealed partial class KeyBindingsEditor : UserControl
             {
                 Tag = action,
                 Content = content,
-                Height = 38,
+                Height = 36,
                 Padding = new Thickness(10, 2, 10, 2),
                 HorizontalContentAlignment = HorizontalAlignment.Stretch,
                 HorizontalAlignment = HorizontalAlignment.Stretch,
@@ -249,10 +366,13 @@ public sealed partial class KeyBindingsEditor : UserControl
         ActionName.Text = PlayerActionCatalog.Label(action);
         ActionCategory.Text = PlayerActionCatalog.CategoryOf(action);
         RowsReflectSelection();
-        HintText.Text = Loc.T("keybindings.hint");
+        HintText.Text = IsBuiltInProfile(CurrentProfile)
+            ? Loc.T("keybindings.builtInHint")
+            : Loc.T("keybindings.hint");
         StatusText.Text = string.Empty;
         RecordButton.Visibility = Visibility.Visible;
         CancelButton.Visibility = Visibility.Collapsed;
+        UpdateProfileState();
     }
 
     private void RowsReflectSelection()
@@ -270,12 +390,37 @@ public sealed partial class KeyBindingsEditor : UserControl
         ChordText.Text = chords.Count == 0 ? Loc.T("keybindings.unbound") : string.Join(" / ", chords);
     }
 
+    private void UpdateProfileState()
+    {
+        bool builtIn = IsBuiltInProfile(CurrentProfile);
+        CopyToCustomButton.Visibility = builtIn ? Visibility.Visible : Visibility.Collapsed;
+        RecordButton.IsEnabled = !builtIn;
+        ClearButton.IsEnabled = !builtIn;
+        ResetOneButton.IsEnabled = !builtIn;
+        ProfileHintLabel.Text = builtIn
+            ? Loc.T("keybindings.builtInHint")
+            : Loc.T("keybindings.profileHint");
+        SaveButton.IsEnabled = _dirty && !builtIn;
+    }
+
+    private void MarkDirty()
+    {
+        _dirty = true;
+        UpdateProfileState();
+    }
+
     private void OnRecordClick(object sender, RoutedEventArgs e) => StartRecording();
 
     private void OnCancelClick(object sender, RoutedEventArgs e) => StopRecording(clearStatus: true);
 
     private void StartRecording()
     {
+        if (IsBuiltInProfile(CurrentProfile))
+        {
+            StatusText.Text = Loc.T("keybindings.builtInHint");
+            return;
+        }
+
         if (_selectedAction is null)
         {
             StatusText.Text = Loc.T("keybindings.pickFirst");
@@ -378,8 +523,14 @@ public sealed partial class KeyBindingsEditor : UserControl
             return;
         }
 
+        if (IsBuiltInProfile(CurrentProfile))
+        {
+            StopRecording(clearStatus: false);
+            StatusText.Text = Loc.T("keybindings.builtInHint");
+            return;
+        }
+
         string action = _selectedAction;
-        SwitchToCustom();
         string? conflict = KeyBindings.FindConflict(_bindings, chord, action);
         if (conflict is not null)
         {
@@ -398,7 +549,7 @@ public sealed partial class KeyBindingsEditor : UserControl
         _bindings = string.IsNullOrEmpty(chord)
             ? KeyBindings.ClearAction(_bindings, action)
             : KeyBindings.SetBinding(_bindings, action, chord);
-        Persist();
+        MarkDirty();
         BuildActionList();
         SelectAction(action);
         StopRecording(clearStatus: false);
@@ -409,15 +560,15 @@ public sealed partial class KeyBindingsEditor : UserControl
 
     private void OnClearClick(object sender, RoutedEventArgs e)
     {
-        if (_selectedAction is null)
+        if (IsBuiltInProfile(CurrentProfile) || _selectedAction is null)
         {
+            StatusText.Text = Loc.T("keybindings.builtInHint");
             return;
         }
 
         string action = _selectedAction;
-        SwitchToCustom();
         _bindings = KeyBindings.ClearAction(_bindings, action);
-        Persist();
+        MarkDirty();
         BuildActionList();
         SelectAction(action);
         StatusText.Text = Loc.F("keybindings.clearedAction", PlayerActionCatalog.Label(action));
@@ -425,16 +576,15 @@ public sealed partial class KeyBindingsEditor : UserControl
 
     private void OnResetOneClick(object sender, RoutedEventArgs e)
     {
-        if (_selectedAction is null)
+        if (IsBuiltInProfile(CurrentProfile) || _selectedAction is null)
         {
+            StatusText.Text = Loc.T("keybindings.builtInHint");
             return;
         }
 
         string action = _selectedAction;
-        string profile = KeyBindingProfiles.Normalize(App.Settings.KeyBindingProfile);
-        SwitchToCustom();
         var reset = KeyBindings.ClearAction(_bindings, action).ToList();
-        foreach (string chord in KeyBindings.DefaultChords(action, profile))
+        foreach (string chord in KeyBindings.DefaultChords(action, KeyBindingProfiles.Default))
         {
             if (KeyBindings.FindConflict(reset, chord, action) is null)
             {
@@ -443,7 +593,7 @@ public sealed partial class KeyBindingsEditor : UserControl
         }
 
         _bindings = reset;
-        Persist();
+        MarkDirty();
         BuildActionList();
         SelectAction(action);
         StatusText.Text = Loc.F("keybindings.resetOneAction", PlayerActionCatalog.Label(action));
@@ -451,6 +601,12 @@ public sealed partial class KeyBindingsEditor : UserControl
 
     private async void OnResetAllClick(object sender, RoutedEventArgs e)
     {
+        if (IsBuiltInProfile(CurrentProfile))
+        {
+            StatusText.Text = Loc.T("keybindings.builtInHint");
+            return;
+        }
+
         bool reset = await Dialogs.ConfirmAsync(
             XamlRoot,
             Loc.T("keybindings.resetAllTitle"),
@@ -461,15 +617,28 @@ public sealed partial class KeyBindingsEditor : UserControl
             return;
         }
 
-        string profile = KeyBindingProfiles.Normalize(App.Settings.KeyBindingProfile);
-        SwitchToCustom();
-        _bindings = KeyBindings.CreateProfileDefaults(profile);
-        Persist();
-        Reload();
+        _bindings = KeyBindings.CreateProfileDefaults(KeyBindingProfiles.Default);
+        MarkDirty();
+        BuildActionList();
+        SelectAction(_selectedAction);
         StatusText.Text = Loc.T("keybindings.resetAllDone");
     }
 
-    private void OnProfileChanged(object sender, SelectionChangedEventArgs e)
+    private void OnSaveClick(object sender, RoutedEventArgs e)
+    {
+        if (IsBuiltInProfile(CurrentProfile))
+        {
+            StatusText.Text = Loc.T("keybindings.builtInHint");
+            return;
+        }
+
+        Persist();
+        _dirty = false;
+        UpdateProfileState();
+        StatusText.Text = Loc.T("keybindings.saved");
+    }
+
+    private async void OnProfileChanged(object sender, SelectionChangedEventArgs e)
     {
         if (_loading || ProfileBox.SelectedIndex < 0)
         {
@@ -477,33 +646,98 @@ public sealed partial class KeyBindingsEditor : UserControl
         }
 
         List<string> names = ProfileNames();
-        string profile = names[Math.Clamp(ProfileBox.SelectedIndex, 0, names.Count - 1)];
-        if (string.Equals(KeyBindingProfiles.Normalize(App.Settings.KeyBindingProfile), profile, StringComparison.Ordinal))
+        int targetIndex = Math.Clamp(ProfileBox.SelectedIndex, 0, names.Count - 1);
+        string target = names[targetIndex];
+        string current = CurrentProfile;
+        if (string.Equals(current, target, StringComparison.Ordinal))
         {
             return;
         }
 
-        StopRecording(clearStatus: false);
-        SaveCurrentUserProfile();
-        SetProfile(profile, persist: true);
-        KeyBindingUserProfile? saved = FindUserProfile(profile);
-        if (saved is not null)
+        if (_dirty)
         {
-            App.Settings.KeyBindings = saved.Bindings
-                .Select(binding => new KeyBindingSetting(binding.Action, binding.Chord))
-                .ToList();
+            bool? save = await ShowUnsavedDialogAsync();
+            if (save is null)
+            {
+                _loading = true;
+                try
+                {
+                    ProfileBox.SelectedIndex = IndexOfProfile(current);
+                }
+                finally
+                {
+                    _loading = false;
+                }
+
+                return;
+            }
+
+            if (save == true)
+            {
+                Persist();
+            }
+
+            _dirty = false;
         }
 
-        _bindings = KeyBindings.Resolve(App.Settings.KeyBindings, App.Settings.KeyBindingProfile).ToList();
-        App.SaveSettings();
-        BuildActionList();
-        SelectAction(_selectedAction);
-        StatusText.Text = Loc.F("keybindings.profileChanged", ProfileBox.Items[ProfileBox.SelectedIndex]);
+        _loading = true;
+        try
+        {
+            StopRecording(clearStatus: false);
+            SaveCurrentUserProfile();
+            SetProfileCore(target);
+            KeyBindingUserProfile? saved = FindUserProfile(target);
+            App.Settings.KeyBindings = saved is null
+                ? new List<KeyBindingSetting>()
+                : saved.Bindings
+                    .Select(binding => new KeyBindingSetting(binding.Action, binding.Chord))
+                    .ToList();
+            App.Settings.KeyBindingProfile = target;
+            _saving = true;
+            try
+            {
+                App.SaveSettings();
+            }
+            finally
+            {
+                _saving = false;
+            }
+
+            _bindings = KeyBindings.Resolve(App.Settings.KeyBindings, target).ToList();
+            _dirty = false;
+            BuildActionList();
+            SelectAction(_selectedAction);
+        }
+        finally
+        {
+            _loading = false;
+        }
+
+        UpdateProfileState();
+        StatusText.Text = Loc.F("keybindings.profileChanged", ProfileBox.Items[targetIndex]);
     }
 
-    private async void OnNewProfileClick(object sender, RoutedEventArgs e)
+    private async void OnCopyToCustomClick(object sender, RoutedEventArgs e)
     {
-        string? name = await PromptProfileNameAsync("新建按键方案", "自定义方案");
+        string source = CurrentProfile;
+        if (!IsBuiltInProfile(source))
+        {
+            return;
+        }
+
+        CopyToCustom();
+        StatusText.Text = Loc.F(
+            "keybindings.copiedToCustom",
+            IsEnglish ? KeyBindingProfiles.LabelEnglish(source) : KeyBindingProfiles.Label(source));
+    }
+
+    private void OnNewProfileClick(object sender, RoutedEventArgs e) => _ = CreateProfileAsync();
+
+    private async Task CreateProfileAsync()
+    {
+        string? name = await PromptProfileNameAsync(
+            IsEnglish ? "New keyboard profile" : "新建按键方案",
+            IsEnglish ? "Custom profile" : "自定义方案");
         if (string.IsNullOrWhiteSpace(name))
         {
             return;
@@ -511,8 +745,13 @@ public sealed partial class KeyBindingsEditor : UserControl
 
         if (ProfileNames().Contains(name, StringComparer.OrdinalIgnoreCase))
         {
-            StatusText.Text = "已存在同名方案。";
+            StatusText.Text = IsEnglish ? "A profile with that name already exists." : "已存在同名方案。";
             return;
+        }
+
+        if (_dirty)
+        {
+            Persist();
         }
 
         var profile = new KeyBindingUserProfile
@@ -524,25 +763,33 @@ public sealed partial class KeyBindingsEditor : UserControl
         };
         App.Settings.UserKeyProfiles.Add(profile);
         App.Settings.KeyBindingProfile = name;
-        App.Settings.KeyBindings = profile.Bindings.ToList();
+        App.Settings.KeyBindings = profile.Bindings
+            .Select(binding => new KeyBindingSetting(binding.Action, binding.Chord))
+            .ToList();
+        _dirty = false;
         App.SaveSettings();
         BuildProfileChoices();
-        Reload();
-        ProfileBox.SelectedIndex = IndexOfProfile(name);
-        StatusText.Text = $"已创建方案“{name}”。";
+        _bindings = KeyBindings.Resolve(App.Settings.KeyBindings, name).ToList();
+        BuildActionList();
+        SelectAction(_selectedAction);
+        StatusText.Text = IsEnglish
+            ? $"Profile “{name}” created."
+            : $"已创建方案“{name}”。";
     }
 
     private async void OnRenameProfileClick(object sender, RoutedEventArgs e)
     {
-        string current = KeyBindingProfiles.Normalize(App.Settings.KeyBindingProfile);
+        string current = CurrentProfile;
         KeyBindingUserProfile? saved = FindUserProfile(current);
         if (saved is null)
         {
-            StatusText.Text = "默认和 IINA 方案不能重命名；请先新建自定义方案。";
+            StatusText.Text = Loc.T("keybindings.builtInHint");
             return;
         }
 
-        string? name = await PromptProfileNameAsync("重命名按键方案", saved.Name);
+        string? name = await PromptProfileNameAsync(
+            IsEnglish ? "Rename keyboard profile" : "重命名按键方案",
+            saved.Name);
         if (string.IsNullOrWhiteSpace(name) ||
             string.Equals(name, saved.Name, StringComparison.Ordinal))
         {
@@ -551,7 +798,7 @@ public sealed partial class KeyBindingsEditor : UserControl
 
         if (ProfileNames().Contains(name, StringComparer.OrdinalIgnoreCase))
         {
-            StatusText.Text = "已存在同名方案。";
+            StatusText.Text = IsEnglish ? "A profile with that name already exists." : "已存在同名方案。";
             return;
         }
 
@@ -559,28 +806,33 @@ public sealed partial class KeyBindingsEditor : UserControl
         App.Settings.KeyBindingProfile = name;
         App.SaveSettings();
         BuildProfileChoices();
-        Reload();
-        ProfileBox.SelectedIndex = IndexOfProfile(name);
-        StatusText.Text = $"方案已重命名为“{name}”。";
+        StatusText.Text = IsEnglish
+            ? $"Profile renamed to “{name}”."
+            : $"方案已重命名为“{name}”。";
     }
 
     private void OnDeleteProfileClick(object sender, RoutedEventArgs e)
     {
-        string current = KeyBindingProfiles.Normalize(App.Settings.KeyBindingProfile);
+        string current = CurrentProfile;
         KeyBindingUserProfile? saved = FindUserProfile(current);
         if (saved is null)
         {
-            StatusText.Text = "默认和 IINA 方案不能删除。";
+            StatusText.Text = Loc.T("keybindings.builtInHint");
             return;
         }
 
         App.Settings.UserKeyProfiles.Remove(saved);
-        App.Settings.KeyBindingProfile = KeyBindingProfiles.Default;
+        App.Settings.KeyBindingProfile = KeyBindingProfiles.Wiina;
         App.Settings.KeyBindings.Clear();
+        _dirty = false;
         App.SaveSettings();
         BuildProfileChoices();
-        Reload();
-        StatusText.Text = $"已删除方案“{saved.Name}”。";
+        _bindings = KeyBindings.Resolve(App.Settings.KeyBindings, App.Settings.KeyBindingProfile).ToList();
+        BuildActionList();
+        SelectAction(_selectedAction);
+        StatusText.Text = IsEnglish
+            ? $"Profile “{saved.Name}” deleted."
+            : $"已删除方案“{saved.Name}”。";
     }
 
     private async Task<string?> PromptProfileNameAsync(string title, string initial)
@@ -591,8 +843,8 @@ public sealed partial class KeyBindingsEditor : UserControl
             XamlRoot = XamlRoot,
             Title = title,
             Content = box,
-            PrimaryButtonText = "确定",
-            CloseButtonText = "取消",
+            PrimaryButtonText = Loc.T("common.ok"),
+            CloseButtonText = Loc.T("common.cancel"),
             DefaultButton = ContentDialogButton.Primary,
         };
         if (await dialog.ShowAsync() != ContentDialogResult.Primary)
@@ -603,22 +855,13 @@ public sealed partial class KeyBindingsEditor : UserControl
         return box.Text.Trim();
     }
 
-    private void SwitchToCustom()
+    private void CopyToCustom()
     {
-        string current = KeyBindingProfiles.Normalize(App.Settings.KeyBindingProfile);
-        if (!string.Equals(current, KeyBindingProfiles.Default, StringComparison.Ordinal) &&
-            !string.Equals(current, KeyBindingProfiles.Iina, StringComparison.Ordinal))
-        {
-            return;
-        }
-
-        // Built-ins stay immutable. The first edit forks them into a real,
-        // renameable user profile instead of the old undeletable "Custom".
-        string name = "自定义";
+        string name = IsEnglish ? "Custom" : "自定义";
         int suffix = 2;
         while (ProfileNames().Contains(name, StringComparer.OrdinalIgnoreCase))
         {
-            name = $"自定义 {suffix++}";
+            name = IsEnglish ? $"Custom {suffix++}" : $"自定义 {suffix++}";
         }
 
         var profile = new KeyBindingUserProfile
@@ -630,13 +873,20 @@ public sealed partial class KeyBindingsEditor : UserControl
         };
         App.Settings.UserKeyProfiles.Add(profile);
         App.Settings.KeyBindingProfile = name;
-        App.Settings.KeyBindings = profile.Bindings.ToList();
+        App.Settings.KeyBindings = profile.Bindings
+            .Select(binding => new KeyBindingSetting(binding.Action, binding.Chord))
+            .ToList();
+        _dirty = false;
+        App.SaveSettings();
         BuildProfileChoices();
         ProfileBox.SelectedIndex = IndexOfProfile(name);
-        App.SaveSettings();
+        _bindings = KeyBindings.Resolve(App.Settings.KeyBindings, name).ToList();
+        BuildActionList();
+        SelectAction(_selectedAction);
+        UpdateProfileState();
     }
 
-    private void SetProfile(string profile, bool persist)
+    private void SetProfileCore(string profile)
     {
         App.Settings.KeyBindingProfile = profile;
         _loading = true;
@@ -648,11 +898,6 @@ public sealed partial class KeyBindingsEditor : UserControl
         {
             _loading = false;
         }
-
-        if (persist)
-        {
-            App.SaveSettings();
-        }
     }
 
     private void Persist()
@@ -661,14 +906,21 @@ public sealed partial class KeyBindingsEditor : UserControl
             .Select(binding => new KeyBindingSetting(binding.Action, binding.Chord))
             .ToList();
         SaveCurrentUserProfile();
-        App.SaveSettings();
+        _saving = true;
+        try
+        {
+            App.SaveSettings();
+        }
+        finally
+        {
+            _saving = false;
+        }
     }
 
     private void SaveCurrentUserProfile()
     {
-        string current = KeyBindingProfiles.Normalize(App.Settings.KeyBindingProfile);
-        if (string.Equals(current, KeyBindingProfiles.Default, StringComparison.Ordinal) ||
-            string.Equals(current, KeyBindingProfiles.Iina, StringComparison.Ordinal))
+        string current = CurrentProfile;
+        if (IsBuiltInProfile(current))
         {
             return;
         }
@@ -705,10 +957,15 @@ public sealed partial class KeyBindingsEditor : UserControl
                 return;
             }
 
-            SwitchToCustom();
+            if (IsBuiltInProfile(CurrentProfile))
+            {
+                CopyToCustom();
+            }
+
             _bindings = imported.ToList();
-            Persist();
-            Reload();
+            MarkDirty();
+            BuildActionList();
+            SelectAction(_selectedAction);
             StatusText.Text = string.IsNullOrWhiteSpace(error)
                 ? Loc.F("keybindings.imported", imported.Count)
                 : Loc.F("keybindings.importedPartial", imported.Count, error);
@@ -744,9 +1001,21 @@ public sealed partial class KeyBindingsEditor : UserControl
         }
     }
 
+    private void OnSearchChanged(object sender, TextChangedEventArgs e)
+    {
+        _search = SearchBox.Text.Trim();
+        string? selected = _selectedAction;
+        BuildActionList();
+        if (selected is not null &&
+            _rows.Any(row => string.Equals(row.Action, selected, StringComparison.Ordinal)))
+        {
+            SelectAction(selected);
+        }
+    }
+
     private void OnSettingsChanged()
     {
-        if (_recording)
+        if (_recording || _saving || _dirty)
         {
             return;
         }
@@ -755,6 +1024,7 @@ public sealed partial class KeyBindingsEditor : UserControl
         _bindings = KeyBindings.Resolve(App.Settings.KeyBindings, App.Settings.KeyBindingProfile).ToList();
         BuildActionList();
         SelectAction(selected);
+        UpdateProfileState();
     }
 
     private void OnLanguageChanged(object? sender, EventArgs e)
@@ -767,8 +1037,34 @@ public sealed partial class KeyBindingsEditor : UserControl
     private void UpdateStaticLabels()
     {
         ProfileLabel.Text = Loc.T("keybindings.profile");
-        ProfileHintLabel.Text = Loc.T("keybindings.profileHint");
         SectionLabel.Text = Loc.T("keybindings.section");
+        SearchBox.PlaceholderText = Loc.T("keybindings.searchPlaceholder");
+        UpdateProfileState();
+    }
+
+    private async Task<bool?> ShowUnsavedDialogAsync()
+    {
+        if (XamlRoot is null)
+        {
+            return false;
+        }
+
+        var dialog = new ContentDialog
+        {
+            XamlRoot = XamlRoot,
+            Title = Loc.T("keybindings.unsavedTitle"),
+            Content = Loc.T("keybindings.unsavedBody"),
+            PrimaryButtonText = Loc.T("common.save"),
+            SecondaryButtonText = Loc.T("keybindings.discard"),
+            CloseButtonText = Loc.T("common.cancel"),
+            DefaultButton = ContentDialogButton.Primary,
+        };
+        ContentDialogResult result = await dialog.ShowAsync();
+        return result switch
+        {
+            ContentDialogResult.Primary => true,
+            ContentDialogResult.Secondary => false,
+            _ => null,
+        };
     }
 }
-
