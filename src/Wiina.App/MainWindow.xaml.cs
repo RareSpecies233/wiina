@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Globalization;
 using System.IO;
 using System.Linq;
@@ -54,6 +55,9 @@ public sealed partial class MainWindow : Window
     private readonly DispatcherQueueTimer _resizeTimer;
     private readonly DispatcherQueueTimer _autoHideTimer;
     private readonly OscVisibilityController _oscState = new();
+
+    /// <summary>Monotonic clock for the OSC idle rules (unaffected by system time changes).</summary>
+    private readonly Stopwatch _idleClock = Stopwatch.StartNew();
     private readonly OscViewModel _oscVm = new();
     private readonly SidebarState _sidebar = new();
     private AppSettings _settings;
@@ -65,9 +69,17 @@ public sealed partial class MainWindow : Window
     private bool _closed;
     private bool _compact;
     private bool _titleBarVisible = true;
+
+    /// <summary>
+    /// Fullscreen fades the OSC without the titlebar, so the titlebar opacity is
+    /// pinned to zero while it owns the screen; leaving fullscreen restores the
+    /// opacity that belongs to the current chrome state.
+    /// </summary>
+    private bool _titleBarPinnedByFullscreen;
     private bool _sidebarResizing;
     private bool _updatingSidebar;
     private bool _oscDragging;
+    private Point? _pointerPressPosition;
     private bool _seeking;
     private bool _wasPlayingBeforeSeek;
     private bool _chromeShown = true;
@@ -202,6 +214,11 @@ public sealed partial class MainWindow : Window
         VideoFrame.SizeChanged += OnVideoFrameSizeChanged;
         RootGrid.SizeChanged += OnRootSizeChanged;
         RootGrid.Loaded += OnRootLoaded;
+        // The floating OSC placement only follows the sidebar edge; the panel
+        // may stay open without moving the controls when it does not overlap
+        // them (see ApplyOscPosition).
+        SidebarLeading.SizeChanged += (_, _) => ApplyOscPosition();
+        SidebarTrailing.SizeChanged += (_, _) => ApplyOscPosition();
         // Sliders capture the pointer, so their release may not bubble as a
         // normal event. Listen with handledEventsToo to re-arm auto-hide after
         // any drag that ended (inside or outside the window).
@@ -209,11 +226,34 @@ public sealed partial class MainWindow : Window
             UIElement.PointerReleasedEvent,
             new PointerEventHandler(OnRootPointerReleased),
             handledEventsToo: true);
+        // The click-to-hide check needs the press origin: a click is only a
+        // click when the pointer did not travel between press and release.
+        RootGrid.AddHandler(
+            UIElement.PointerPressedEvent,
+            new PointerEventHandler(OnRootPointerPressed),
+            handledEventsToo: true);
         Activated += (_, args) =>
         {
             if (args.WindowActivationState == WindowActivationState.Deactivated)
             {
                 CloseApplicationMenu();
+
+                // Losing focus keeps the chrome only in the docked layout and
+                // while a sidebar is in use. Flyouts close asynchronously on
+                // focus loss, so hide after the activation event has unwound.
+                if (OscVisibilityController.ShouldHideOnDeactivate(
+                        _settings.Layout == WindowLayoutMode.Docked,
+                        HasVisibleSidebar))
+                {
+                    DispatcherQueue.TryEnqueue(() =>
+                    {
+                        if (!_closed)
+                        {
+                            HideChrome(force: true);
+                        }
+                    });
+                }
+
                 return;
             }
 
@@ -234,6 +274,8 @@ public sealed partial class MainWindow : Window
         ApplyTheme();
         ApplyLayout();
         _oscState.AutoHideEnabled = _settings.OscAutoHide;
+        _oscState.AutoHideSeconds = _settings.OscAutoHideSeconds;
+        _autoHideTimer.Interval = TimeSpan.FromSeconds(_oscState.AutoHideSeconds);
         ApplyStage5Settings();
 
         if (AppWindow.Presenter is OverlappedPresenter presenter)
@@ -354,19 +396,29 @@ public sealed partial class MainWindow : Window
         ResetAutoHideTimer();
     }
 
+    /// <summary>
+    /// The overlay chrome belongs to the normal window and to fullscreen, where
+    /// it floats over the video and must still auto-hide. Mini and PiP layouts
+    /// draw their own surfaces and ignore the player chrome.
+    /// </summary>
+    private bool ChromeInteractionEnabled =>
+        _mode.Current is PlayerMode.Normal or PlayerMode.Fullscreen;
+
     private void OnRootPointerEntered(object sender, PointerRoutedEventArgs e)
     {
-        if (_mode.Current != PlayerMode.Normal)
+        if (!ChromeInteractionEnabled)
         {
             return;
         }
 
+        Point point = e.GetCurrentPoint(RootGrid).Position;
+        _oscState.EnterWindow(point.X, point.Y, _idleClock.Elapsed);
         ShowChrome();
     }
 
     private void OnRootPointerMoved(object sender, PointerRoutedEventArgs e)
     {
-        if (_mode.Current != PlayerMode.Normal)
+        if (!ChromeInteractionEnabled)
         {
             return;
         }
@@ -374,24 +426,20 @@ public sealed partial class MainWindow : Window
         Point point = e.GetCurrentPoint(RootGrid).Position;
         _pointerOverChrome = IsOverChrome(point);
 
+        // Sub-threshold jitter (a hand resting on the mouse) is not activity:
+        // the OSC must still fade out, even with the pointer sitting on it.
+        if (!_oscState.PointerMoved(point.X, point.Y, _idleClock.Elapsed))
+        {
+            return;
+        }
+
         if (!_chromeShown)
         {
             ShowChrome();
         }
-
-        if (_pointerOverChrome || _oscDragging || _seeking)
-        {
-            _autoHideTimer.Stop();
-        }
         else
         {
             ResetAutoHideTimer();
-        }
-
-        if (!_chromeShown)
-        {
-            // WinUI restores the default cursor on pointer moves.
-            WindowInterop.SetCursorVisible(false);
         }
     }
 
@@ -419,6 +467,7 @@ public sealed partial class MainWindow : Window
         }
 
         _pointerOverChrome = false;
+        _oscState.ResetPointerAnchor();
         _autoHideTimer.Stop();
         CloseApplicationMenu();
 
@@ -434,14 +483,55 @@ public sealed partial class MainWindow : Window
         HideChrome(force: true);
     }
 
-    private void OnRootPointerReleased(object sender, PointerRoutedEventArgs e)
+    private void OnRootPointerPressed(object sender, PointerRoutedEventArgs e)
     {
-        if (_mode.Current != PlayerMode.Normal)
+        if (_mode.Current is not (PlayerMode.Normal or PlayerMode.Fullscreen))
         {
+            _pointerPressPosition = null;
             return;
         }
 
-        _pointerOverChrome = IsOverChrome(e.GetCurrentPoint(RootGrid).Position);
+        var point = e.GetCurrentPoint(RootGrid);
+        _pointerPressPosition = point.Properties.IsLeftButtonPressed
+            ? point.Position
+            : null;
+    }
+
+    private void OnRootPointerReleased(object sender, PointerRoutedEventArgs e)
+    {
+        if (_mode.Current is not (PlayerMode.Normal or PlayerMode.Fullscreen))
+        {
+            _pointerPressPosition = null;
+            return;
+        }
+
+        Point point = e.GetCurrentPoint(RootGrid).Position;
+        _pointerOverChrome = IsOverChrome(point);
+
+        Point? press = _pointerPressPosition;
+        _pointerPressPosition = null;
+        bool isDrag = press is not { } start ||
+            Math.Abs(point.X - start.X) > OscVisibilityController.MovementThreshold ||
+            Math.Abs(point.Y - start.Y) > OscVisibilityController.MovementThreshold;
+
+        // A plain left click on the video dismisses the chrome; clicks on the
+        // chrome itself, drags and flyout clicks keep it available.
+        // The HideOsc single-click action already toggles the chrome on the
+        // click timer, so an immediate hide here would fight that toggle.
+        if (_settings.SingleClickAction != SingleClickAction.HideOsc &&
+            !_suppressClick &&
+            !_windowDragging &&
+            _settings.Layout != WindowLayoutMode.Docked &&
+            _openFlyoutCount == 0 &&
+            _oscState.ShouldHideOnClick(
+                chromeVisible: _chromeShown,
+                overChrome: _pointerOverChrome,
+                isDrag: isDrag))
+        {
+            HideChrome(force: true);
+            return;
+        }
+
         ResetAutoHideTimer();
     }
 
@@ -500,39 +590,53 @@ public sealed partial class MainWindow : Window
     private void OnAutoHideTick(DispatcherQueueTimer sender, object args)
     {
         _autoHideTimer.Stop();
-        if (_pointerOverChrome || _oscDragging || _seeking ||
-            _openFlyoutCount > 0 || WindowInterop.IsLeftButtonDown() ||
-            HasVisibleSidebar || _oscState.IsSuppressed)
+        if (_seeking ||
+            _openFlyoutCount > 0 ||
+            WindowInterop.IsLeftButtonDown())
         {
             return;
         }
 
-        HideChrome();
-    }
-
-    private void OnChromePointerEntered(object sender, PointerRoutedEventArgs e)
-    {
-        _autoHideTimer.Stop();
-        _oscState.Show();
-        FadeChrome(1, hitTest: true);
-        _autoHideTimer.Stop();
-    }
-
-    private void OnChromePointerExited(object sender, PointerRoutedEventArgs e)
-    {
-        _autoHideTimer.Stop();
-        if (_oscState.AutoHideEnabled &&
-            !_oscState.IsSuppressed &&
-            _openFlyoutCount == 0 &&
-            !HasVisibleSidebar)
+        // The idle clock, not the timer tick, is the source of truth: a resting
+        // pointer over the chrome (fullscreen bottom bar) must not keep the OSC
+        // visible forever.
+        if (_oscState.ShouldHideOnIdle(_idleClock.Elapsed))
         {
+            HideChrome();
+            return;
+        }
+
+        // Dispatcher timers may fire a hair before the interval elapses. If the
+        // idle clock is not there yet, re-arm for the remainder instead of
+        // leaving the chrome up until the next pointer move (which may never
+        // come - the old "OSC stays forever" bug).
+        if (_chromeShown && _oscState.CanHide && !HasVisibleSidebar)
+        {
+            TimeSpan remaining =
+                TimeSpan.FromSeconds(_oscState.AutoHideSeconds) -
+                (_idleClock.Elapsed - _oscState.LastActivity);
+            _autoHideTimer.Interval = remaining < TimeSpan.FromMilliseconds(50)
+                ? TimeSpan.FromMilliseconds(50)
+                : remaining;
             _autoHideTimer.Start();
         }
     }
 
+    private void OnChromePointerEntered(object sender, PointerRoutedEventArgs e)
+    {
+        // Entering the chrome is activity, but it must not park the timer: the
+        // chrome still fades out under a resting pointer.
+        ShowChrome();
+    }
+
+    private void OnChromePointerExited(object sender, PointerRoutedEventArgs e)
+    {
+        ResetAutoHideTimer();
+    }
+
     private void ShowChrome()
     {
-        if (_mode.Current != PlayerMode.Normal)
+        if (!ChromeInteractionEnabled)
         {
             return;
         }
@@ -552,7 +656,7 @@ public sealed partial class MainWindow : Window
 
     private void HideChrome(bool force = false)
     {
-        if (_mode.Current != PlayerMode.Normal)
+        if (!ChromeInteractionEnabled)
         {
             return;
         }
@@ -595,7 +699,7 @@ public sealed partial class MainWindow : Window
     private void ResetAutoHideTimer()
     {
         _autoHideTimer.Stop();
-        if (_mode.Current != PlayerMode.Normal ||
+        if (!ChromeInteractionEnabled ||
             _settings.Layout == WindowLayoutMode.Docked ||
             !_oscState.AutoHideEnabled ||
             _oscDragging ||
@@ -604,17 +708,21 @@ public sealed partial class MainWindow : Window
             _openFlyoutCount > 0 ||
             WindowInterop.IsLeftButtonDown() ||
             HasVisibleSidebar ||
-            _pointerOverChrome)
+            _oscState.IsSuppressed ||
+            !_chromeShown)
         {
             return;
         }
 
+        _oscState.AutoHideSeconds = _settings.OscAutoHideSeconds;
+        _oscState.MarkActivity(_idleClock.Elapsed);
+        _autoHideTimer.Interval = TimeSpan.FromSeconds(_oscState.AutoHideSeconds);
         _autoHideTimer.Start();
     }
 
     private void FadeChrome(double opacity, bool hitTest)
     {
-        if (_mode.Current != PlayerMode.Normal)
+        if (!ChromeInteractionEnabled)
         {
             return;
         }
@@ -632,6 +740,7 @@ public sealed partial class MainWindow : Window
         {
             TitleBar.Opacity = 0;
             TitleBar.IsHitTestVisible = false;
+            _titleBarPinnedByFullscreen = true;
         }
         else
         {
@@ -904,13 +1013,33 @@ public sealed partial class MainWindow : Window
             return;
         }
 
-        x = Math.Clamp(x, 0, availableWidth - oscWidth);
         y = Math.Clamp(y, 0, availableHeight - oscHeight);
+
+        // Dragging honours the same sidebar rule as ApplyOscPosition: the panel
+        // only blocks the area it actually covers.
+        double minX = 0;
+        double maxX = availableWidth - oscWidth;
+        (double leading, double trailing) = VisibleSidebarInsets();
+        if ((leading > 0 || trailing > 0) &&
+            y + oscHeight > SidebarPanelTop() + SidebarOverlapTolerance)
+        {
+            double sidebarMinX = leading > 0 ? leading + OscSidebarGap : 0;
+            double sidebarMaxX = (trailing > 0
+                ? availableWidth - trailing - OscSidebarGap
+                : availableWidth) - oscWidth;
+            if (sidebarMaxX >= sidebarMinX)
+            {
+                minX = sidebarMinX;
+                maxX = sidebarMaxX;
+            }
+        }
+
+        x = Math.Clamp(x, minX, maxX);
 
         // Snap the horizontal centre within +-5 px (spec §5.6).
         double centerX = x + oscWidth / 2;
         double snappedCenter = OscPositioning.SnapToCenter(centerX, availableWidth, 5);
-        x = Math.Clamp(snappedCenter - oscWidth / 2, 0, availableWidth - oscWidth);
+        x = Math.Clamp(snappedCenter - oscWidth / 2, minX, maxX);
 
         Canvas.SetLeft(OscFloating, x);
         Canvas.SetTop(OscFloating, y);
@@ -962,10 +1091,53 @@ public sealed partial class MainWindow : Window
             OscPositioning.DenormalizeCenter(_settings.OscY, height),
             oscHeight,
             height);
+        double left = centerX - oscWidth / 2;
+        double top = centerY - oscHeight / 2;
 
-        Canvas.SetLeft(OscFloating, centerX - oscWidth / 2);
-        Canvas.SetTop(OscFloating, centerY - oscHeight / 2);
+        // A sidebar displaces the floating OSC only when the two rectangles
+        // actually intersect. Opening a panel must not make the controls jump
+        // across the video when they sit above it or beside it.
+        (double leading, double trailing) = VisibleSidebarInsets();
+        if ((leading > 0 || trailing > 0) &&
+            top + oscHeight > SidebarPanelTop() + SidebarOverlapTolerance)
+        {
+            double minLeft = leading > 0 ? leading + OscSidebarGap : 0;
+            double maxLeft = (trailing > 0
+                ? width - trailing - OscSidebarGap
+                : width) - oscWidth;
+            if (maxLeft >= minLeft)
+            {
+                left = Math.Clamp(left, minLeft, maxLeft);
+            }
+        }
+
+        Canvas.SetLeft(OscFloating, left);
+        Canvas.SetTop(OscFloating, top);
     }
+
+    /// <summary>Gap kept between the floating OSC and an open sidebar panel.</summary>
+    private const double OscSidebarGap = 8;
+
+    /// <summary>Vertical slack when testing whether the sidebar would cover the OSC.</summary>
+    private const double SidebarOverlapTolerance = 0.5;
+
+    /// <summary>Widths of the sidebar panels that are currently on screen.</summary>
+    private (double Leading, double Trailing) VisibleSidebarInsets()
+    {
+        double leading = SidebarLeading.Visibility == Visibility.Visible &&
+            SidebarLeading.ActualWidth > 0
+            ? SidebarLeading.ActualWidth
+            : 0;
+        double trailing = SidebarTrailing.Visibility == Visibility.Visible &&
+            SidebarTrailing.ActualWidth > 0
+            ? SidebarTrailing.ActualWidth
+            : 0;
+        return (leading, trailing);
+    }
+
+    /// <summary>Top edge of the sidebar panels (they start under the titlebar).</summary>
+    private double SidebarPanelTop() =>
+        Math.Max(0, Math.Max(SidebarLeading.Margin.Top, SidebarTrailing.Margin.Top));
 
     private void SaveOscPosition()
     {
@@ -1243,6 +1415,18 @@ public sealed partial class MainWindow : Window
             AppWindow.TitleBar.PreferredHeightOption = TitleBarHeightOption.Collapsed;
         }
         TitleBar.Visibility = Visibility.Visible;
+
+        // Fullscreen pinned the titlebar transparent; once the overlapped
+        // presenter is back, the titlebar must follow the chrome visibility again
+        // (its own fades set the matching opacity and hit testing).
+        if (visible && _titleBarPinnedByFullscreen &&
+            AppWindow.Presenter.Kind != AppWindowPresenterKind.FullScreen)
+        {
+            _titleBarPinnedByFullscreen = false;
+            TitleBar.Opacity = 1;
+            TitleBar.IsHitTestVisible = true;
+        }
+
         OscTop.Margin = new Thickness(0, visible ? 40 : 0, 0, 0);
         UpdateSidebarMargins();
     }
@@ -1328,12 +1512,11 @@ public sealed partial class MainWindow : Window
         OscBottom.Visibility = useBottomOsc ? Visibility.Visible : Visibility.Collapsed;
 
         bool sidebarVisible = !_compact && HasVisibleSidebar;
-        bool showLeading = sidebarVisible && _sidebar.IsVisible(SidebarSide.Leading);
-        bool showTrailing = sidebarVisible && _sidebar.IsVisible(SidebarSide.Trailing);
 
         // The floating OSC stays available while a sidebar is open (the sidebar
-        // suppresses auto-hide rather than hiding the controls); it is kept
-        // inside the free area so it never sits under the panel.
+        // suppresses auto-hide rather than hiding the controls). Placement is
+        // resolved per OSC in ApplyOscPosition: the panel only pushes the
+        // floating controls when it would actually cover them.
         OscFloating.Visibility = !docked && !_compact && !topOsc &&
             _settings.OscPosition == OscPosition.Floating
             ? Visibility.Visible
@@ -1344,11 +1527,7 @@ public sealed partial class MainWindow : Window
 
         UpdateDockedInsets();
         OscCanvas.Visibility = Visibility.Visible;
-        OscCanvas.Margin = new Thickness(
-            showLeading ? _sidebar.Width : 0,
-            0,
-            showTrailing ? _sidebar.Width : 0,
-            0);
+        OscCanvas.Margin = new Thickness(0);
 
         if (docked)
         {

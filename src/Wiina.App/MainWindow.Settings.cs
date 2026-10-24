@@ -25,6 +25,14 @@ public sealed partial class MainWindow
 {
     private readonly List<MpvAudioDevice> _audioDevices = new();
 
+    /// <summary>
+    /// Audio output devices libmpv currently reports. The settings window renders
+    /// its 音频输出设备 dropdown from this list; it falls back to the last snapshot
+    /// while the player is starting up (or when no player exists yet).
+    /// </summary>
+    public IReadOnlyList<MpvAudioDevice> AudioDeviceList =>
+        _player?.GetAudioDevices() is { Count: > 0 } live ? live : _audioDevices;
+
     public string? CurrentTitle => _currentTitle;
 
     /// <summary>Opens files/URLs coming from the welcome window or another window.</summary>
@@ -98,6 +106,13 @@ public sealed partial class MainWindow
                 break;
             case "ui.osc-autohide":
                 _oscState.AutoHideEnabled = _settings.OscAutoHide;
+                ResetAutoHideTimer();
+                break;
+            case "ui.osc-autohide-seconds":
+                // Live apply: restart the idle window with the new delay so
+                // the next fade-out already uses it.
+                _oscState.AutoHideSeconds = _settings.OscAutoHideSeconds;
+                _autoHideTimer.Interval = TimeSpan.FromSeconds(_oscState.AutoHideSeconds);
                 ResetAutoHideTimer();
                 break;
             case "ui.blur-mode":

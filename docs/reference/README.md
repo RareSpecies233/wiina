@@ -6,6 +6,10 @@
 
 - `IINA-macOS-UI-复刻规格.md` — 由维护者提供的规格（1230 行），基于
   [`iina/iina`](https://github.com/iina/iina) `develop` @ `5c15f81568b1f61f85219302843018e3c43c8d3b`（2026-10-16）。
+- `settings-layout.md` — 当前设置界面的完整快照（12 页 / 122 行，含设置可打开的全部窗口与
+  快速设置侧栏），供下一版重排设置菜单时对照；修改设置结构后需同步更新。
+- `iina-thumbnails.md` — IINA 时间轴缩略图的实现调研与 Wiina 现状/差距分析（只读研究，
+  对齐工作尚未实施）。
 
 ## 来源与许可证
 

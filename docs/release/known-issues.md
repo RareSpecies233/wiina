@@ -1,4 +1,4 @@
-# Known issues — Wiina v1.2.5
+# Known issues — Wiina v1.2.6
 
 Nothing here is hidden; these are known limitations of the v1 build.
 
@@ -17,6 +17,49 @@ Nothing here is hidden; these are known limitations of the v1 build.
   `installer/wiina.iss` into a per-user installer when Inno Setup 6 is
   available. No MSIX package and no auto-update are produced. See
   [../installer.md](../installer.md).
+
+## OSC auto-hide and placement
+
+- **The delay is configurable only in non-docked layouts.** Settings → 界面 →
+  窗口与 OSC → 自动隐藏延时 accepts 0.5–30 s (default 2.5). Docked layout keeps
+  its titlebar and bottom bar permanently visible by design.
+- **Sub-5-DIP jitter does not count as activity.** A hand resting on the mouse
+  no longer keeps the chrome awake, and a pointer resting over the fullscreen
+  bottom bar hides on schedule. If that is undesirable (screen readers, remote
+  desktop), disable auto-hide instead of holding the pointer over the bar.
+- **Deactivation hides immediately** except in Docked layout or while a sidebar
+  is open. A left click on the video hides the chrome only when press and
+  release stay put; a drag never hides it.
+- **The floating OSC avoids a sidebar only when it would be covered.** The
+  clamp uses the rectangle of the visible leading/trailing panel and an 8 DIP
+  gap; panels that do not vertically overlap the OSC leave it untouched. PiP
+  and mini layouts never show an OSC.
+
+## Timeline thumbnails (research only)
+
+- Wiina builds the scrub preview **live per hover**: a headless libmpv instance
+  seeks to a ~5 s bucket and takes a `screenshot-raw`. There is no disk
+  thumbnail cache, the UI shows a loading placeholder, and non-file sources are
+  skipped (`File.Exists` gate). Each preview costs one seek plus one decode on
+  a background instance, not on the UI thread.
+- IINA instead pre-generates about 100 thumbnails once per file through
+  `FFmpegController`, stores them on disk, and does a nearest-neighbour lookup
+  at hover with no loading state; streams are skipped there too.
+- Adopting the IINA pipeline (pre-generation + cache) is **planned but not
+  implemented**; the research note with file references is
+  [../reference/iina-thumbnails.md](../reference/iina-thumbnails.md).
+
+## Audio output device
+
+- The dropdown is fed by mpv's `audio-device-list`. Before the first player
+  starts it contains only "跟随系统默认"; the refresh button re-reads the cached
+  list rather than polling mpv.
+- A saved device mpv no longer reports is shown as "不可用（<name>）" and kept
+  verbatim until you pick another device, so settings are never silently
+  rewritten.
+- Device labels are mpv's descriptions; the raw name (`wasapi/...` on Windows)
+  is only in the tooltip. Changing devices mid-playback re-initialises the audio
+  output, which can produce a short glitch or a brief silence.
 
 ## Chrome blur over video
 

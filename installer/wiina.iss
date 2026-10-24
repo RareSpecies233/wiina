@@ -24,7 +24,7 @@
 ; language from the Windows UI language and keeps a language drop-down.
 
 #define MyAppName "Wiina"
-#define MyAppVersion "1.2.5"
+#define MyAppVersion "1.2.6"
 #define MyAppPublisher "Wiina contributors"
 #define MyAppUrl "https://github.com/RareSpecies233/wiina"
 #define MyAppExeName "Wiina.exe"

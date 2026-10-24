@@ -1,12 +1,64 @@
 # Wiina release notes
 
 
-Release date (1.2.5): 2026-10-24
+Release date (1.2.6): 2026-10-24
 
 Windows-native, IINA-inspired mpv front end built with WinUI 3, Windows App
 SDK 2.5, and libmpv.
 
-## What's new in 1.2.5
+## What's new in 1.2.6
+
+### The OSC moves only when a panel would cover it
+
+- Opening quick settings, the playlist, chapters or the plugins panel used to
+  re-place the floating OSC unconditionally, even when the panel did not overlap
+  it. The floating OSC is now clamped horizontally only when its rectangle
+  intersects the visible sidebar (8 DIP gap, 0.5 DIP vertical slack), so the
+  controls stay put when the panel sits above or beside them.
+- Dragging the floating OSC and restoring the saved position use the same rule.
+  The docked layout is unchanged: the bottom bar belongs to the layout and still
+  insets by the panel width.
+
+### Auto-hide is driven by an explicit idle clock
+
+- New setting **Settings → 界面 → 窗口与 OSC → 自动隐藏延时**
+  (`ui.osc-autohide-seconds`, 0.5–30 s, default 2.5). It clamps on both the
+  settings model and the state machine.
+- Pointer activity is timestamped on a monotonic `Stopwatch`. Moves smaller than
+  **5 DIP on both axes** are ignored: they neither show the chrome nor reset the
+  idle countdown, so a hand resting on the mouse cannot keep the OSC alive.
+- The idle clock — not the timer tick — decides the fade. A resting pointer over
+  the bottom bar in fullscreen now hides on schedule, which fixes the
+  fullscreen "OSC never disappears" bug.
+- Losing focus hides immediately unless the layout is Docked or a sidebar is
+  open. A left click on the video hides visible chrome only when the press and
+  release did not travel; Docked layout never auto-hides; PiP and mini ignore
+  the player chrome entirely.
+
+### Audio output device is a real dropdown
+
+- Settings → 音频 → 音量与输出 now lists the devices libmpv reports
+  (`audio-device-list`): "跟随系统默认" first, then human-readable descriptions
+  with the raw mpv name in the tooltip (duplicated descriptions are
+  disambiguated with the name), plus a refresh button.
+- A saved device mpv does not currently report stays selectable as
+  "不可用（<name>）" instead of being silently rewritten. Switching applies
+  immediately; before a player exists the dropdown offers only the system
+  default.
+- No polling: the refresh button re-reads the main window's cached list, which
+  mpv updates when the player starts or the device set changes.
+
+### Settings and reference docs
+
+- Settings stays at 12 pages; the new auto-hide delay row brings it to **122
+  rows**, and no existing row id changed.
+- New: `docs/reference/settings-layout.md` (full 12-page / 122-row snapshot) and
+  `docs/reference/iina-thumbnails.md` (how IINA pre-generates and caches
+  timeline thumbnails vs Wiina's live per-hover extraction; alignment is
+  **planned, not implemented**).
+- 668 tests pass (maintainer run; this docs pass did not build or re-run).
+
+## 1.2.5 — previous release
 
 ### Theme changes apply everywhere, immediately
 

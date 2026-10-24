@@ -7,7 +7,7 @@ Wiina 把 [IINA](https://iina.io/) 在 macOS 上的**界面逻辑**（窗口层�
 [mpv](https://mpv.io/) 作为播放内核。视觉上不照搬 AppKit，而是按 Windows 11 Fluent 规范重新设计：Segoe UI Variable、
 Segoe Fluent Icons、播放器外框的可选视频毛玻璃（纯色档为不透明 accent 染色）、辅助窗口的 Mica/Acrylic、圆角与系统主题。
 
-## 状态（v1.2.5）
+## 状态（v1.2.6）
 
 - **Stage 0–8 已验收。** 播放管线、WinUI 标题栏、OSC、播放/轨道/字幕/章节/播放列表/历史、侧边栏与快速设置、
   OSD/缩略图、全屏/PiP/迷你模式/多窗口、12 页设置（含文件关联）/搜索/快捷键/菜单/欢迎与辅助窗口、
@@ -22,6 +22,27 @@ Segoe Fluent Icons、播放器外框的可选视频毛玻璃（纯色档为不�
   [2](docs/acceptance/stage-2.md) · [3](docs/acceptance/stage-3.md) · [4](docs/acceptance/stage-4.md) ·
   [5](docs/acceptance/stage-5.md) · [6](docs/acceptance/stage-6.md) · [7](docs/acceptance/stage-7.md) ·
   [8](docs/acceptance/stage-8.md)。
+
+### v1.2.6：OSC 避让、自动隐藏计时与音频输出设备
+
+- **OSC 只在确实被遮挡时让位**：打开快速设置/播放列表/章节/插件侧栏时，浮动 OSC 不再无条件平移；
+  只有侧栏面板与 OSC 在垂直方向实际重叠时，才横向贴边让开（保留 8 DIP 间距）。
+  拖动浮动 OSC、恢复保存位置也走同一规则。Docked 布局的底栏属于布局分栏，仍随侧栏让位。
+- **自动隐藏由明确的空闲时钟驱动**：新增「设置 → 界面 → 窗口与 OSC → 自动隐藏延时」
+  （0.5–30 秒，默认 2.5，行 id `ui.osc-autohide-seconds`）。指针活动记在单调 `Stopwatch` 上；
+  单轴小于 5 DIP 的抖动既不算活动、也不重置计时，所以手搭在鼠标上不会让控制条一直亮着。
+  全屏下鼠标停在底部控制条上同样会按时淡出；失去焦点（非 Docked 且无侧栏）立即隐藏；
+  点击画面隐藏要求按下到抬起没有明显位移；Docked 布局从不自动隐藏，PiP/迷你模式不受影响。
+- **音频输出设备改为下拉选择**：设置 → 音频 → 音量与输出从 libmpv 的 `audio-device-list` 读取，
+  首项为「跟随系统默认」，带刷新按钮；设备重名时用描述区分，悬停显示原始设备名。
+  已保存但 mpv 当前未报告的设备保留为「不可用（…）」占位，不会被静默改写；切换后立即生效；
+  播放器尚未创建时只提供系统默认项。
+- **设置仍为 12 页**，新增自动隐藏延时一行后共 **122 行**，既有行 id 未变。
+- **新增参考文档**：[设置界面快照](docs/reference/settings-layout.md)（12 页 / 122 行，供重排对照）、
+  [IINA 缩略图调研](docs/reference/iina-thumbnails.md)（IINA 预生成 + 磁盘缓存 vs Wiina 悬停实时抽帧；
+  对齐**尚未实施**）。
+- 测试 668 项通过；产物 `wiina-1.2.6-win-x64.zip` / `Wiina-Setup-1.2.6-x64.exe`。
+- 文档同步：[v1.2.6 验收](docs/acceptance/v1.2.6.md)。
 
 ### v1.2.5：主题同步、纯色档修复与画质管理
 
@@ -44,6 +65,7 @@ Segoe Fluent Icons、播放器外框的可选视频毛玻璃（纯色档为不�
 - 测试 659 项通过；产物 `wiina-1.2.5-win-x64.zip` / `Wiina-Setup-1.2.5-x64.exe`。
 - 文档同步：[v1.2.5 验收](docs/acceptance/v1.2.5.md)、[ADR-0003](docs/architecture/0003-acrylic.md)
   更新 OSD 表面，[ADR-0004](docs/architecture/0004-solid-chrome.md) 仅描述纯色档。
+
 ### v1.2.4：毛玻璃回归、贴边吸附与安装包
 
 - **毛玻璃回归为四个可选档位**：设置 → 界面 → 窗口与 OSC 的「毛玻璃模式」提供
@@ -223,9 +245,9 @@ Segoe Fluent Icons、播放器外框的可选视频毛玻璃（纯色档为不�
 
 发布包有两种形式，都不需要单独安装 .NET 或 Windows App Runtime：
 
-1. **便携 zip**：获取 `artifacts/wiina-1.2.5-win-x64.zip`，解压到任意可写目录，运行 `Wiina.exe`；
+1. **便携 zip**：获取 `artifacts/wiina-1.2.6-win-x64.zip`，解压到任意可写目录，运行 `Wiina.exe`；
    卸载时运行同目录的 `Uninstall Wiina.exe`（可保留配置）。
-2. **安装包**：获取 `artifacts/Wiina-Setup-1.2.5-x64.exe`，按当前用户安装（默认
+2. **安装包**：获取 `artifacts/Wiina-Setup-1.2.6-x64.exe`，按当前用户安装（默认
    `%LOCALAPPDATA%\Programs\Wiina`，无需管理员），从“设置 → 应用”卸载；卸载时询问
    「是否保留配置文件？」，默认保留。
 
@@ -266,16 +288,16 @@ powershell -ExecutionPolicy Bypass -File tools/fetch-libmpv.ps1
 测试覆盖设置/搜索/菜单规则、快捷键、OSC/OSD、播放列表/历史、滤镜/EQ、窗口布局/几何、边缘吸附、
 文件关联注册计划，以及 Stage 11 的本地化目录完整性、语言解析/持久化取值、打包清单与无障碍元数据契约；
 1.2.4 起还包括 DWM 可见边框换算（`FrameMarginsTests`）、画质预设归一化（`QualitySettingsTests`）与
-小窗渲染尺寸（`RenderSizeTests`）；1.2.5 扩展了画质 profile 的序列化/默认值测试。当前 659 项测试在 Release 下全部通过。
+小窗渲染尺寸（`RenderSizeTests`）；1.2.5 扩展了画质 profile 的序列化/默认值测试；1.2.6 增加 OSC 可见性状态机测试（`OscVisibilityControllerTests`）。当前 668 项测试在 Release 下全部通过。
 
 ## 打包（可复现）
 
 ```powershell
 # 便携 zip（先构建 src/Wiina.Uninstall，再打包并校验卸载器与 Wiina.dll 版本）
-pwsh -File scripts/package.ps1 -Version 1.2.5
+pwsh -File scripts/package.ps1 -Version 1.2.6
 
 # 安装包（在便携 zip 之后；需要 Inno Setup 6 的 ISCC.exe）
-pwsh -File scripts/release.ps1 -Version 1.2.5
+pwsh -File scripts/release.ps1 -Version 1.2.6
 ```
 
 `package.ps1` 会：用 `dotnet build -c Release -r win-x64 --self-contained -p:Platform=x64 -t:Rebuild`
@@ -283,11 +305,11 @@ pwsh -File scripts/release.ps1 -Version 1.2.5
 应用出现 XBF parse 失败）→ 单独发布 `src/Wiina.Uninstall` 并把 `Uninstall Wiina.exe` 放进载荷 →
 复制构建输出、`third_party/libmpv/libmpv-2.dll`、`LICENSE`、`NOTICE`、`README.md` 并生成
 `SOURCE.txt`（源码地址 + 提交 + 构建时间）→ 校验必需文件与**待打包 `Wiina.dll` 的版本** →
-生成 `artifacts/wiina-1.2.5-win-x64.zip`。
+生成 `artifacts/wiina-1.2.6-win-x64.zip`。
 
 `release.ps1` 在便携 zip 之后解压同一份载荷到 `artifacts/publish`，用
 `%LOCALAPPDATA%\Programs\Inno Setup 6\ISCC.exe`（或 PATH / Program Files 中的 ISCC）编译
-`installer/wiina.iss`，输出 `artifacts/Wiina-Setup-1.2.5-x64.exe`，并打印两个产物的
+`installer/wiina.iss`，输出 `artifacts/Wiina-Setup-1.2.6-x64.exe`，并打印两个产物的
 大小与 SHA-256。`artifacts/` 与 `third_party/libmpv/` 均被 gitignore，仓库不提交二进制。
 缺少任一必需文件、卸载器或版本不匹配时脚本直接失败。
 
@@ -312,12 +334,15 @@ pwsh -File scripts/release.ps1 -Version 1.2.5
 ## 文档
 
 - [实施计划（历史，v1 前）](docs/PLAN.md) — 阶段、范围、验收标准；当前行为以本 README 与验收页为准
+- [v1.2.6 验收](docs/acceptance/v1.2.6.md) — OSC 避让/自动隐藏、音频设备下拉与参考文档的验证记录
 - [v1.2.5 验收](docs/acceptance/v1.2.5.md) — 第三轮 4 项修复 + 画质选项清单的验证记录
 - [v1.2.4 验收](docs/acceptance/v1.2.4.md) — 第二轮 10 项用户问题的验证清单
 - [v1.2.3 验收](docs/acceptance/v1.2.3.md) — 第一轮 12 项用户问题的验证清单
 - [Stage 11 验收](docs/acceptance/stage-11.md) — §19.2 清单与结果
 - [无障碍与本地化说明](docs/accessibility.md)
 - [性能测量](docs/performance.md)
+- [设置界面快照](docs/reference/settings-layout.md) — 12 页 / 122 行的完整设置清单与窗口动作
+- [IINA 缩略图调研](docs/reference/iina-thumbnails.md) — 上游实现、Wiina 现状与差距（对齐未实施）
 - [文件关联](docs/file-associations.md) — 按用户注册、默认应用确认与取消
 - [安装与卸载](docs/installer.md) — Inno Setup 按用户安装、卸载保留配置与便携卸载器
 - [发布说明](docs/release/notes.md) · [已知问题](docs/release/known-issues.md)

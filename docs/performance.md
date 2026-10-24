@@ -1,4 +1,4 @@
-# Performance measurements (v1.2.5)
+# Performance measurements (v1.2.6)
 
 Measured on the development machine on 2026-10-19 (Asia/Hong_Kong), at v1.0.0.
 The numbers below are the historical baseline; they were **not** re-measured
@@ -70,6 +70,28 @@ scenarios (peak 265.7 MB at 4K). Private bytes exceed 300 MB at 4K because the
 GPU/driver surfaces and the video swapchain are charged to the process; this is
 reported honestly rather than trimmed by a smaller measurement window.
 
+## What changed in 1.2.6
+
+- **Auto-hide idle tracking is one monotonic clock, not polling.** The main
+  window keeps a single `Stopwatch`; the `DispatcherQueueTimer` fires at the
+  configured delay and only asks `OscVisibilityController.ShouldHideOnIdle`.
+  Pointer moves under 5 DIP on both axes are dropped before they touch the
+  clock, so jitter no longer restarts the timer. Nothing is measured per frame.
+- **OSC placement is recomputed on layout events only** - window resize, sidebar
+  panel `SizeChanged`, floating-OSC/canvas size change, drag end and position
+  restore. The clamp reads the visible panel widths and performs one rectangle
+  overlap test; there is no per-pointer-move work.
+- **The audio-device dropdown does no polling.** It projects the main window's
+  cached `audio-device-list` (mpv pushes it on start and when the device set
+  changes) when the settings page is built and on explicit refresh; selection
+  goes out as one mpv `audio-device` command.
+- **Settings: 12 pages / 122 rows in 1.2.6** (one new row: auto-hide delay).
+  Building a page still shows no visible stall.
+- **Tests: 668 passed / 0 failed** (maintainer's release verification; the docs
+  pass did not build or re-run them).
+- Startup, memory and blur cost were not re-measured for 1.2.6; the 1.2.4/1.2.5
+  numbers above remain the last measured values.
+
 ## What changed in 1.2.5
 
 - **Live theme switching costs one recolor, not a re-render.** `App.ResolveTheme`
@@ -84,10 +106,10 @@ reported honestly rather than trimmed by a smaller measurement window.
 - **Solid is now opaque by construction.** Chrome panels no longer write
   `Background` from code; the brush stays declared in XAML and the blur/tint
   layers toggle `Visibility`. Cost is unchanged (one fill per surface).
-- **Settings rows: 12 pages / 119 rows.** An earlier 1.2.4 draft of this page
-  said 121; that was wrong (1.2.4 had already removed the two persistent-OSD
-  rows). The quality editor adds no settings rows — its 23 options live in the
-  profile window.
+- **Settings rows: 12 pages / 122 rows in 1.2.6.** (1.2.4 and 1.2.5 had 121;
+  earlier drafts of this page said 119, which was off by two.) The new 1.2.6 row
+  is the OSC auto-hide delay. The quality editor adds no settings rows — its 23
+  options live in the profile window.
 - **Tests: 659 passed / 0 failed** (maintainer release verification for 1.2.5;
   the docs pass did not re-run them).
 - Startup/memory were not re-measured for 1.2.5.
@@ -139,8 +161,8 @@ work is one brush fill.
 
 ### Settings and packaging
 
-- Settings moved to **12 pages / 119 rows** (1.2.3 had 121 with the two persistent-OSD rows): the blur-mode row is
-  back and the deband row moved to 视频 → 画面. Row construction is still
+- Settings stayed at **12 pages / 121 rows** (same as 1.2.3): the blur-mode row was
+  restored and the deband row moved to 视频 → 画面. Row construction is still
   code-generated and showed no visible stall.
 - The settings rail no longer animates a hover brush on unselected items, so it
   does strictly less work per pointer move.
@@ -156,7 +178,7 @@ work is one brush fill.
 - Thumbnails (scrub peek) and the inspector run off the UI thread; the UI shows
   placeholder/loading state while data arrives. No synchronous file or IPC work
   was observed blocking the window during the measurements.
-- Settings/page navigation builds rows in code; 12 pages with 119 rows total
+- Settings/page navigation builds rows in code; 12 pages with 122 rows total
   render without a visible stall on this machine.
 - Library scanning is not a feature of this stage; playlist import is bounded
   by the files the user opens.

@@ -163,10 +163,17 @@ public static class SettingsCatalog
             "osc controller position 控制条 位置"));
         rows.Add(BoolRow(
             "ui.osc-autohide", SettingsPageId.Ui, "窗口与 OSC",
-            "OSC 自动隐藏", "2.5 秒无操作后淡出；Docked 布局下不隐藏。",
+            "OSC 自动隐藏", "鼠标静止超过下面的延时后淡出；Docked 布局下不隐藏。",
             settings => settings.OscAutoHide,
             (settings, value) => settings.OscAutoHide = value,
             "osc autohide 自动隐藏"));
+        rows.Add(NumberRow(
+            "ui.osc-autohide-seconds", SettingsPageId.Ui, "窗口与 OSC",
+            "自动隐藏延时", "鼠标静止多少秒后隐藏 OSC 与标题栏；0.5–30 秒。",
+            0.5, 30, 0.5, " 秒",
+            settings => settings.OscAutoHideSeconds,
+            (settings, value) => settings.OscAutoHideSeconds = Math.Clamp(value, 0.5, 30),
+            "osc autohide delay seconds 自动隐藏 延时 秒"));
         rows.Add(ChoiceRow(
             "ui.blur-mode", SettingsPageId.Ui, "窗口与 OSC",
             "毛玻璃模式", "固定/动态/始终会抓取视频帧做高斯模糊；关闭后使用不透明纯色 + 重点色染色，性能最好且不透出画面。",
@@ -510,12 +517,12 @@ public static class SettingsCatalog
             settings => settings.AudioDelay,
             (settings, value) => settings.AudioDelay = QuickSettings.ClampAudioDelay(value),
             "audio delay sync 延迟 音画同步"));
-        rows.Add(TextRow(
+        rows.Add(AudioDeviceRow(
             "audio.device", SettingsPageId.Audio, "音量与输出",
-            "音频输出设备", "mpv 设备名；留空或 auto 表示跟随系统默认。",
+            "音频输出设备", "从 libmpv 检测到的输出设备中选择；默认跟随系统默认设备，切换后立即生效。",
             settings => settings.AudioDevice,
             (settings, value) => settings.AudioDevice = string.IsNullOrWhiteSpace(value) ? "auto" : value.Trim(),
-            "audio device output 输出 设备"));
+            "audio device output 输出 设备 扬声器 耳机 speaker default"));
         rows.Add(BoolRow(
             "audio.auto-external", SettingsPageId.Audio, "音量与输出",
             "自动加载外挂音轨", "自动加载与视频同名的 .mka 音轨；不会加载无关音频文件。",
@@ -1051,6 +1058,28 @@ public static class SettingsCatalog
             Keywords = keywords,
             Kind = SettingsRowKind.Text,
             UnavailableReason = unavailable,
+            Get = settings => get(settings),
+            Set = (settings, value) => set(settings, value as string ?? string.Empty),
+        };
+
+    private static SettingsRowDefinition AudioDeviceRow(
+        string id,
+        SettingsPageId page,
+        string section,
+        string title,
+        string description,
+        Func<AppSettings, string> get,
+        Action<AppSettings, string> set,
+        string keywords = "") =>
+        new()
+        {
+            Id = id,
+            Page = page,
+            Section = section,
+            Title = title,
+            Description = description,
+            Keywords = keywords,
+            Kind = SettingsRowKind.AudioDevice,
             Get = settings => get(settings),
             Set = (settings, value) => set(settings, value as string ?? string.Empty),
         };
