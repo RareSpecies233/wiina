@@ -5,6 +5,7 @@ using Microsoft.UI.Dispatching;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Media.Animation;
 using Microsoft.UI.Xaml.Media.Imaging;
 using Windows.Foundation;
 using Wiina.App.Controls;
@@ -12,6 +13,7 @@ using Wiina.App.Services;
 using Wiina.Core.Models;
 using Wiina.App.Localization;
 using Wiina.Core.Osd;
+using Wiina.Core.Playback;
 using Wiina.Core.Settings;
 using Wiina.Core.State;
 using Wiina.Core.Text;
@@ -48,6 +50,7 @@ public sealed partial class MainWindow
     private bool _openingStream;
     private string? _streamTarget;
     private DispatcherQueueTimer? _fullscreenInfoTimer;
+    private DispatcherQueueTimer? _frameDropNoticeTimer;
     private DateTimeOffset _lastBatterySample;
     private int? _batteryPercent;
     private bool _batteryCharging;
@@ -78,6 +81,11 @@ public sealed partial class MainWindow
         _fullscreenInfoTimer.IsRepeating = true;
         _fullscreenInfoTimer.Tick += (_, _) => UpdateFullscreenStatus();
 
+        _frameDropNoticeTimer = DispatcherQueue.CreateTimer();
+        _frameDropNoticeTimer.Interval = FrameDropNoticeSeconds;
+        _frameDropNoticeTimer.IsRepeating = false;
+        _frameDropNoticeTimer.Tick += (_, _) => HideFrameDropNotice();
+
         UpdateOsdPlacement();
         UpdateFullscreenStatus();
     }
@@ -103,6 +111,73 @@ public sealed partial class MainWindow
         Osd.Show(message);
         UpdateOsdPlacement();
         Trace($"OSD [{message.Kind}] coalesced={result.Coalesced}");
+    }
+
+    // ------------------------------------------------------ frame-drop notice
+
+    /// <summary>How long the frame-drop card stays fully visible.</summary>
+    private static readonly TimeSpan FrameDropNoticeSeconds = TimeSpan.FromSeconds(2.2);
+
+    /// <summary>
+    /// Shows a drop burst as a native card in the middle of the picture. The
+    /// previous implementation asked mpv to render it with `show-text`, but on
+    /// this libmpv build the ASS positioning prefix was printed literally and
+    /// the text landed in the top-left corner (shown behind the title bar).
+    /// This card is unaffected by the OSD position setting and never overlaps
+    /// the OSD/counter layout.
+    /// </summary>
+    private void ShowFrameDropNotice(FrameDropNotice notice)
+    {
+        if (FrameDropNotice.Visibility != Visibility.Visible)
+        {
+            FrameDropNoticeText.Text = notice.Describe();
+            FrameDropNotice.Visibility = Visibility.Visible;
+        }
+        else
+        {
+            // A second burst while the card is still up: refresh the text and
+            // restart the dwell so the user gets the full reading time.
+            FrameDropNoticeText.Text = notice.Describe();
+        }
+
+        FrameDropNotice.Opacity = 1;
+        _frameDropNoticeTimer?.Stop();
+        _frameDropNoticeTimer?.Start();
+        Trace(
+            $"[frame-drop] notice {notice.PerMinute:0}/min drops={notice.Drops}" +
+            $" window={notice.Seconds:0.##} card=center");
+    }
+
+    private void HideFrameDropNotice()
+    {
+        _frameDropNoticeTimer?.Stop();
+        if (FrameDropNotice.Visibility != Visibility.Visible)
+        {
+            return;
+        }
+
+        if (!AnimationsEnabled || FrameDropNotice.XamlRoot is null)
+        {
+            FrameDropNotice.Opacity = 0;
+            FrameDropNotice.Visibility = Visibility.Collapsed;
+            return;
+        }
+
+        var storyboard = new Storyboard();
+        var fade = new DoubleAnimation
+        {
+            To = 0,
+            Duration = new Duration(TimeSpan.FromMilliseconds(180)),
+        };
+        Storyboard.SetTarget(fade, FrameDropNotice);
+        Storyboard.SetTargetProperty(fade, "Opacity");
+        storyboard.Children.Add(fade);
+        storyboard.Completed += (_, _) =>
+        {
+            FrameDropNotice.Visibility = Visibility.Collapsed;
+            FrameDropNotice.Opacity = 0;
+        };
+        storyboard.Begin();
     }
 
     private string ShortStreamName(string? path)
@@ -659,6 +734,8 @@ public sealed partial class MainWindow
     {
         _fullscreenInfoTimer?.Stop();
         _fullscreenInfoTimer = null;
+        _frameDropNoticeTimer?.Stop();
+        _frameDropNoticeTimer = null;
         _thumbnailCts?.Cancel();
         _thumbnailCts?.Dispose();
         _thumbnailCts = null;

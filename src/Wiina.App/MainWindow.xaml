@@ -115,6 +115,26 @@
                  the OSD position setting (issue 6). -->
             <controls:PlaybackStatsPanel x:Name="StatsPanel"
                                          Visibility="Collapsed" />
+
+            <!-- Frame-drop notice: a short card centred on the picture. It is
+                 deliberately independent of the OSD position setting, so a drop
+                 burst is never hidden behind the title bar or the OSC. -->
+            <Border x:Name="FrameDropNotice"
+                    HorizontalAlignment="Center"
+                    VerticalAlignment="Center"
+                    Padding="14,8"
+                    CornerRadius="8"
+                    Background="{ThemeResource PanelBrush}"
+                    BorderBrush="{ThemeResource PanelBorderBrush}"
+                    BorderThickness="1"
+                    IsHitTestVisible="False"
+                    Visibility="Collapsed"
+                    Opacity="0">
+                <TextBlock x:Name="FrameDropNoticeText"
+                           Style="{StaticResource CaptionTextStyle}"
+                           TextAlignment="Center"
+                           TextWrapping="Wrap" />
+            </Border>
         </Grid>
 
         <!-- Mini / music mode covers the whole shell (Stage 6). Kept below the

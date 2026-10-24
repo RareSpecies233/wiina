@@ -404,26 +404,26 @@ public sealed class SettingsSearchTests
     }
 
     [Fact]
-    public void AdvancedModesSectionIsTheOnlyMiniPlayerEntry()
+    public void AdvancedModesSectionHasOneMiniPlayerEntry()
     {
-        SettingsRowDefinition music = Assert.Single(
+        // Mini player and music mode are the same feature: one entry only, and
+        // it carries the "still in development" warning.
+        Assert.DoesNotContain(
             SettingsCatalog.Rows, row => row.Id == "advanced.music-mode");
+
         SettingsRowDefinition mini = Assert.Single(
             SettingsCatalog.Rows, row => row.Id == "advanced.mini-player");
-
-        foreach (SettingsRowDefinition row in new[] { music, mini })
-        {
-            Assert.Equal(SettingsPageId.Advanced, row.Page);
-            Assert.Equal("模式", row.Section);
-            Assert.Equal(SettingsRowKind.Action, row.Kind);
-            Assert.Null(row.UnavailableReason);
-        }
-
-        Assert.Equal("enter-music-mode", music.ActionId);
+        Assert.Equal(SettingsPageId.Advanced, mini.Page);
+        Assert.Equal("模式", mini.Section);
+        Assert.Equal(SettingsRowKind.Action, mini.Kind);
+        Assert.Null(mini.UnavailableReason);
         Assert.Equal("enter-mini-player", mini.ActionId);
+        Assert.Contains("迷你播放器", mini.Title);
+        Assert.Contains("开发中", mini.Description);
+        Assert.Contains("测试", mini.Description);
 
         // The menu catalogue must not expose these modes any more; only the
-        // settings entries above may route into them.
+        // settings entry above may route into them.
         Assert.DoesNotContain(
             MenuCatalog.Flatten(MenuCatalog.Build(new MenuState())),
             item => item.Id is "video.music-mode" or "video.mini-player" or "window.music-mode");

@@ -822,7 +822,7 @@ public sealed partial class SettingsWindow : Window
             "video.quality-editor" =>
             Loc.T("settings.open"),
         "reset-equalizer" => Loc.T("settings.reset"),
-        "enter-music-mode" or "enter-mini-player" => Loc.T("settings.enter"),
+        "enter-mini-player" => Loc.T("settings.enter"),
         _ => Loc.T("settings.run"),
     };
 
@@ -1156,23 +1156,26 @@ public sealed partial class SettingsWindow : Window
 
                     break;
 
-                case "enter-music-mode":
                 case "enter-mini-player":
                 {
+                    // Mini player and music mode are one experimental surface
+                    // now. Warn once and require an explicit confirmation
+                    // (default is Cancel) before the settings window closes.
+                    if (!await Dialogs.ConfirmAsync(
+                            RootGrid.XamlRoot,
+                            Loc.T("settings.miniDevTitle"),
+                            Loc.T("settings.miniDevBody"),
+                            Loc.T("dialogs.continue")))
+                    {
+                        break;
+                    }
+
                     // The mini player takes over the main window, so the
                     // settings window must leave the screen first. Closing it
                     // also clears App's singleton, so Settings reopens cleanly.
                     MainWindow? main = App.ActiveWindow;
                     Close();
-                    if (row.ActionId == "enter-music-mode")
-                    {
-                        main?.EnterMusicMode();
-                    }
-                    else
-                    {
-                        main?.EnterMiniPlayerMode();
-                    }
-
+                    main?.EnterMiniPlayerMode();
                     break;
                 }
 

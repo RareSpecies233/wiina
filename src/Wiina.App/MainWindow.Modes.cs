@@ -2,6 +2,7 @@ using System.Linq;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Media;
 using Windows.Graphics;
 using Windows.Storage.Pickers;
 using Wiina.App.Interop;
@@ -34,6 +35,12 @@ public sealed partial class MainWindow
     private int _miniDragWindowY;
     private int _miniDragCursorX;
     private int _miniDragCursorY;
+
+    /// <summary>
+    /// Background the root grid had before mini mode pinned an opaque,
+    /// theme-matched base. Restored on exit.
+    /// </summary>
+    private Brush? _miniBackgroundBackup;
 
     /// <summary>Stable id used by the app-level window registry.</summary>
     public string WindowId { get; } = Guid.NewGuid().ToString("N");
@@ -484,11 +491,13 @@ public sealed partial class MainWindow
     private bool _miniBackdropSuspended;
 
     /// <summary>
-    /// Mini mode is fully covered by the video surface, so the window acrylic
-    /// only adds compositor work under an opaque SwapChainPanel (small-window
-    /// reference doc §4: no AcrylicBrush around the video). Dropped on entry and
-    /// restored on exit; nothing visible changes because the backdrop is
-    /// hidden behind the video.
+    /// Mini mode replaces the window acrylic with Mica. The acrylic would only
+    /// add compositor work under the covered surface (small-window reference
+    /// doc §4), but dropping the backdrop entirely is not an option either:
+    /// the XAML island does not cover the non-client frame band, so a window
+    /// with no backdrop paints that band black — which is exactly how the
+    /// light-theme "black mini window" report looked. Mica is theme-tinted,
+    /// DWM-composited and cheap. The previous backdrop is restored on exit.
     /// </summary>
     private void SetMiniBackdropSuspended(bool suspended)
     {
@@ -502,7 +511,7 @@ public sealed partial class MainWindow
         {
             if (suspended)
             {
-                SystemBackdrop = null;
+                SystemBackdrop = new MicaBackdrop();
             }
             else
             {
@@ -511,7 +520,19 @@ public sealed partial class MainWindow
         }
         catch
         {
-            // Backdrop is cosmetic; never block a mode switch.
+            // Backdrop is cosmetic; never block a mode switch. Fall back to the
+            // normal window backdrop if Mica is unavailable on this system.
+            try
+            {
+                if (!suspended)
+                {
+                    TrySetBackdrop();
+                }
+            }
+            catch
+            {
+                // Ignore: still cosmetic.
+            }
         }
     }
 
@@ -526,9 +547,24 @@ public sealed partial class MainWindow
         MiniPlayer.Visibility = Visibility.Visible;
         MiniPlayer.SetAnimationsEnabled(AnimationsEnabled);
         MiniPlayer.ResetControls();
+        // The normal root is transparent: the window backdrop (acrylic) paints
+        // it. The backdrop is suspended in mini mode, and any transparent
+        // pixel then exposes the black mpv swap chain or a dark album cover
+        // behind the info text (the light-theme "black mini window" report).
+        // Pin an opaque base matching the active theme for the mode.
+        _miniBackgroundBackup = RootGrid.Background;
+        RootGrid.Background = new SolidColorBrush(MiniPlayer.ActualTheme == ElementTheme.Light
+            // Mirrors Tokens.xaml AppBackgroundBrush so the base matches the
+            // theme resource the rest of the window uses.
+            ? Windows.UI.Color.FromArgb(0xFF, 0xF7, 0xF7, 0xF7)
+            : Windows.UI.Color.FromArgb(0xFF, 0x08, 0x09, 0x0A));
         // Mouse-only chrome: Tab must not park focus on a mini control, where
         // Space would press it instead of pausing. Restored on exit below.
         MiniPlayer.SetKeyboardMouseOnly(true);
+        // The main-window chrome (titlebar buttons, OSC) is hidden behind the
+        // mini overlay but still in the tab order; the recursive pass is cheap
+        // and the preview handler remains the backstop for lazy containers.
+        MakeMediaChromeKeyboardTransparent();
         MiniPlayer.SetPlaylistExpanded(_settings.MusicModeShowPlaylist);
         UpdateMiniPlayerState();
         UpdateMiniPlaylist();
@@ -537,11 +573,24 @@ public sealed partial class MainWindow
             ResizeMiniForPlaylist(expanded: true);
         }
 
+        // Diagnostics for the light-theme background report: records the theme
+        // and the effective brush of every layer that can paint the window.
+        Trace($"mini theme: {MiniPlayer.DescribeThemeSurfaces()} " +
+            $"windowBg={DescribeBrush(RootGrid.Background)} element={MiniPlayer.ActualTheme}");
+
         // Mini mode is keyboard-driven (Space pauses); never leave focus on a
         // mini control after the mode switch or the player shortcuts stop.
         RootGrid.Focus(FocusState.Programmatic);
         return true;
     }
+
+    private static string DescribeBrush(Brush? brush) => brush switch
+    {
+        SolidColorBrush solid => solid.Color.ToString(),
+        LinearGradientBrush gradient => $"gradient({gradient.GradientStops.Count})",
+        null => "null",
+        _ => brush.GetType().Name,
+    };
 
     private void HideMiniPlayer()
     {
@@ -556,6 +605,12 @@ public sealed partial class MainWindow
         MiniPlayer.SetPlaylistExpanded(false);
         MiniPlayer.HideControls();
         MiniPlayer.ResetControls();
+        if (_miniBackgroundBackup is not null)
+        {
+            RootGrid.Background = _miniBackgroundBackup;
+            _miniBackgroundBackup = null;
+        }
+
         SetMiniBackdropSuspended(false);
         // The restored normal frame is not edge-snapped: drop the magnet and
         // hand the normal DWM frame back.

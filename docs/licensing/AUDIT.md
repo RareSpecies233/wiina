@@ -1,4 +1,4 @@
-# 许可证与合规审计（v1.3.3）
+# 许可证与合规审计（v1.3.4）
 
 > 结论先行：**Wiina 以 GPL-3.0-only 发布**。不复制 IINA 的 Swift/AppKit 源码、图片资产、SF Symbols 或应用图标；
 > 不把 mpv/libmpv 二进制提交进 git；发布包附带 mpv 的许可证文本与源码获取方式。

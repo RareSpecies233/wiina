@@ -1,10 +1,18 @@
 # Accessibility, localization, DPI and motion
 
-This document records what Wiina v1.3.3 implements, how it was checked, and
+This document records what Wiina v1.3.4 implements, how it was checked, and
 what is intentionally limited. It is a summary, not a certification.
 
 ## 1. Keyboard and focus
 
+- Picture-in-Picture keeps its transport buttons out of the Tab order and
+  handles the keys at the window root: Space play/pause, Enter fullscreen,
+  Escape back to the main window. Other keys are forwarded to the main player,
+  so screen-reader users keep the same shortcuts as in the main window. The
+  mini player remains deliberately mouse-only.
+- The dropped-frame notice is a transient, non-hit-testable card; it is not a
+  live region, so it is announced only if the screen reader happens to poll the
+  overlay. The statistics panel remains the readable surface.
 - The key binding editor is reachable from Controls → 快捷键 and from the
   command palette; its search box, profile picker, category list and recorder
   are keyboard friendly, and the conflict dialog is a normal ContentDialog
@@ -144,7 +152,7 @@ generic text containers mirror.
 
 ## 7. Localization coverage
 
-- Runtime catalog: 569 keys in `UiStringCatalog.cs`, each with a non-empty
+- Runtime catalog: 571 keys in `UiStringCatalog.cs`, each with a non-empty
   zh-Hans and English string. Coverage includes the title bar, OSC, OSD, menus,
   sidebars, quick settings, all settings pages (11 pages, 130 rows;
   page titles, summaries, section headers, row titles/descriptions/choices), welcome/about/log/inspector/open-URL

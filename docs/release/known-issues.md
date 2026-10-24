@@ -1,7 +1,22 @@
-# Known issues — Wiina v1.3.3
+# Known issues — Wiina v1.3.4
 
-Nothing here is hidden; these are known limitations of the v1.3.3 build. The full decision list (with fix cost and checkboxes) lives in [../reports/known-issues-1.3.1.md](../reports/known-issues-1.3.1.md).
+Nothing here is hidden; these are known limitations of the v1.3.4 build. The full decision list (with fix cost and checkboxes) lives in [../reports/known-issues-1.3.1.md](../reports/known-issues-1.3.1.md).
 
+## What changed in 1.3.4
+
+- An unfocused window no longer shows the OSC on hover: the pointer handlers
+  return while `!_windowActive && !_chromeShown`, and focus loss still hides the
+  chrome. Docked layout and an open sidebar keep their existing exemptions.
+- The "mini window" defects were Picture-in-Picture: Tab no longer enters its
+  transport buttons, Space pauses, Enter leaves PiP for fullscreen, Escape
+  restores the main window, and all other keys are forwarded to the main window.
+- Light theme: the PiP background follows `AppBackgroundBrush`; the mini player
+  uses theme brushes plus `MicaBackdrop` and restores the old background on exit.
+- The dropped-frame notice is a native WinUI card in the centre of the picture
+  (2.2 s, 180 ms fade). The ASS/`show-text` path is gone.
+- Settings -> Advanced keeps one mini-player entry, with a development warning
+  and a confirmation dialog (default cancel).
+- Cursor hiding did **not** change in 1.3.4 and is not considered fixed.
 ## What changed in 1.3.3
 
 - Opening an OSC or title-bar menu no longer hides the chrome or the cursor:
@@ -17,8 +32,9 @@ Nothing here is hidden; these are known limitations of the v1.3.3 build. The ful
   neither has a default shortcut.
 ## What changed in 1.3.2
 
-- Cursor hiding is fixed with an in-process IAT hook (`CursorHider`); see the
-  section below for evidence and residual risks.
+- Cursor hiding was attempted with an in-process IAT hook (`CursorHider`); see
+  the section below for evidence and residual risks. **Superseded: still not
+  solved as of 1.3.4.**
 - Fullscreen no longer shows the 1-3 px top strip, and dragging in fullscreen
   never exits fullscreen.
 - OSC/menu polish: media chrome no longer takes keyboard focus, the screenshot
@@ -78,16 +94,15 @@ version-specific (mpv.net bundles its own libmpv), Wiina-only features are
 absent, and the Wiina side-panel commands are commented out because mpv.net has
 no side panels. Nothing is installed or patched by Wiina.
 
-## Frame-drop OSD
+## Frame-drop card
 
 Dropped-frame numbers come from mpv counters and are estimates; the rate is
 measured over a 3-second window with a 12-second cooldown, so a single bad
-frame does not spam the OSD. In 1.3.2 the notice sat left-middle; since 1.3.3 it
-is anchored at the exact centre of the picture with ASS `\an5` and
-`\pos(osd-width/2, osd-height/2)`, falling back to 1920×1080 when mpv does not
-report a surface size, and lives for 2.2 s. The statistics panel remains the
-detailed view.
-
+frame does not spam the card. 1.3.2 showed it left-middle, 1.3.3 moved it to the
+exact centre with ASS tags; since 1.3.4 it is a native WinUI `Border` in the
+overlay layer (`FrameDropNotice`), centred, non-hit-testable, visible for 2.2 s
+with a 180 ms fade-out. The text is produced by `FrameDropNotice.Describe()` and
+a unit test rejects ASS markup. The statistics panel remains the detailed view.
 ## Screenshot file names
 
 - Screenshots are named `media-hour-minute-second-millisecond.png`
@@ -100,9 +115,9 @@ detailed view.
   video page and the OSC 更多 -> 视频 submenu; the file is always PNG via mpv
   `screenshot-raw` flags `subtitles` or `video`.
 
-## Cursor hiding (fixed in 1.3.2)
+## Cursor hiding (still not solved)
 
-Status: fixed and measured on a real 1080p session.
+Status: **not solved.** The 1.3.2 hook below is the last attempt; it still loses to the WinUI input stack in some configurations, and 1.3.4 changed nothing here. Treat the measurements as historical evidence for the technique, not as a fix.
 
 The desktop pointer over a WinUI 3 client area is driven by the input thread
 inside Microsoft.UI.Input.dll / Microsoft.InputStateManager.dll /
@@ -209,6 +224,25 @@ instant). The default mode (pre-generation) is unchanged.
   is only in the tooltip. Changing devices mid-playback re-initialises the audio
   output, which can produce a short glitch or a brief silence.
 
+## Picture-in-Picture keyboard and focus
+
+- The PiP transport buttons are out of the Tab order (`IsTabStop=False`,
+  `AllowFocusOnInteraction=False`), and the window root handles `PreviewKeyDown`:
+  Tab is swallowed, Space toggles playback, Enter leaves PiP and enters
+  fullscreen, Escape restores the main window.
+- Every other key is forwarded to the main window (`TryForwardShortcutKey`);
+  a key is only marked handled when the main window really executed a binding,
+  so unbound keys still fall through to the system.
+- The PiP window is a borderless `WS_POPUP` window, but DWM still reserves an
+  8 px non-client border: `GetWindowRect` is 8 px larger than the client area on
+  every side and that strip shows the desktop behind the window. WinUI 3 has no
+  supported way to remove it, so 1.3.4 documents it instead of faking a fix.
+  At 100 % DPI the visible gap is 8 px; higher DPI was not re-measured.
+- Keys are forwarded only when the main window actually executes a binding;
+  otherwise the key falls through to the system (so global OS shortcuts keep
+  working, and nothing is silently swallowed).- The mini player keeps its own rule: it is mouse-only, and Tab cycles the main
+  window instead of landing on mini controls.
+
 ## Mini player
 
 - The mini player is deliberately mouse-only. `MiniPlayerView.SetKeyboardMouseOnly`
@@ -218,16 +252,19 @@ instant). The default mode (pre-generation) is unchanged.
   controls. This is a design trade-off, not a regression.
 - Light theme uses `MiniCoverFallbackBrush` / `MiniCoverScrimBrush` from
   `Themes/Tokens.xaml` (all three theme dictionaries); High Contrast flattens
-  both to system colours.
+  both to system colours. The PiP root and the mini player background now use
+  theme resources as well, and the mini player applies `MicaBackdrop` on entry
+  and restores the previous background on exit.
 - Auto-entering the mini player for audio files is disabled. `AutoSwitchToMusicMode`
   is still stored in `settings.json` for compatibility but no longer triggers a
   mode change.
 
 ## Mode entry points
 
-- The only entries for music/mini mode are the two action rows on Settings →
-  Advanced → Modes (`advanced.music-mode`, `advanced.mini-player`). Both close
-  the settings window first, because the mini player takes over the main window.
+- The only entry for music/mini mode is the single row on Settings -> Advanced
+  -> Modes (`advanced.mini-player`), which warns that the feature is still in
+  development and asks for confirmation (default cancel). `advanced.music-mode`
+  was removed in 1.3.4; the settings window closes before the mode switch.
 - There is no default shortcut and the shortcut editor no longer lists these
   actions. Picture-in-picture still has `Ctrl+Shift+P` (shipped Wiina profile),
   and the 窗口 menu label is derived from that profile rather than hard-coded.

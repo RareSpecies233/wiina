@@ -2,6 +2,7 @@ using System.Globalization;
 using System.IO;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Controls.Primitives;
 using Microsoft.UI.Xaml.Input;
@@ -91,13 +92,22 @@ public sealed partial class MainWindow
 
         // Media chrome (OSC, titlebar, mini controls) must never own keyboard
         // focus, otherwise Space/Enter activate the focused button instead of
-        // toggling playback or fullscreen. Tab is swallowed in the
-        // keyboard-driven modes as a safety net for lazily created controls.
+        // toggling playback or fullscreen. The recursive pass is only the
+        // first line of defence: lazily created containers and hidden chrome
+        // live outside it, so the keyboard-driven modes (mini player,
+        // fullscreen) also intercept keys in the tunneling preview phase,
+        // before a focused control can consume Space/Enter or move focus with
+        // Tab.
         MakeMediaChromeKeyboardTransparent();
         RootGrid.AddHandler(
-            UIElement.KeyDownEvent,
-            new KeyEventHandler(OnRootKeyDownCapture),
+            UIElement.PreviewKeyDownEvent,
+            new KeyEventHandler(OnRootPreviewKeyDown),
             handledEventsToo: true);
+        // Last line of defence for the keyboard-driven modes: whatever route
+        // focus took (Tab, UIA, automation, a template part created after the
+        // recursive pass), a chrome control must not keep it — Space/Enter
+        // would activate that control instead of toggling playback.
+        RootGrid.GotFocus += OnRootGotFocus;
 
         VideoFrame.PointerPressed += OnVideoPointerPressed;
         VideoFrame.PointerMoved += OnVideoPointerMoved;
@@ -2024,6 +2034,14 @@ public sealed partial class MainWindow
             // Tab order (a focused slider still lets Space bubble to the player).
             slider.IsTabStop = false;
         }
+        else if (root is Control control)
+        {
+            // Containers such as ListView, ScrollViewer and realised items are
+            // tab stops in their own right, and a lazily created item never
+            // passes through this walk in time. The preview handler is the
+            // backstop; this just keeps every realised control out of the order.
+            control.IsTabStop = false;
+        }
 
         int count = VisualTreeHelper.GetChildrenCount(root);
         for (int i = 0; i < count; i++)
@@ -2033,20 +2051,99 @@ public sealed partial class MainWindow
     }
 
     /// <summary>
-    /// Mini mode and fullscreen are keyboard-driven, so Tab must not park focus
-    /// on a chrome control (where Space would press it instead of pausing).
-    /// Registered with <c>handledEventsToo</c>, i.e. it runs after the normal
-    /// key handler and only manages focus, never the shortcut itself.
+    /// Mini mode and fullscreen are keyboard-driven, so no chrome control may
+    /// keep focus or see a key before the player does. This runs in the
+    /// tunneling preview phase: Tab is swallowed and focus is forced back to
+    /// the root, while every other key goes through the same key map as the
+    /// root handler, so Space/Enter keep pausing/entering fullscreen even when
+    /// WinUI managed to focus a button or a lazily realised playlist container.
     /// </summary>
-    private void OnRootKeyDownCapture(object sender, KeyRoutedEventArgs e)
+    private void OnRootPreviewKeyDown(object sender, KeyRoutedEventArgs e)
     {
-        if (e.Key != VirtualKey.Tab || (!InMiniMode && !IsFullscreen))
+        if (!InMiniMode && !IsFullscreen)
         {
             return;
         }
 
-        e.Handled = true;
+        if (IsTextInputFocused())
+        {
+            return;
+        }
+
+        if (e.Key == VirtualKey.Tab)
+        {
+            Trace($"mini tab: before={DescribeFocusedElement()}");
+            e.Handled = true;
+            RootGrid.Focus(FocusState.Programmatic);
+            Trace($"mini tab: after={DescribeFocusedElement()}");
+            return;
+        }
+
+        Trace($"key down {e.Key} (preview)");
+        if (TryExecuteShortcut(e.Key))
+        {
+            // Keep the key away from whatever still holds focus: a button would
+            // treat Space/Enter as "press me" and a list would scroll instead.
+            e.Handled = true;
+        }
+    }
+
+    /// <summary>
+    /// Focus guard for the keyboard-driven modes. Whatever moved focus onto a
+    /// chrome control (Tab in a lazily realised list, automation, a template
+    /// part created after the recursive pass), the player keeps the keyboard:
+    /// focus is pushed back to the root so Space/Enter can never press the
+    /// focused button. Pointer input is unaffected: a click still reaches the
+    /// control, it just does not keep keyboard focus.
+    /// </summary>
+    private void OnRootGotFocus(object sender, RoutedEventArgs e)
+    {
+        if (!InMiniMode && !IsFullscreen)
+        {
+            return;
+        }
+
+        object? focused = FocusManager.GetFocusedElement(RootGrid.XamlRoot);
+        if (focused is null || ReferenceEquals(focused, RootGrid))
+        {
+            return;
+        }
+
+        if (focused is not Control control || control is TextBox or RichEditBox or AutoSuggestBox or NumberBox)
+        {
+            // Panels and non-focusable elements (or a legitimate text editor)
+            // are not the problem this guard is about.
+            return;
+        }
+
+        Trace($"focus guard: {DescribeFocusedElement()} -> RootGrid");
         RootGrid.Focus(FocusState.Programmatic);
+    }
+
+    private string DescribeFocusedElement()
+    {
+        try
+        {
+            object? focused = FocusManager.GetFocusedElement(RootGrid.XamlRoot);
+            if (focused is null)
+            {
+                return "<null>";
+            }
+
+            if (focused is FrameworkElement element)
+            {
+                string name = string.IsNullOrEmpty(element.Name) ? "-" : element.Name;
+                string id = AutomationProperties.GetAutomationId(element);
+                id = string.IsNullOrEmpty(id) ? "-" : id;
+                return $"{element.GetType().Name} name={name} id={id}";
+            }
+
+            return focused.GetType().Name;
+        }
+        catch (Exception ex)
+        {
+            return $"<{ex.GetType().Name}>";
+        }
     }
 
     private void OnRootKeyDown(object sender, KeyRoutedEventArgs e)
@@ -2057,7 +2154,14 @@ public sealed partial class MainWindow
         }
 
         Trace($"key down {e.Key}");
-        KeyModifiers modifiers = KeyModifiers.None;
+        if (TryExecuteShortcut(e.Key))
+        {
+            e.Handled = true;
+        }
+    }
+
+    private bool TryExecuteShortcut(VirtualKey key)
+    {        KeyModifiers modifiers = KeyModifiers.None;
         if (WindowInterop.IsKeyDown(VirtualKey.Control))
         {
             modifiers |= KeyModifiers.Control;
@@ -2079,18 +2183,25 @@ public sealed partial class MainWindow
             modifiers |= KeyModifiers.Windows;
         }
 
-        if (!KeyChordMapper.TryMap(e.Key, modifiers, out KeyChord chord) ||
+        if (!KeyChordMapper.TryMap(key, modifiers, out KeyChord chord) ||
             !_keyMap.TryGetAction(chord, out string? action) ||
             string.IsNullOrEmpty(action))
         {
-            return;
+            return false;
         }
 
-        if (ExecuteAction(action))
-        {
-            e.Handled = true;
-        }
+        Trace($"action {action} ({chord})");
+        return ExecuteAction(action);
     }
+
+    /// <summary>
+    /// Task-58: the picture-in-picture window forwards keys here so a focused PiP
+    /// surface shares this window's key map and action executor instead of
+    /// keeping a second copy of the binding table. Returns true when a binding
+    /// ran (the caller marks the key handled); false means the key is unbound and
+    /// must stay untouched for IME / system shortcuts.
+    /// </summary>
+    internal bool TryForwardShortcutKey(VirtualKey key) => TryExecuteShortcut(key);
 
     private bool ExecuteAction(string action)
     {

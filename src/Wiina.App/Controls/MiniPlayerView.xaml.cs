@@ -151,6 +151,27 @@ public sealed partial class MiniPlayerView : UserControl
 
     public void SetAnimationsEnabled(bool enabled) => _animationsEnabled = enabled;
 
+    /// <summary>
+    /// One-line snapshot of the surfaces that decide the mini-mode background
+    /// colour, written to the trace when mini mode is entered so a light-theme
+    /// regression can be attributed to a specific layer.
+    /// </summary>
+    public string DescribeThemeSurfaces()
+    {
+        static string ColorOf(Brush? brush) => brush switch
+        {
+            SolidColorBrush solid => solid.Color.ToString(),
+            LinearGradientBrush gradient => $"gradient({gradient.GradientStops.Count})",
+            null => "null",
+            _ => brush.GetType().Name,
+        };
+
+        return $"theme={ActualTheme} root={ColorOf(Root.Background)} " +
+            $"cover={ColorOf(FallbackCoverSurface.Background)} coverVisible={FallbackCover.Visibility} " +
+            $"info={ColorOf(InfoPanel.Background)} controls={ColorOf(ControlArea.Background)} " +
+            $"playlist={ColorOf(PlaylistPanel.Background)}";
+    }
+
     public void SetMedia(string? title, string? artist, string? album, bool hasAlbumArt)
     {
         string resolvedTitle = string.IsNullOrWhiteSpace(title) ? "Wiina" : title;

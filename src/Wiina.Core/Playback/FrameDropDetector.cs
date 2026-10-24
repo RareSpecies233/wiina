@@ -54,7 +54,17 @@ public readonly record struct FrameDropNotice(
     long Drops,
     double Seconds,
     double PerMinute,
-    long TotalDrops);
+    long TotalDrops)
+{
+    /// <summary>
+    /// One-line text for the in-app notice card. The wording lives in Core so
+    /// the formatting is unit-testable without a WinUI host (the old version
+    /// pushed this through mpv's show-text, which on this libmpv build printed
+    /// the ASS positioning tags as literal text).
+    /// </summary>
+    public string Describe() => FormattableString.Invariant(
+        $"Wiina · 丢帧 {PerMinute:0} 帧/分（{Seconds:0.#} 秒内 {Drops} 帧，累计 {TotalDrops}）");
+}
 
 /// <summary>
 /// Sliding-window frame-drop detector for libmpv playback.

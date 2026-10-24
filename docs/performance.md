@@ -1,8 +1,8 @@
-# Performance measurements (v1.3.3)
+# Performance measurements (v1.3.4)
 
 Measured on the development machine on 2026-10-19 (Asia/Hong_Kong), at v1.0.0.
 The numbers below are the historical baseline; they were **not** re-measured
-for 1.2.4 through 1.3.3 (see the per-version notes below for
+for 1.2.4 through 1.3.4 (see the per-version notes below for
 the known deltas). Numbers are what
 this machine produced; they are not universal guarantees.
 
@@ -70,6 +70,18 @@ scenarios (peak 265.7 MB at 4K). Private bytes exceed 300 MB at 4K because the
 GPU/driver surfaces and the video swapchain are charged to the process; this is
 reported honestly rather than trimmed by a smaller measurement window.
 
+## What changed in 1.3.4
+
+- No new polling: the dropped-frame card is driven by the existing
+  `FrameDropDetector` tick and the notice itself is a plain XAML border shown
+  for 2.2 s (180 ms fade), replacing the mpv `show-text` round-trip. The
+  statistics panel keeps its 1 s refresh.
+- The unfocused-window guards remove pointer work while the window is inactive:
+  two early returns in the pointer handlers and one in `ShowChrome`.
+- PiP key forwarding runs only on key events, not per frame; the mini player
+  applies its theme brush and `MicaBackdrop` once on entry.
+- Settings: eleven pages, 129 rows, 571 UI strings; 833 tests. Startup, memory,
+  blur and 4K numbers were **not** re-measured for 1.3.4.
 ## What changed in 1.3.3
 
 - **Open chrome menus stop the auto-hide countdown** instead of letting a menu

@@ -1,11 +1,70 @@
 # Wiina release notes
 
-Release date (1.3.3): 2026-10-25
+Release date (1.3.4): 2026-10-25
 
 Windows-native, IINA-inspired mpv front end built with WinUI 3, Windows App
 SDK 2.5, and libmpv.
 
-## What's new in 1.3.3
+## What's new in 1.3.4
+
+### An unfocused window no longer wakes the OSC
+
+`OnRootPointerEntered`, `OnRootPointerMoved` and `ShowChrome` now return early
+while the window is inactive and the chrome is hidden (`!_windowActive &&
+!_chromeShown`), so hovering an unfocused window no longer pops the OSC back.
+Losing focus still hides the chrome through the existing `Activated` path
+(docked layout and an open sidebar remain exempt). Measured with a real mouse:
+hover on an unfocused window does nothing; after clicking to activate, moving
+the pointer shows the OSC.
+
+### The reported "mini window" was Picture-in-Picture
+
+The keyboard and light-theme defects the user saw were in `PipWindow`, not in
+`MiniPlayer`. Picture-in-Picture no longer lets Tab land on its transport
+buttons, and its root `PreviewKeyDown` swallows Tab, maps Space to play/pause,
+Enter to fullscreen (leaving PiP first) and Escape to restore the main window.
+Every other key is forwarded to the main window, and a key only counts as
+handled when the main window actually ran a binding. Verified with real keys:
+Left/Right seek, Up/Down volume, M mute, Ctrl+S screenshot, Enter/Escape,
+Tab x5 stays on the pane.
+
+### Light theme for PiP and the mini player
+
+The PiP root background is a `ThemeResource AppBackgroundBrush` instead of a
+hard-coded black; the mini player applies an opaque theme brush plus
+`MicaBackdrop` on entry and restores the previous background on exit.
+Screenshots: `artifacts/pip-light.png`, `mini-light-mini.png`,
+`mini-dark-mini.png`.
+
+**Known limit:** the outermost 8 px of every window is DWM's invisible resize
+border - it shows the desktop wallpaper and cannot be painted by the app. DPI
+above 100 % and High Contrast were not re-tested this round.
+
+### The dropped-frame notice is a native card
+
+The transient dropped-frame notice is now a WinUI `Border` in the overlay
+layer (`MainWindow.xaml`), centred on the picture, non-hit-testable, shown for
+2.2 s and faded over 180 ms. The mpv `show-text`/ASS `\an`/`\pos` path was
+deleted; the text comes from `FrameDropNotice.Describe()` and a unit test
+asserts that no ASS markup creeps back in.
+
+### One mini-player entry, behind a development warning
+
+Settings -> Advanced now has a single row, "Mini player (music mode)"; the
+separate `advanced.music-mode` row is gone. The description warns that the
+feature is still in development with limited stability, and a `ContentDialog`
+confirmation (default: cancel) appears before the settings window closes.
+
+### Cursor hiding is still not solved
+
+Nothing in 1.3.4 changes the cursor path. The 1.3.2 IAT hook remains the last
+attempt and is still overridden by the WinUI input stack in some
+configurations; treat it as unverified, not fixed.
+
+### Counts
+
+Eleven pages, 129 settings rows, 571 UI strings, 833 tests.
+## 1.3.3 — previous release
 
 ### Opening a chrome menu no longer hides the OSC
 

@@ -505,6 +505,15 @@ public sealed partial class MainWindow : Window
             return;
         }
 
+        // An unfocused player must not light up: moving the mouse over it while
+        // another window is active is not an intent to control playback. The
+        // click raises Activated first, and the next move shows the chrome.
+        if (!_windowActive && !_chromeShown)
+        {
+            Trace("[pointer] enter ignored (window inactive)");
+            return;
+        }
+
         Point point = e.GetCurrentPoint(RootGrid).Position;
         _oscState.EnterWindow(point.X, point.Y, _idleClock.Elapsed);
         ShowChrome();
@@ -523,6 +532,14 @@ public sealed partial class MainWindow : Window
         // WinUI resets the cursor to the arrow for every mouse move; while the
         // chrome is faded out the pointer must stay hidden even for jitter.
         ReapplyHiddenCursor();
+
+        // Activity in an inactive window must not wake the chrome or re-arm the
+        // countdown. A click activates the window (Activated shows the chrome),
+        // so the following move behaves normally again.
+        if (!_windowActive && !_chromeShown)
+        {
+            return;
+        }
 
         // A pointer on the chrome parks the countdown (hover keeps the OSC up);
         // only movement over the video restarts it.
@@ -702,36 +719,11 @@ public sealed partial class MainWindow : Window
             _frameDropDetector.TryTakeNotice(now, out FrameDropNotice notice))
         {
             // Report a rate, not a raw delta: one hiccup becomes a visible burst
-            // in a three-second window, which is exactly what the user cares about.
-            // The notice is placed at the centre of the picture: the default
-            // top-centre OSD slot is fully covered whenever the title bar is
-            // visible, and the left edge reads as an accident. The ASS tags only
-            // affect this one message, so every other OSD keeps its configured
-            // position.
-            long osdWidth = Int(player, "osd-width");
-            long osdHeight = Int(player, "osd-height");
-            if (osdWidth <= 0 || osdHeight <= 0)
-            {
-                osdWidth = Int(player, "width");
-                osdHeight = Int(player, "height");
-            }
-
-            if (osdWidth <= 0 || osdHeight <= 0)
-            {
-                osdWidth = 1920;
-                osdHeight = 1080;
-            }
-
-            long centerX = osdWidth / 2;
-            long centerY = osdHeight / 2;
-            player.Command(
-                "show-text",
-                $"{{\\an5\\pos({centerX},{centerY})}}Wiina · 丢帧 {notice.PerMinute:0} 帧/分" +
-                $"（{notice.Seconds:0.#} 秒内 {notice.Drops} 帧，累计 {notice.TotalDrops}）",
-                "2200");
-            Trace(
-                $"[frame-drop] notice {notice.PerMinute:0}/min" +
-                $" drops={notice.Drops} window={notice.Seconds:0.##}");
+            // in the detector's window, which is exactly what the user cares
+            // about. The notice is an in-app card: mpv's show-text prints ASS
+            // tags literally on this build, so the message used to land in the
+            // top-left corner with its positioning markup visible.
+            ShowFrameDropNotice(notice);
         }
 
         if (_settings.ShowMpvStats)
@@ -857,6 +849,16 @@ public sealed partial class MainWindow : Window
     {
         if (!ChromeInteractionEnabled)
         {
+            return;
+        }
+
+        // Central guard for every show path: an inactive window keeps its chrome
+        // down so hover over an unfocused player cannot wake the OSC. While the
+        // chrome is already visible (activated by a click, sidebar open, docked
+        // layout) shows stay allowed.
+        if (!_windowActive && !_chromeShown)
+        {
+            Trace("[chrome] show ignored (window inactive)");
             return;
         }
 

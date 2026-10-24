@@ -24,7 +24,7 @@
         <!-- Generated cover tile: only visible when the file has no embedded
              album art (mpv draws real cover art as a video track behind us). -->
         <Grid x:Name="FallbackCover" Grid.Row="0">
-            <Border Background="{ThemeResource MiniCoverFallbackBrush}" />
+            <Border x:Name="FallbackCoverSurface" Background="{ThemeResource MiniCoverFallbackBrush}" />
             <TextBlock x:Name="FallbackInitial"
                        Text="♪"
                        FontFamily="Segoe UI Symbol"
@@ -201,6 +201,7 @@
                 </Grid>
                 <ListView x:Name="PlaylistList"
                           Grid.Row="1"
+                          IsTabStop="False"
                           SelectionMode="Single"
                           IsItemClickEnabled="True"
                           ItemClick="OnPlaylistItemClick" />

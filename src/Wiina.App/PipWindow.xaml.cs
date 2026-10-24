@@ -5,6 +5,7 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media.Animation;
 using Windows.Graphics;
+using VirtualKey = Windows.System.VirtualKey;
 using Wiina.App.Interop;
 using Wiina.Core.State;
 using Wiina.App.Localization;
@@ -34,6 +35,13 @@ public sealed partial class PipWindow : Window
 
     private bool? _snapFrameApplied;
 
+    /// <summary>
+    /// Task-58: the main window that created this PiP surface. Captured at
+    /// construction because the owner is minimized while PiP is the visible
+    /// surface; forwarded keys must still reach that exact window.
+    /// </summary>
+    private readonly MainWindow? _shortcutHost;
+
     public PipWindow(
         RectInt32 workArea,
         RectInt32 mainFrame,
@@ -42,6 +50,11 @@ public sealed partial class PipWindow : Window
         double rasterizationScale)
     {
         InitializeComponent();
+
+        // Task-58: remember the owner now (it is the active window while the PiP
+        // is being created) so forwarded keys reach the right window even when
+        // several main windows are open.
+        _shortcutHost = App.ActiveWindow;
 
         Root.RequestedTheme = App.ResolveTheme();
 
@@ -98,6 +111,12 @@ public sealed partial class PipWindow : Window
             windowMoveStarted: _snapSession.Reset);
 
         Root.SizeChanged += OnRootSizeChanged;
+        // Task-57: the transport buttons must never take keyboard focus, and the
+        // play/pause + restore keys must work no matter which element has focus.
+        Root.AddHandler(
+            UIElement.PreviewKeyDownEvent,
+            new KeyEventHandler(OnRootPreviewKeyDown),
+            handledEventsToo: true);
         Root.Loaded += (_, _) =>
         {
             if (Root.XamlRoot is { } xamlRoot)
@@ -434,6 +453,39 @@ public sealed partial class PipWindow : Window
     {
         args.Handled = true;
         RestoreRequested?.Invoke(this, EventArgs.Empty);
+    }
+
+    /// <summary>
+    /// Task-57/58: runs in the preview (tunneling) phase before any focused
+    /// control can consume the key. Tab never reaches the transport buttons,
+    /// Space pauses, Escape returns to the main window, and every other key is
+    /// forwarded to the owning main window so the PiP surface uses the same key
+    /// map (seeking, volume, mute, screenshot, speed, fullscreen...). Unbound
+    /// keys stay unhandled so IME and system shortcuts keep working.
+    /// </summary>
+    private void OnRootPreviewKeyDown(object sender, KeyRoutedEventArgs e)
+    {
+        switch (e.Key)
+        {
+            case VirtualKey.Tab:
+                e.Handled = true;
+                return;
+            case VirtualKey.Space:
+                e.Handled = true;
+                PlayPauseRequested?.Invoke(this, EventArgs.Empty);
+                ShowControls();
+                return;
+            case VirtualKey.Escape:
+                e.Handled = true;
+                RestoreRequested?.Invoke(this, EventArgs.Empty);
+                return;
+        }
+
+        MainWindow? host = _shortcutHost ?? App.ActiveWindow;
+        if (host is not null && host.TryForwardShortcutKey(e.Key))
+        {
+            e.Handled = true;
+        }
     }
 
     private void OnPlayPauseClick(object sender, RoutedEventArgs e)

@@ -244,6 +244,8 @@ public static class UiStrings
     public const string settings_toggle = "settings.toggle";
     public const string settings_run = "settings.run";
     public const string settings_enter = "settings.enter";
+    public const string settings_miniDevTitle = "settings.miniDevTitle";
+    public const string settings_miniDevBody = "settings.miniDevBody";
     public const string settings_unavailable = "settings.unavailable";
     public const string settings_searchEmpty = "settings.searchEmpty";
     public const string settings_pressKeys = "settings.pressKeys";
@@ -889,6 +891,10 @@ public static class UiStrings
         Add("settings.toggle", "切换", "Toggle");
         Add("settings.run", "执行", "Run");
         Add("settings.enter", "进入", "Enter");
+        Add("settings.miniDevTitle", "迷你播放器（开发中）", "Mini player (in development)");
+        Add("settings.miniDevBody",
+            "迷你播放器与音乐模式是同一功能，目前仍在开发中，稳定性有限，建议仅在测试时使用。\n\n进入后设置窗口会关闭。",
+            "The mini player and music mode are the same feature. It is still in development and stability is limited, so use it for testing only.\n\nThe settings window closes when you continue.");
         Add("settings.unavailable", "不可用：{0}", "Unavailable: {0}");
         Add("settings.searchEmpty", "没有匹配的设置。", "No matching settings.");
         Add("settings.pressKeys", "请按下快捷键…", "Press shortcut keys…");
