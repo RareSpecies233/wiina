@@ -18,7 +18,7 @@ public static class SettingsCatalog
     {
         new(SettingsPageId.General, "通用", "启动、外观与历史记录", "\uE713"),
         new(SettingsPageId.Ui, "界面", "窗口布局、OSC、OSD 与缩略图", "\uE790"),
-        new(SettingsPageId.Video, "视频", "硬件解码、比例、裁剪与画面变换", "\uE714"),
+        new(SettingsPageId.Video, "视频", "硬件解码、画质、比例与画面变换", "\uE714"),
         new(SettingsPageId.Audio, "音频", "音量上限、延迟与输出设备", "\uE767"),
         new(SettingsPageId.Subtitles, "字幕", "字体、颜色、位置与延迟", "\uE8D8"),
         new(SettingsPageId.Network, "网络", "缓存、代理与请求头", "\uE774"),
@@ -26,7 +26,7 @@ public static class SettingsCatalog
         new(SettingsPageId.KeyBindings, "按键绑定", "录制、冲突检测与导入导出", "\uE765"),
         new(SettingsPageId.Advanced, "高级", "诊断、文件夹与维护", "\uE7EF"),
         new(SettingsPageId.Integration, "文件关联", "让 Windows 用 Wiina 打开视频与音频", "\uE71B"),
-        new(SettingsPageId.Plugin, "插件", "插件管理（Stage 9）", "\uEA86"),
+        new(SettingsPageId.Plugin, "插件", "尚未实现（Stage 9）：仅保留占位与文件夹入口", "\uEA86"),
         new(SettingsPageId.Utilities, "工具", "字体、日志、检查器与关于", "\uE90F"),
     };
 
@@ -93,6 +93,12 @@ public static class SettingsCatalog
             settings => settings.ResumePlayback,
             (settings, value) => settings.ResumePlayback = value,
             "resume history 续播 历史"));
+        rows.Add(BoolRow(
+            "general.restore-window", SettingsPageId.General, "播放与历史",
+            "恢复上次窗口位置", "启动时还原窗口尺寸与位置；关闭后总是居中显示。",
+            settings => settings.RestoreWindowPosition,
+            (settings, value) => settings.RestoreWindowPosition = value,
+            "window position restore 窗口 位置"));
         rows.Add(ChoiceRow(
             "general.auto-playlist", SettingsPageId.General, "播放列表",
             "自动添加播放列表",
@@ -102,31 +108,6 @@ public static class SettingsCatalog
             (settings, value) => settings.AutoPlaylistMode =
                 (AutoPlaylistMode)Math.Clamp(value, 0, 2),
             "playlist auto folder subfolder 播放列表 自动 同目录 子文件夹 手动"));
-        rows.Add(BoolRow(
-            "general.restore-window", SettingsPageId.General, "播放与历史",
-            "恢复上次窗口位置", "启动时还原窗口尺寸与位置；关闭后总是居中显示。",
-            settings => settings.RestoreWindowPosition,
-            (settings, value) => settings.RestoreWindowPosition = value,
-            "window position restore 窗口 位置"));
-        rows.Add(BoolRow(
-            "general.edge-snap", SettingsPageId.General, "播放与历史",
-            "拖动时吸附屏幕边缘",
-            "拖动窗口结束后，靠近显示器工作区边缘会自动贴合（类似 macOS）。",
-            settings => settings.EdgeSnapping,
-            (settings, value) => settings.EdgeSnapping = value,
-            "snap edge window drag 吸附 边缘 拖动 窗口"));
-        rows.Add(ActionRow(
-            "general.screenshot-folder", SettingsPageId.General, "播放与历史",
-            "截图文件夹",
-            "Ctrl+S 保存截图的目录（默认 图片\\Wiina Screenshots）。",
-            "choose-screenshot-folder",
-            "screenshot folder 截图 文件夹",
-            settings => GetScreenshotFolder(settings)));
-        rows.Add(ActionRow(
-            "general.data-folder", SettingsPageId.General, "播放与历史",
-            "打开数据文件夹", "settings.json、history.json 与 mpv 配置所在的目录。",
-            "open-data-folder",
-            "data folder config 数据 配置"));
 
         // ------------------------------------------------------------------ UI
         rows.Add(ChoiceRow(
@@ -150,6 +131,13 @@ public static class SettingsCatalog
             settings => settings.LockAspectRatio,
             (settings, value) => settings.LockAspectRatio = value,
             "aspect ratio lock 宽高比"));
+        rows.Add(BoolRow(
+            "general.edge-snap", SettingsPageId.Ui, "窗口与 OSC",
+            "拖动时吸附屏幕边缘",
+            "拖动窗口时，靠近显示器工作区边缘会实时贴合；拖离时会自动脱离。",
+            settings => settings.EdgeSnapping,
+            (settings, value) => settings.EdgeSnapping = value,
+            "snap edge window drag 吸附 边缘 拖动 窗口"));
         rows.Add(ChoiceRow(
             "ui.sidebar-side", SettingsPageId.Ui, "窗口与 OSC",
             "侧边栏位置", "快速设置、播放列表和章节从窗口哪一侧滑入。",
@@ -179,6 +167,13 @@ public static class SettingsCatalog
             settings => settings.OscAutoHide,
             (settings, value) => settings.OscAutoHide = value,
             "osc autohide 自动隐藏"));
+        rows.Add(ChoiceRow(
+            "ui.blur-mode", SettingsPageId.Ui, "窗口与 OSC",
+            "毛玻璃模式", "固定/动态/始终会抓取视频帧做高斯模糊；关闭后使用不透明纯色 + 重点色染色，性能最好且不透出画面。",
+            new[] { "固定（静态帧）", "动态（跟随视频）", "始终（持续计算）", "关闭毛玻璃（纯色）" },
+            settings => (int)settings.ChromeBlurMode,
+            (settings, value) => settings.ChromeBlurMode = (ChromeBlurMode)Math.Clamp(value, 0, 3),
+            "blur glass acrylic chrome 毛玻璃 模糊 纯色"));
         rows.Add(BoolRow(
             "ui.osd-enabled", SettingsPageId.Ui, "OSD",
             "显示 OSD 消息", "音量、跳转、轨道切换等状态提示。",
@@ -206,12 +201,6 @@ public static class SettingsCatalog
             settings => settings.OsdDurationSeconds,
             (settings, value) => settings.OsdDurationSeconds = Math.Clamp(value, 0.2, 5),
             "osd duration timeout OSD 时间"));
-        rows.Add(BoolRow(
-            "ui.osd-persistent", SettingsPageId.Ui, "OSD",
-            "启用持久 OSD", "切换后显示可交互的技术信息面板；Esc 关闭。",
-            settings => settings.OsdPersistent,
-            (settings, value) => settings.OsdPersistent = value,
-            "osd persistent 持久 OSD"));
         rows.Add(BoolRow(
             "ui.fullscreen-clock", SettingsPageId.Ui, "全屏状态栏",
             "全屏时钟", "全屏时在左下角显示时间。",
@@ -275,29 +264,6 @@ public static class SettingsCatalog
                 new[] { "auto-safe", "auto", "d3d11va", "dxva2", "no" }[
                     Math.Clamp(value, 0, 4)],
             "hwdec hardware decode d3d11va dxva2 硬解 模式"));
-        rows.Add(ChoiceRow(
-            "video.quality", SettingsPageId.Video, "解码",
-            "视频画质预设",
-            "mpv 缩放与去色带 profile；自动保留 IINA/libmpv 默认，高质量更清晰但更耗 GPU。",
-            new[] { "自动（IINA 默认）", "均衡", "高质量", "性能优先" },
-            settings => (int)settings.VideoQualityPreset,
-            (settings, value) =>
-            {
-                settings.VideoQualityPreset = (VideoQualityPreset)Math.Clamp(value, 0, 3);
-                settings.ActiveQualityProfile = settings.VideoQualityPreset switch
-                {
-                    VideoQualityPreset.Balanced => "均衡",
-                    VideoQualityPreset.HighQuality => "高质量",
-                    VideoQualityPreset.Performance => "性能优先",
-                    _ => "自动（IINA 默认）",
-                };
-            },
-            "quality profile scaler mpv IINA 画质 缩放 性能 高质量 预设"));
-        rows.Add(ActionRow(
-            "video.quality-editor", SettingsPageId.Video, "解码",
-            "管理画质预设…", "创建、重命名、导入/导出带 profile 的缩放与去色带设置。",
-            "open-video-quality",
-            "quality profile scaler import export 画质 预设 管理"));
         rows.Add(BoolRow(
             "video.mpv-stats", SettingsPageId.Video, "解码",
             "播放统计面板", "在画面右上角显示解码、渲染、音画同步与丢帧等完整统计。",
@@ -413,6 +379,34 @@ public static class SettingsCatalog
             (settings, value) => settings.VideoDelogoHeight = (int)Math.Round(
                 Math.Clamp(value, 2, 16384)),
             "delogo height 高度 台标"));
+        rows.Add(ChoiceRow(
+            "video.quality", SettingsPageId.Video, "画面",
+            "视频画质预设",
+            "两个内置档位：默认保留 IINA/libmpv 的缩放组合，性能优先全部使用 Bilinear；自定义档位在“管理画质预设…”里。",
+            new[] { "默认", "性能优先" },
+            settings => settings.VideoQualityPreset == VideoQualityPreset.Performance ? 1 : 0,
+            (settings, value) =>
+            {
+                settings.VideoQualityPreset = value >= 1
+                    ? VideoQualityPreset.Performance
+                    : VideoQualityPreset.Auto;
+                settings.ActiveQualityProfile =
+                    settings.VideoQualityPreset == VideoQualityPreset.Performance
+                        ? "性能优先"
+                        : "默认";
+            },
+            "quality profile scaler mpv IINA 画质 缩放 性能 默认 预设"));
+        rows.Add(ActionRow(
+            "video.quality-editor", SettingsPageId.Video, "画面",
+            "管理画质预设…", "创建、重命名、导入/导出缩放档位；去色带开关在下面单独控制。",
+            "open-video-quality",
+            "quality profile scaler import export 画质 预设 管理"));
+        rows.Add(BoolRow(
+            "video.deband", SettingsPageId.Video, "画面",
+            "去色带", "默认关闭；开启后减轻渐变画面的色带，但会轻微柔化细节并增加少量 GPU 开销。",
+            settings => settings.DebandEnabled,
+            (settings, value) => settings.DebandEnabled = value,
+            "deband color banding gradient 去色带 色带 渐变"));
         rows.Add(ChoiceRow(
             "video.aspect", SettingsPageId.Video, "画面",
             "宽高比", "覆盖视频显示比例；默认跟随容器。",
@@ -810,20 +804,37 @@ public static class SettingsCatalog
             "libmpv version mpv 版本",
             settings => "由播放引擎提供"));
         rows.Add(ActionRow(
+            "advanced.export-diagnostics", SettingsPageId.Advanced, "诊断",
+            "导出诊断信息", "把版本、渲染器、关键设置为文本写入日志文件夹。",
+            "export-diagnostics",
+            "diagnostics export 诊断 导出"));
+        rows.Add(ActionRow(
+            "utilities.open-url", SettingsPageId.Advanced, "诊断",
+            "打开 URL…", "校验地址后交给当前播放窗口打开。",
+            "open-url-dialog",
+            "url open 地址"));
+        rows.Add(ActionRow(
             "advanced.config-folder", SettingsPageId.Advanced, "文件夹",
             "打开配置文件夹", "%LOCALAPPDATA%\\Wiina（settings.json / mpv 子目录）。",
             "open-config-folder",
             "config folder 配置 文件夹"));
         rows.Add(ActionRow(
+            "general.data-folder", SettingsPageId.Advanced, "文件夹",
+            "打开数据文件夹", "settings.json、history.json 与 mpv 配置所在的目录。",
+            "open-data-folder",
+            "data folder config 数据 配置"));
+        rows.Add(ActionRow(
+            "general.screenshot-folder", SettingsPageId.Advanced, "文件夹",
+            "截图文件夹",
+            "Ctrl+S 保存截图的目录（默认 图片\\Wiina Screenshots）。",
+            "choose-screenshot-folder",
+            "screenshot folder 截图 文件夹",
+            settings => GetScreenshotFolder(settings)));
+        rows.Add(ActionRow(
             "advanced.log-folder", SettingsPageId.Advanced, "文件夹",
             "打开日志文件夹", "%LOCALAPPDATA%\\Wiina\\logs 与崩溃日志。",
             "open-log-folder",
             "log folder 日志 文件夹"));
-        rows.Add(ActionRow(
-            "advanced.export-diagnostics", SettingsPageId.Advanced, "诊断",
-            "导出诊断信息", "把版本、渲染器、关键设置为文本写入日志文件夹。",
-            "export-diagnostics",
-            "diagnostics export 诊断 导出"));
         rows.Add(ActionRow(
             "advanced.clear-history", SettingsPageId.Advanced, "维护",
             "清空播放历史", "删除最近文件与断点续播记录。",
@@ -914,11 +925,6 @@ public static class SettingsCatalog
             (settings, value) => settings.SubtitleFont = Text.FontNameValidation.Normalize(value),
             "font picker 字体"));
         rows.Add(ActionRow(
-            "utilities.open-url", SettingsPageId.Utilities, "工具",
-            "打开 URL…", "校验地址后交给当前播放窗口打开。",
-            "open-url-dialog",
-            "url open 地址"));
-        rows.Add(ActionRow(
             "utilities.log-viewer", SettingsPageId.Utilities, "工具",
             "日志查看器", "查看 %TEMP% 跟踪日志与崩溃日志，可刷新、过滤、打开文件夹。",
             "open-log-viewer",
@@ -933,11 +939,6 @@ public static class SettingsCatalog
             "关于 Wiina", "版本、许可证、mpv 与 WinUI 信息。",
             "open-about",
             "about version license 关于 版本"));
-        rows.Add(ActionRow(
-            "utilities.technical-osd", SettingsPageId.Utilities, "工具",
-            "技术信息 OSD", "在当前播放窗口切换持久技术信息面板。",
-            "toggle-technical-osd",
-            "osd technical 技术信息"));
 
         return rows.ToArray();
     }

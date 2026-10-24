@@ -1,7 +1,5 @@
-using Microsoft.UI.Text;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
-using Microsoft.UI.Xaml.Media;
 
 namespace Wiina.App.Controls;
 
@@ -64,6 +62,9 @@ public sealed partial class PlaybackStatsPanel : UserControl
     {
         RowsHost.Children.Clear();
         _valueBlocks.Clear();
+        var groupStyle = (Style)Resources["StatGroupTextStyle"];
+        var labelStyle = (Style)Resources["StatLabelTextStyle"];
+        var valueStyle = (Style)Resources["StatValueTextStyle"];
 
         string? group = null;
         foreach (PlaybackStatRow row in rows)
@@ -74,9 +75,7 @@ public sealed partial class PlaybackStatsPanel : UserControl
                 RowsHost.Children.Add(new TextBlock
                 {
                     Text = group,
-                    FontSize = 11,
-                    FontWeight = FontWeights.SemiBold,
-                    Foreground = (Brush)Application.Current.Resources["SecondaryTextBrush"],
+                    Style = groupStyle,
                     Margin = new Thickness(0, _valueBlocks.Count == 0 ? 0 : 10, 0, 3),
                 });
             }
@@ -92,16 +91,14 @@ public sealed partial class PlaybackStatsPanel : UserControl
             var label = new TextBlock
             {
                 Text = row.Label,
-                FontSize = 12,
-                Foreground = (Brush)Application.Current.Resources["SecondaryTextBrush"],
+                Style = labelStyle,
                 TextTrimming = TextTrimming.CharacterEllipsis,
                 VerticalAlignment = VerticalAlignment.Top,
             };
             var value = new TextBlock
             {
                 Text = row.Value,
-                FontSize = 12,
-                Foreground = (Brush)Application.Current.Resources["PrimaryTextBrush"],
+                Style = valueStyle,
                 TextWrapping = TextWrapping.Wrap,
                 IsTextSelectionEnabled = true,
                 VerticalAlignment = VerticalAlignment.Top,

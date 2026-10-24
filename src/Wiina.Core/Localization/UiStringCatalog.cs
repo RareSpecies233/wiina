@@ -118,7 +118,6 @@ public static class UiStrings
     public const string ui_timelineThumbs = "ui.timelineThumbs";
     public const string ui_fullscreenBattery = "ui.fullscreenBattery";
     public const string ui_settings = "ui.settings";
-    public const string ui_persistentOsd = "ui.persistentOsd";
     public const string ui_window = "ui.window";
     public const string ui_windowSize = "ui.windowSize";
     public const string ui_alwaysOnTop = "ui.alwaysOnTop";
@@ -408,8 +407,6 @@ public static class UiStrings
     public const string osd_videoNotLoaded = "osd.videoNotLoaded";
     public const string osd_auto = "osd.auto";
     public const string osd_mutedSuffix = "osd.mutedSuffix";
-    public const string osd_persistentTitle = "osd.persistentTitle";
-    public const string osd_persistentBody = "osd.persistentBody";
     public const string osd_status = "osd.status";
     public const string osd_position = "osd.position";
     public const string osd_labelVolume = "osd.labelVolume";
@@ -606,9 +603,7 @@ public static class UiStrings
         Add("ui.copy", "复制", "Copy");
         Add("ui.video", "视频", "Video");
         Add("ui.qualityPreset", "视频画质", "Video quality");
-        Add("ui.qualityAuto", "自动（IINA 默认）", "Auto (IINA default)");
-        Add("ui.qualityBalanced", "均衡", "Balanced");
-        Add("ui.qualityHigh", "高质量", "High quality");
+        Add("ui.qualityAuto", "默认", "Default");
         Add("ui.qualityPerformance", "性能优先", "Performance first");
         Add("ui.removeSelected", "移除所选", "Remove selected");
         Add("ui.about", "关于 Wiina", "About Wiina");
@@ -699,7 +694,6 @@ public static class UiStrings
         Add("ui.timelineThumbs", "时间轴缩略图", "Timeline thumbnails");
         Add("ui.fullscreenBattery", "全屏电量", "Fullscreen battery");
         Add("ui.settings", "设置", "Settings");
-        Add("ui.persistentOsd", "持久技术信息 OSD", "Persistent technical OSD");
         Add("ui.window", "窗口", "Window");
         Add("ui.windowSize", "窗口尺寸", "Window size");
         Add("ui.alwaysOnTop", "窗口置顶", "Always on top");
@@ -1014,8 +1008,6 @@ public static class UiStrings
         Add("osd.videoNotLoaded", "未加载视频", "No video loaded");
         Add("osd.auto", "自动", "Auto");
         Add("osd.mutedSuffix", "（静音）", " (muted)");
-        Add("osd.persistentTitle", "持久 OSD（Stage 5）", "Persistent OSD (Stage 5)");
-        Add("osd.persistentBody", "持久 OSD（Stage 5）\n• 普通 OSD 在持久 OSD 打开期间被抑制。\n• 自动隐藏已停用；点击 × 或按 Esc 关闭。\n• 附件/插件视图与窗口增长后的多显示器适配留到后续阶段。", "Persistent OSD (Stage 5)\n• Regular OSD is suppressed while persistent OSD is open.\n• Auto-hide is disabled; click × or press Esc to close.\n• Attachment/plugin views and multi-monitor growth after window changes were deferred.");
         Add("osd.status", "状态", "Status");
         Add("osd.position", "位置", "Position");
         Add("osd.labelVolume", "音量", "Volume");

@@ -1,6 +1,6 @@
 # Plugins — not implemented (Stage 9 skipped)
 
-Wiina v1.2.3 **does not ship a plugin system**. Stage 9 of the implementation
+Wiina v1.2.4 **does not ship a plugin system**. Stage 9 of the implementation
 plan (plugin host, `Info.json`, permissions, WebView2-based plugin UI) was
 intentionally skipped by the maintainer.
 

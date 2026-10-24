@@ -14,9 +14,31 @@
             <SolidColorBrush x:Key="OsdProgressTrackBrush" Color="#33FFFFFF" />
             <SolidColorBrush x:Key="ThumbnailBorderBrush" Color="#99FFFFFF" />
             <SolidColorBrush x:Key="StatusBackgroundBrush" Color="#B3000000" />
-            <!-- Chrome over the video is an opaque solid block. Its colour is
-                 the base below mixed with the system accent at runtime by
-                 Services/ChromeTint.cs (issue 2: no capture, no Win2D blur). -->
+            <!-- Chrome over the video: a live Win2D blur of the video frame is
+                 painted behind the floating surfaces (ChromeBlur.cs); these
+                 tints ride on those blurred pixels. The opaque
+                 ChromeSolidBrush is the "no blur" option and the fallback
+                 until the first blurred frame arrives. Its colour is the base
+                 below mixed with the system accent at runtime by
+                 Services/ChromeTint.cs. -->
+            <SolidColorBrush x:Key="TitleBarBlurTintBrush" Color="#99101114" />
+            <SolidColorBrush x:Key="OscBlurTintBrush" Color="#B3101114" />
+            <AcrylicBrush x:Key="SidebarAcrylicBrush"
+                          TintColor="#FF101114"
+                          TintOpacity="0.28"
+                          TintLuminosityOpacity="0.45"
+                          FallbackColor="#CC15171B" />
+            <SolidColorBrush x:Key="SidebarBlurTintBrush" Color="#A6101114" />
+            <AcrylicBrush x:Key="TitleBarAcrylicBrush"
+                          TintColor="#FF101114"
+                          TintOpacity="0.32"
+                          TintLuminosityOpacity="0.3"
+                          FallbackColor="#CC101114" />
+            <AcrylicBrush x:Key="OscAcrylicBrush"
+                          TintColor="#FF101114"
+                          TintOpacity="0.46"
+                          TintLuminosityOpacity="0.4"
+                          FallbackColor="#E6101114" />
             <SolidColorBrush x:Key="ChromeSolidBrush" Color="#FF15171B" />
             <SolidColorBrush x:Key="SettingsRailBrush" Color="#0AFFFFFF" />
             <SolidColorBrush x:Key="SettingsPageWashBrush" Color="#4015171B" />
@@ -65,6 +87,24 @@
             <SolidColorBrush x:Key="ThumbnailBorderBrush" Color="#99000000" />
             <SolidColorBrush x:Key="StatusBackgroundBrush" Color="#CCF3F3F3" />
             <SolidColorBrush x:Key="ChromeSolidBrush" Color="#FFF3F3F3" />
+            <SolidColorBrush x:Key="TitleBarBlurTintBrush" Color="#99F3F3F3" />
+            <SolidColorBrush x:Key="OscBlurTintBrush" Color="#B3F3F3F3" />
+            <AcrylicBrush x:Key="SidebarAcrylicBrush"
+                          TintColor="#FFF3F3F3"
+                          TintOpacity="0.3"
+                          TintLuminosityOpacity="0.45"
+                          FallbackColor="#CCFFFFFF" />
+            <SolidColorBrush x:Key="SidebarBlurTintBrush" Color="#A6F3F3F3" />
+            <AcrylicBrush x:Key="TitleBarAcrylicBrush"
+                          TintColor="#FFF3F3F3"
+                          TintOpacity="0.36"
+                          TintLuminosityOpacity="0.3"
+                          FallbackColor="#CCF3F3F3" />
+            <AcrylicBrush x:Key="OscAcrylicBrush"
+                          TintColor="#FFF3F3F3"
+                          TintOpacity="0.5"
+                          TintLuminosityOpacity="0.42"
+                          FallbackColor="#E6F3F3F3" />
             <SolidColorBrush x:Key="SettingsRailBrush" Color="#0A000000" />
             <SolidColorBrush x:Key="SettingsPageWashBrush" Color="#40FFFFFF" />
             <SolidColorBrush x:Key="SettingsCardWashBrush" Color="#14000000" />
@@ -110,6 +150,12 @@
             <SolidColorBrush x:Key="ThumbnailBorderBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
             <SolidColorBrush x:Key="StatusBackgroundBrush" Color="{ThemeResource SystemColorWindowColor}" />
             <SolidColorBrush x:Key="ChromeSolidBrush" Color="{ThemeResource SystemColorWindowColor}" />
+            <SolidColorBrush x:Key="TitleBarBlurTintBrush" Color="{ThemeResource SystemColorWindowColor}" />
+            <SolidColorBrush x:Key="OscBlurTintBrush" Color="{ThemeResource SystemColorWindowColor}" />
+            <SolidColorBrush x:Key="SidebarAcrylicBrush" Color="{ThemeResource SystemColorWindowColor}" />
+            <SolidColorBrush x:Key="SidebarBlurTintBrush" Color="Transparent" />
+            <SolidColorBrush x:Key="TitleBarAcrylicBrush" Color="{ThemeResource SystemColorWindowColor}" />
+            <SolidColorBrush x:Key="OscAcrylicBrush" Color="{ThemeResource SystemColorWindowColor}" />
             <SolidColorBrush x:Key="SettingsRailBrush" Color="{ThemeResource SystemColorWindowColor}" />
             <SolidColorBrush x:Key="SettingsPageWashBrush" Color="{ThemeResource SystemColorWindowColor}" />
             <SolidColorBrush x:Key="SettingsCardWashBrush" Color="{ThemeResource SystemColorWindowColor}" />

@@ -7,7 +7,6 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media.Imaging;
 using Windows.Foundation;
-using Windows.Graphics;
 using Wiina.App.Controls;
 using Wiina.App.Services;
 using Wiina.Core.Models;
@@ -51,8 +50,6 @@ public sealed partial class MainWindow
     private int? _batteryPercent;
     private bool _batteryCharging;
     private bool _onAcPower;
-    private SizeInt32? _persistentSavedSize;
-    private SizeInt32? _persistentGrownSize;
 
     private bool IsFullscreen => AppWindow.Presenter.Kind == AppWindowPresenterKind.FullScreen;
 
@@ -62,8 +59,12 @@ public sealed partial class MainWindow
         Osd.SetScale(_settings.OsdSizePercent);
         Osd.SetDuration(OsdSettings.Duration(_settings.OsdDurationSeconds));
         Osd.SetAnimationsEnabled(AnimationsEnabled);
-        Osd.PersistentCloseRequested += ClosePersistentOsd;
-        Osd.PersistentVisibilityChanged += OnPersistentVisibilityChanged;
+
+        // The statistics card shares RootGrid's element-level theme; mirroring
+        // it like OsdText keeps its ThemeResource brushes from keeping the
+        // app-theme values used at construction (issue 6 dark-mode text).
+        StatsPanel.RequestedTheme = RootGrid.RequestedTheme;
+        RootGrid.ActualThemeChanged += (_, _) => StatsPanel.RequestedTheme = RootGrid.ActualTheme;
 
         FullscreenStatus.Configure(
             _settings.FullscreenClockEnabled,
@@ -77,10 +78,6 @@ public sealed partial class MainWindow
 
         UpdateOsdPlacement();
         UpdateFullscreenStatus();
-        if (_settings.OsdPersistent)
-        {
-            DispatcherQueue.TryEnqueue(ShowPersistentOsd);
-        }
     }
 
     private void ApplyStage5Settings()
@@ -101,11 +98,7 @@ public sealed partial class MainWindow
     private void ShowOsd(OsdMessage message)
     {
         OsdQueueResult result = _osdQueue.Enqueue(message);
-        if (!Osd.IsPersistentShowing)
-        {
-            Osd.Show(message);
-        }
-
+        Osd.Show(message);
         UpdateOsdPlacement();
         Trace($"OSD [{message.Kind}] coalesced={result.Coalesced}");
     }
@@ -139,6 +132,40 @@ public sealed partial class MainWindow
     // ------------------------------------------------------------ OSD geometry
 
     private void UpdateOsdPlacement()
+    {
+        (double top, double bottom, double right, double left) = OverlayInsets();
+
+        OsdPosition position = _settings.OsdPosition;
+        bool topPosition = OsdPositions.IsTop(position);
+        bool leftPosition = OsdPositions.IsLeft(position);
+        bool centered = OsdPositions.IsCenter(position);
+        HorizontalAlignment horizontal = centered
+            ? HorizontalAlignment.Center
+            : leftPosition
+                ? HorizontalAlignment.Left
+                : HorizontalAlignment.Right;
+        VerticalAlignment vertical = topPosition
+            ? VerticalAlignment.Top
+            : VerticalAlignment.Bottom;
+
+        Osd.HorizontalAlignment = horizontal;
+        Osd.VerticalAlignment = vertical;
+        Osd.Margin = new Thickness(
+            centered ? 8 : leftPosition ? left : 0,
+            topPosition ? top : 0,
+            centered ? 8 : leftPosition ? 0 : right,
+            topPosition ? 0 : bottom);
+        Osd.SetAlignment(horizontal, vertical);
+
+        UpdateStatsPlacement(top, bottom, right, left);
+    }
+
+    /// <summary>
+    /// Insets shared by the overlay cards (OSD and statistics): bottom-anchored
+    /// cards stay clear of the OSC and top-anchored cards clear of the title bar
+    /// or top OSC; fullscreen drops the chrome allowances.
+    /// </summary>
+    private (double Top, double Bottom, double Right, double Left) OverlayInsets()
     {
         double bottom = 8;
         double top = 8;
@@ -184,27 +211,34 @@ public sealed partial class MainWindow
             bottom = Math.Max(bottom, 48);
         }
 
+        return (top, bottom, right, left);
+    }
+
+    /// <summary>
+    /// Places the statistics card on the same six OSD positions and with the
+    /// same insets, so it respects the OSD position setting and never covers
+    /// the OSC or title bar (issue 6).
+    /// </summary>
+    private void UpdateStatsPlacement(double top, double bottom, double right, double left)
+    {
         OsdPosition position = _settings.OsdPosition;
         bool topPosition = OsdPositions.IsTop(position);
         bool leftPosition = OsdPositions.IsLeft(position);
         bool centered = OsdPositions.IsCenter(position);
-        HorizontalAlignment horizontal = centered
+
+        StatsPanel.HorizontalAlignment = centered
             ? HorizontalAlignment.Center
             : leftPosition
                 ? HorizontalAlignment.Left
                 : HorizontalAlignment.Right;
-        VerticalAlignment vertical = topPosition
+        StatsPanel.VerticalAlignment = topPosition
             ? VerticalAlignment.Top
             : VerticalAlignment.Bottom;
-
-        Osd.HorizontalAlignment = horizontal;
-        Osd.VerticalAlignment = vertical;
-        Osd.Margin = new Thickness(
+        StatsPanel.Margin = new Thickness(
             centered ? 8 : leftPosition ? left : 0,
             topPosition ? top : 0,
             centered ? 8 : leftPosition ? 0 : right,
             topPosition ? 0 : bottom);
-        Osd.SetAlignment(horizontal, vertical);
     }
 
     private bool OsdCoversTimeline()
@@ -381,112 +415,6 @@ public sealed partial class MainWindow
         return kilo < 1024
             ? $" · {kilo:0} KB/s"
             : $" · {kilo / 1024:0.0} MB/s";
-    }
-
-    // ---------------------------------------------------------- persistent OSD
-
-    private void TogglePersistentOsd()
-    {
-        if (Osd.IsPersistentShowing)
-        {
-            ClosePersistentOsd();
-            return;
-        }
-
-        ShowPersistentOsd();
-    }
-
-    private void ShowPersistentOsd()
-    {
-        _settings.OsdPersistent = true;
-        GrowWindowForPersistentOsd();
-
-        var details = new List<(string Label, string Value)>
-        {
-            (Loc.T("osd.status"), _oscVm.IsPlaying ? Loc.T("osd.play") : _oscVm.Position > 0 ? Loc.T("osd.pause") : Loc.T("osd.idle")),
-            (Loc.T("osd.position"), $"{TimeFormatter.Format(_oscVm.Position)} / {TimeFormatter.Format(_oscVm.Duration)}"),
-            (Loc.T("osd.labelVolume"), $"{Math.Round(_oscVm.Volume)}%" + (_oscVm.IsMuted ? Loc.T("osd.mutedSuffix") : string.Empty)),
-            (Loc.T("osd.labelSpeed"), $"{_oscVm.Speed:0.##}x"),
-            (Loc.T("osd.labelVideo"), _videoWidth > 0 && _videoHeight > 0
-                ? $"{_videoWidth}×{_videoHeight} · {_videoAspect:0.###}:1"
-                : Loc.T("osd.videoNotLoaded")),
-            (Loc.T("osd.labelAudioOutput"), string.IsNullOrWhiteSpace(_currentAudioDevice)
-                ? Loc.T("osd.auto")
-                : _currentAudioDevice),
-            (Loc.T("osd.labelFile"), _currentPath ?? "—"),
-        };
-
-        TrackInfo? audio = _trackList.FirstOrDefault(
-            track => track.Type == TrackType.Audio && track.IsSelected);
-        TrackInfo? subtitle = _trackList.FirstOrDefault(
-            track => track.Type == TrackType.Subtitle && track.IsSelected);
-        if (audio is not null)
-        {
-            details.Add((Loc.T("osd.labelAudioTrack"), audio.DisplayName));
-        }
-
-        details.Add((Loc.T("osd.labelSubtitle"), subtitle?.DisplayName ?? Loc.T("menu.off")));
-
-        string body = Loc.T("osd.persistentBody");
-
-        Osd.ShowPersistent(_currentTitle ?? Loc.T("osd.technicalInfo"), _currentPath, details, body);
-        SyncQuickSettingsValues();
-        SaveSettings();
-    }
-
-    private void ClosePersistentOsd()
-    {
-        _settings.OsdPersistent = false;
-        Osd.HidePersistent();
-        RestoreWindowAfterPersistentOsd();
-        SyncQuickSettingsValues();
-        SaveSettings();
-    }
-
-    private void OnPersistentVisibilityChanged(bool visible)
-    {
-        if (!visible)
-        {
-            RestoreWindowAfterPersistentOsd();
-        }
-    }
-
-    private void GrowWindowForPersistentOsd()
-    {
-        if (_persistentGrownSize is not null)
-        {
-            return;
-        }
-
-        SizeInt32 size = AppWindow.Size;
-        if (size.Width >= 560 && size.Height >= 360)
-        {
-            return;
-        }
-
-        _persistentSavedSize = size;
-        int width = Math.Max(560, size.Width);
-        int height = Math.Max(360, size.Height);
-        AppWindow.Resize(new SizeInt32(width, height));
-        _persistentGrownSize = new SizeInt32(width, height);
-    }
-
-    private void RestoreWindowAfterPersistentOsd()
-    {
-        if (_persistentGrownSize is not { } grown || _persistentSavedSize is not { } saved)
-        {
-            return;
-        }
-
-        if (AppWindow.Size is { } current &&
-            current.Width == grown.Width &&
-            current.Height == grown.Height)
-        {
-            AppWindow.Resize(saved);
-        }
-
-        _persistentGrownSize = null;
-        _persistentSavedSize = null;
     }
 
     // -------------------------------------------------------- time preview UX

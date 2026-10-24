@@ -12,6 +12,12 @@
                 BorderBrush="{ThemeResource PanelBorderBrush}"
                 BorderThickness="0,1,0,0"
                 MinHeight="64">
+        <Grid>
+            <Border x:Name="BackdropBlurHost" IsHitTestVisible="False" />
+            <Border x:Name="OscBlurTintLayer"
+                    Background="{ThemeResource OscBlurTintBrush}"
+                    Visibility="Collapsed"
+                    IsHitTestVisible="False" />
         <Grid Margin="16,0,12,0">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="Auto" />
@@ -69,6 +75,7 @@
                               Grid.Column="4"
                               Margin="6,0,0,0"
                               VerticalAlignment="Center" />
+        </Grid>
         </Grid>
         </Border>
     </Grid>

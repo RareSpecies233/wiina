@@ -132,9 +132,9 @@ public sealed partial class PipWindow : Window
     public event EventHandler? PlayPauseRequested;
 
     /// <summary>
-    /// Physical layout size of the PiP video surface (the whole window). The
-    /// mpv composition buffer may be smaller — <c>PipGeometry.RenderSize</c>
-    /// caps it — and the compositor upscales it.
+    /// Physical layout size of the PiP video surface (the whole window). The mpv
+    /// composition buffer uses the same full size so the mini window is exactly
+    /// as sharp as the main window (issue 7).
     /// </summary>
     public event Action<int, int, double>? BufferSizeChanged;
 
@@ -241,11 +241,9 @@ public sealed partial class PipWindow : Window
         int pixelWidth = Math.Max(1, (int)Math.Round(width * dpi));
         int pixelHeight = Math.Max(1, (int)Math.Round(height * dpi));
 
-        // Layout size: the panel always spans the whole PiP window. mpv's
-        // render buffer is capped separately (PipGeometry.RenderSize is applied
-        // to d3d11-composition-size by the main window) and the compositor
-        // upscales it. Using the capped size here shrank the XAML surface and
-        // left part of the window uncovered (issue 3).
+        // Layout and render size are both the full window pixel size: no capped
+        // swapchain and no compositor upscale (issue 7). The XAML panel must also
+        // span the whole window or part of it stays uncovered (issue 3).
         VideoHost.SetLayoutSize(pixelWidth, pixelHeight, dpi);
         // Clip in layout space: the panel is laid out at physical pixels and
         // scaled back by 1/dpi, so a DIP-sized clip would cut a strip off the
@@ -281,7 +279,8 @@ public sealed partial class PipWindow : Window
             new WindowRect(position.X, position.Y, position.X + size.Width, position.Y + size.Height),
             WorkAreaUnderPointer(),
             DisplayScale,
-            fromApplied: true);
+            fromApplied: true,
+            margins: SnapMargins());
         if (result.Rect.Left != position.X || result.Rect.Top != position.Y)
         {
             AppWindow.Move(new PointInt32(result.Rect.Left, result.Rect.Top));
@@ -304,10 +303,18 @@ public sealed partial class PipWindow : Window
             rect,
             WorkAreaUnderPointer(),
             DisplayScale,
-            fromApplied: true);
+            fromApplied: true,
+            margins: SnapMargins());
         ApplySnapFrame(result.IsSnapped);
         return result.Rect;
     }
+
+    /// <summary>
+    /// Invisible resize-border margins of this window, so the PiP drag snaps its
+    /// visible frame flush (issue 2).
+    /// </summary>
+    private FrameMargins SnapMargins() =>
+        WindowInterop.TryGetFrameMargins(this, out FrameMargins margins) ? margins : FrameMargins.None;
 
     private double DisplayScale => Root.XamlRoot?.RasterizationScale ?? _rasterizationScale;
 

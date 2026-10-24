@@ -1,112 +1,136 @@
 # Releasing Wiina
 
-`scripts/release.ps1` is the single entry point for a release.
+`scripts/release.ps1` is the single entry point for a release. It syncs the
+version, builds and verifies the portable zip, then compiles the per-user
+installer when Inno Setup 6 is available.
 
 ```powershell
-pwsh -File scripts/release.ps1 -Version 1.2.3
+pwsh -File scripts/release.ps1 -Version 1.2.4
 ```
 
 Use `-NoInstaller` to build only the portable zip, or `-SkipPackage` to check
 the version-sync edits without building anything.
 
-The script:
+Artifacts (both gitignored, both uploaded to the GitHub release):
+
+| File | Produced by |
+|---|---|
+| `artifacts/wiina-1.2.4-win-x64.zip` | `scripts/package.ps1` |
+| `artifacts/Wiina-Setup-1.2.4-x64.exe` | `scripts/release.ps1` (Inno Setup `ISCC.exe`) |
+
+## What the script does
 
 1. Synchronises the version in every source of truth:
    `Directory.Build.props`, `Branding.Version`,
    `PackageManifest.Version`/`ArchiveFileName`, the `assemblyIdentity` in
    `src/Wiina.App/app.manifest`, the `-Version` default in `scripts/package.ps1`
    and `MyAppVersion` in `installer/wiina.iss`.
-2. Builds the self-contained portable payload through
-   `scripts/package.ps1`, writing
-   `artifacts/wiina-<version>-win-x64.zip`.
-3. Verifies the **payload** `Wiina.dll` inside the staging directory reports
-   `-Version` before zipping (the build uses `Platform=x64 -t:Rebuild`, so a
-   stale sibling output cannot be packaged). `release.ps1` also reads the
-   managed assembly version from `src/Wiina.App/bin/x64/Release` and fails on a
-   mismatch.
-4. If Inno Setup 6 (`iscc.exe`) is on `PATH` or in its default install
-   directory, unpacks the portable archive to `artifacts/publish` and compiles
-   `installer/wiina.iss` to `artifacts/Wiina-Setup-<version>-x64.exe`. Without
-   Inno Setup it skips the installer with a warning; the `.iss` is already
-   version-stamped.
-5. Prints the absolute path, size and SHA-256 of each artifact.
+2. Builds the self-contained portable payload through `scripts/package.ps1`.
+   That script first publishes the trimmed single-file uninstaller
+   (`src/Wiina.Uninstall`) and copies it into the payload as
+   `Uninstall Wiina.exe`, then builds the app, verifies the **payload**
+   `Wiina.dll` reports `-Version`, and zips the result.
+3. Verifies that `Uninstall Wiina.exe` is present inside the produced archive
+   (the installer payload is expanded from that same archive, so one check
+   covers both forms), and that the managed assembly under
+   `src/Wiina.App/bin/x64/Release` reports the requested version.
+4. If Inno Setup 6 is installed, expands the verified archive to
+   `artifacts/publish` and compiles `installer/wiina.iss` into
+   `artifacts/Wiina-Setup-<version>-x64.exe`. Without Inno Setup it skips the
+   installer with a warning; `-NoInstaller` forces that path.
+5. Prints the absolute path, size and SHA-256 of each artifact it produced.
 
-## Portable-only flow (package.ps1)
+`ISCC.exe` is looked up on `PATH`, then under
+`%LOCALAPPDATA%\Programs\Inno Setup 6`, then under
+`%ProgramFiles(x86)%\Inno Setup 6`, then `%ProgramFiles%\Inno Setup 6`.
+The installer is per user (`PrivilegesRequired=lowest`), uses the official
+Chinese Simplified translation in `installer/ChineseSimplified.isl`, and asks
+whether to keep user data on uninstall (default: keep). See
+[../installer.md](../installer.md) for the install/uninstall behaviour.
+
+## Portable-only flow
 
 ```powershell
-# 1) Build + stage + zip; fails if any required file or the Wiina.dll version is wrong
-pwsh -File scripts/package.ps1 -Version 1.2.3
+# 1) Build + stage + zip; fails if any required file, the portable uninstaller,
+#    or the Wiina.dll version is wrong
+pwsh -File scripts/package.ps1 -Version 1.2.4
 
 # 2) Confirm the payload version instead of trusting the file name
-$dll = '.\artifacts\wiina-1.2.3-win-x64\Wiina.dll'
-[System.Diagnostics.FileVersionInfo]::GetVersionInfo($dll).FileVersion   # 1.2.3.0
-(Get-Item $dll).VersionInfo.ProductVersion                               # 1.2.3+<commit>
+$dll = '.\artifacts\wiina-1.2.4-win-x64\Wiina.dll'
+[System.Diagnostics.FileVersionInfo]::GetVersionInfo($dll).FileVersion   # 1.2.4.0
+(Get-Item $dll).VersionInfo.ProductVersion                               # 1.2.4+<commit>
 
-# 3) Recompute the asset hash for the release notes / acceptance record
-Get-FileHash .\artifacts\wiina-1.2.3-win-x64.zip -Algorithm SHA256
-(Get-Item .\artifacts\wiina-1.2.3-win-x64.zip).Length
+# 3) Confirm the portable uninstaller is inside the archive
+Add-Type -AssemblyName System.IO.Compression.FileSystem
+$zip = [System.IO.Compression.ZipFile]::OpenRead('.\artifacts\wiina-1.2.4-win-x64.zip')
+try { $zip.Entries | Where-Object FullName -eq 'Uninstall Wiina.exe' } finally { $zip.Dispose() }
 ```
 
-`package.ps1` refuses to zip when `Wiina.dll` does not report
-`<version>.0`, when `libmpv-2.dll` is missing from `third_party/libmpv/`, or
-when `LICENSE`, `NOTICE`, `README.md`, `SOURCE.txt` are absent from the
-payload. It also rejects extra `third_party/libmpv` DLLs/EXEs so an accidental
-dependency cannot slip into the archive.
+`package.ps1` refuses to zip when `Wiina.dll` does not report `<version>.0`,
+when the published `Uninstall Wiina.exe` is missing or implausibly small
+(< 1 MB), when `libmpv-2.dll` is missing from `third_party/libmpv/`, or when
+`LICENSE`, `NOTICE`, `README.md`, `SOURCE.txt` are absent from the payload. It
+also rejects extra `third_party/libmpv` DLLs/EXEs so an accidental dependency
+cannot slip into the archive.
 
-Artifacts are gitignored. Commit the version source changes (and any changelog)
-but never `artifacts/`. The release build is unsigned, so SmartScreen may warn
-on first launch.
+## Reading the checksums
+
+Do not hard-code hashes in documentation or scripts: every build differs even
+for the same version (timestamps, commit id). Always read the values printed by
+`release.ps1`, and record the shipped ones in the version's acceptance page:
+
+```powershell
+Get-FileHash .\artifacts\wiina-1.2.4-win-x64.zip      -Algorithm SHA256
+Get-FileHash .\artifacts\Wiina-Setup-1.2.4-x64.exe    -Algorithm SHA256
+(Get-Item .\artifacts\wiina-1.2.4-win-x64.zip).Length
+(Get-Item .\artifacts\Wiina-Setup-1.2.4-x64.exe).Length
+```
+
+Artifacts are gitignored. Commit the version source changes (and any
+documentation) but never `artifacts/`. Both executables are unsigned, so
+SmartScreen may warn on first launch.
 
 ## Publishing the GitHub release
 
-The portable zip is a release **asset**, not a committed file. After merging
-the release commit to `main` and building the archive:
+The two artifacts are release **assets**, not committed files. After merging
+the release commit to `main` and building them:
 
 1. Create and push the version tag:
 
    ```powershell
    git switch main
    git pull --ff-only origin main
-   git tag -a v1.2.3 -m "Wiina 1.2.3"
+   git tag -a v1.2.4 -m "Wiina 1.2.4"
    git push origin main
-   git push origin v1.2.3
+   git push origin v1.2.4
    ```
 
 2. Publish with GitHub CLI (recommended, reproducible):
 
    ```powershell
    gh auth login
-   gh release create v1.2.3 artifacts/wiina-1.2.3-win-x64.zip `
-     --title "Wiina 1.2.3" `
+   gh release create v1.2.4 `
+     artifacts/wiina-1.2.4-win-x64.zip `
+     artifacts/Wiina-Setup-1.2.4-x64.exe `
+     --title "Wiina 1.2.4" `
      --notes-file docs/release/notes.md `
      --latest
    ```
 
-   `gh` uploads the zip as a release asset. The file stays ignored by git.
+   `gh` uploads both files as release assets. They stay ignored by git.
 
-3. Or use the web UI: **Releases → Draft a new release**, choose tag
-   `v1.2.3` (target `main`), title `Wiina 1.2.3`, paste
-   `docs/release/notes.md` as the description, attach
-   `artifacts/wiina-1.2.3-win-x64.zip`, and publish as the latest release.
+3. Or use the web UI: **Releases → Draft a new release**, choose tag `v1.2.4`
+   (target `main`), title `Wiina 1.2.4`, paste `docs/release/notes.md` as the
+   description, attach both artifacts, and publish as the latest release.
 
-4. Verify the asset size and SHA-256 printed by `release.ps1` against the
-   record in `docs/acceptance/`. Do not copy an older hash: the table below is
-   historical, and every release has a different payload.
+4. Verify the sizes and SHA-256 values printed by `release.ps1` against the
+   record in `docs/acceptance/v1.2.4.md` (or whichever version was built).
 
-## Historical artifacts
+## History
 
-Use these only to check that an old record was copied correctly — never as the
-expected hash for a new build.
-
-| Version | Bytes | SHA-256 |
-|---|---|---|
-| 1.0.2 | 145,557,990 | `14C1218C09C8EFDD4C98B80BE796902269788514FA085D925F01E2FD3583D8D3` |
-| 1.1.0 | 145,561,023 | `8A197A5E22584ED28C29D257E994CB15C976DD3A1B757AE40169C75CE6A445BD` |
-| 1.1.2 | 145,561,657 | `E11B87A19C1FEAEDBA9E8997D5305077DAAE78F8C419323EE681C6277EEF80EC` |
-| 1.2.0 | 145,566,693 | `ADA7CBE59A3BF091FEED9F9DCB9F3F2266DD72542E9984BCD18B388520193F7B` |
-| 1.2.1 | 145,580,027 | `3D9ECFD46D7FC55D0AE180CED78473662C40A6DEEC180AC879B80D9430E4F901` |
-| 1.2.2 | 145,582,114 | `E087101B61FA1AE0E09E3EA0415D26BB1AD3987778EE99241073E2E7E1F0ADC3` |
-
-The 1.2.3 archive will not match 1.2.2: Win2D (and the capture/blur code) is
-no longer part of the payload and new source/test files were added. Record the
-actual size and hash in `docs/acceptance/v1.2.3.md` after building.
+Acceptance records keep the per-version evidence, including the archived
+artifact sizes and hashes as they were observed at release time:
+`docs/acceptance/v1.2.3.md`, `v1.2.2.md`, `v1.2.1.md`, `v1.2.0.md`,
+`v1.1.2.md`, `v1.1.1.md`, `v1.1.0.md`, and the polish/stage pages. Those are
+historical records; never copy an old hash as the expected value for a new
+build.

@@ -141,6 +141,10 @@ public sealed partial class MainWindow : Window
         InitializeComponent();
         _settings = App.Settings;
 
+        // Apply the saved capture mode before the chrome first becomes
+        // visible: "Solid" must never arm the Win2D capture thread at all.
+        ChromeBlur.SetMode(_settings.ChromeBlurMode);
+
         // Follow system light/dark changes even when the OSD was constructed
         // while the app was still on its default (dark) Application theme.
         RootGrid.ActualThemeChanged += (_, _) => Osd.RequestedTheme = RootGrid.ActualTheme;
@@ -538,6 +542,7 @@ public sealed partial class MainWindow : Window
             _chromeShown = true;
             _oscState.Show();
             _oscState.CompleteShow();
+            ChromeBlur.SetActive(true);
             FadeChrome(1, hitTest: true);
             WindowInterop.SetCursorVisible(true);
         }
@@ -581,6 +586,7 @@ public sealed partial class MainWindow : Window
 
         _oscState.CompleteHide();
         _chromeShown = false;
+        ChromeBlur.SetActive(false);
         _autoHideTimer.Stop();
         FadeChrome(0, hitTest: false);
         WindowInterop.SetCursorVisible(false);
@@ -695,8 +701,7 @@ public sealed partial class MainWindow : Window
             (OscFloating.Visibility == Visibility.Visible && Contains(OscFloating, point)) ||
             (SidebarLeading.Visibility == Visibility.Visible && Contains(SidebarLeading, point)) ||
             (SidebarTrailing.Visibility == Visibility.Visible && Contains(SidebarTrailing, point)) ||
-            (StatsPanel.Visibility == Visibility.Visible && Contains(StatsPanel, point)) ||
-            (Osd.IsPersistentShowing && Contains(Osd, point));
+            (StatsPanel.Visibility == Visibility.Visible && Contains(StatsPanel, point));
     }
 
     private bool Contains(FrameworkElement element, Point point)
@@ -1369,6 +1374,16 @@ public sealed partial class MainWindow : Window
 
     private bool? _snapFrameApplied;
 
+    /// <summary>
+    /// Invisible resize-border margins of this window. The OS reports the outer
+    /// window rect (≈8 px of border on left/right/bottom at 100%), so snapping
+    /// the outer rect leaves a gap on three sides; every snap path passes these
+    /// margins to <see cref="EdgeSnapSession"/> so the visible frame is what
+    /// lands flush (issue 2).
+    /// </summary>
+    private FrameMargins SnapMargins() =>
+        WindowInterop.TryGetFrameMargins(this, out FrameMargins margins) ? margins : FrameMargins.None;
+
     private void SnapWindowToEdges()
     {
         if (!_settings.EdgeSnapping ||
@@ -1385,7 +1400,8 @@ public sealed partial class MainWindow : Window
             new WindowRect(position.X, position.Y, position.X + size.Width, position.Y + size.Height),
             WorkAreaUnderPointer(),
             DisplayScale,
-            fromApplied: true);
+            fromApplied: true,
+            margins: SnapMargins());
         if (result.Rect.Left != position.X || result.Rect.Top != position.Y)
         {
             AppWindow.Move(new PointInt32(result.Rect.Left, result.Rect.Top));
@@ -1415,7 +1431,8 @@ public sealed partial class MainWindow : Window
             rect,
             WorkAreaUnderPointer(),
             DisplayScale,
-            fromApplied: true);
+            fromApplied: true,
+            margins: SnapMargins());
         ApplySnapFrame(result.IsSnapped);
         return result.Rect;
     }
@@ -1450,6 +1467,7 @@ public sealed partial class MainWindow : Window
 
     private void OnRootLoaded(object sender, RoutedEventArgs e)
     {
+        ChromeBlur.SetMode(_settings.ChromeBlurMode);
         ConfigureCaptionButtons();
         WindowInterop.Attach(
             this,

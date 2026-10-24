@@ -39,6 +39,11 @@ public readonly record struct EdgeSnapResult(WindowRect Rect, SnapEdges Edges)
 ///
 /// The caller feeds whole window rectangles (outer frame, physical pixels) and
 /// the work area under the pointer; the session returns the position to apply.
+/// Pass <see cref="FrameMargins"/> in the last argument when the rectangle is
+/// the outer window rect (GetWindowRect / AppWindow / WM_MOVING): the session
+/// snaps the <em>visible</em> frame inside those invisible borders and converts
+/// the result back to the outer rect, so all four edges end up pixel-flush
+/// (issue 2). Without margins the behaviour is unchanged.
 /// Two call modes are supported:
 ///
 /// <list type="bullet">
@@ -113,14 +118,22 @@ public sealed class EdgeSnapSession
     /// Snap decision for one proposed window rectangle. <paramref name="scale"/>
     /// is the display scale (DIP to physical pixels); the thresholds are rounded
     /// to physical pixels so 100% and 150% displays feel the same.
+    ///
+    /// <paramref name="margins"/> describes the window's invisible resize border
+    /// (see <see cref="FrameMargins"/>). <paramref name="proposed"/> is the outer
+    /// rect in that case and so is the returned rect; the edge distances,
+    /// hysteresis offsets and the resulting position are all computed in the
+    /// visible frame.
     /// </summary>
     public EdgeSnapResult Apply(
         WindowRect proposed,
         WorkArea area,
         double scale = 1.0,
-        bool fromApplied = false)
+        bool fromApplied = false,
+        FrameMargins margins = default)
     {
-        if (proposed.Width <= 0 || proposed.Height <= 0 || area.Width <= 0 || area.Height <= 0)
+        WindowRect visible = margins.ToVisible(proposed);
+        if (visible.Width <= 0 || visible.Height <= 0 || area.Width <= 0 || area.Height <= 0)
         {
             return new EdgeSnapResult(proposed, SnapEdges.None);
         }
@@ -129,10 +142,12 @@ public sealed class EdgeSnapSession
         int snapPx = Math.Max(1, (int)Math.Round(SnapDistanceDip * factor));
         int breakawayPx = Math.Max(snapPx, (int)Math.Round(BreakawayDip * factor));
 
-        int rawLeft = fromApplied ? proposed.Left - _offsetX : proposed.Left;
-        int rawTop = fromApplied ? proposed.Top - _offsetY : proposed.Top;
-        int width = proposed.Width;
-        int height = proposed.Height;
+        // Offsets are kept in visible-frame space; the margins are constant so
+        // subtracting them from both sides is equivalent to outer-frame space.
+        int rawLeft = fromApplied ? visible.Left - _offsetX : visible.Left;
+        int rawTop = fromApplied ? visible.Top - _offsetY : visible.Top;
+        int width = visible.Width;
+        int height = visible.Height;
 
         int left = ResolveAxis(
             rawLeft,
@@ -182,7 +197,10 @@ public sealed class EdgeSnapSession
         _offsetY = top - rawTop;
         _edges = edges;
 
-        return new EdgeSnapResult(new WindowRect(left, top, left + width, top + height), edges);
+        // Translate the snapped visible frame back into outer window rect space
+        // so callers can apply it directly (WM_MOVING / AppWindow.Move).
+        WindowRect snappedVisible = new(left, top, left + width, top + height);
+        return new EdgeSnapResult(margins.ToOuter(snappedVisible), edges);
     }
 
     /// <summary>

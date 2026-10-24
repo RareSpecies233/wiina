@@ -28,6 +28,9 @@ public sealed partial class AppSettings
     /// <summary>Snap a dragged player window to a work-area edge (macOS style).</summary>
     public bool EdgeSnapping { get; set; } = true;
 
+    /// <summary>Video-frame capture strategy behind the floating chrome.</summary>
+    public ChromeBlurMode ChromeBlurMode { get; set; } = ChromeBlurMode.Dynamic;
+
     /// <summary>Show raw mpv playback statistics as an on-screen overlay.</summary>
     public bool ShowMpvStats { get; set; }
 

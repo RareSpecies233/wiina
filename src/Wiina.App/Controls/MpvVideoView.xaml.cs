@@ -57,11 +57,11 @@ public sealed partial class MpvVideoView : UserControl
     /// window, physical pixels) and applies the inverse DPI transform (the
     /// composition driver rejects SetMatrixTransform).
     ///
-    /// This is deliberately not the mpv render/composition size: mpv may render
-    /// into a capped buffer (see <c>PipGeometry.RenderSize</c>) which the
-    /// compositor upscales to this panel. Passing the capped buffer size here
-    /// used to shrink the XAML surface, leaving the window partly uncovered
-    /// (issue 3).
+    /// The panel size, the XAML surface and mpv's render/composition size are all
+    /// the full window pixel size: mini/PiP mode shares the main window's
+    /// sharpness and only drops the heavy UI chrome (issue 7). Passing a smaller
+    /// render buffer here used to shrink the XAML surface, leaving the window
+    /// partly uncovered (issue 3).
     /// </summary>
     public void SetLayoutSize(int pixelWidth, int pixelHeight, double rasterizationScale)
     {

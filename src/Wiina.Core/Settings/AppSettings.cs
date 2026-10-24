@@ -43,9 +43,6 @@ public sealed partial class AppSettings
     /// <summary>Hold time before the 0.5 s fade-out.</summary>
     public double OsdDurationSeconds { get; set; } = 1;
 
-    /// <summary>Keep the technical OSD open instead of auto-hiding messages.</summary>
-    public bool OsdPersistent { get; set; }
-
     /// <summary>Fullscreen bottom-left clock.</summary>
     public bool FullscreenClockEnabled { get; set; } = true;
 
@@ -85,6 +82,12 @@ public sealed partial class AppSettings
     public double VideoPanX { get; set; }
 
     public double VideoPanY { get; set; }
+
+    /// <summary>
+    /// mpv <c>deband</c> post-processing for the current window. Off by default;
+    /// it stays a global video toggle instead of being part of a scaler profile.
+    /// </summary>
+    public bool DebandEnabled { get; set; }
 
     // ---- Quick settings: audio ----
 

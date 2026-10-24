@@ -5,5 +5,6 @@
     </Project>
     <Project Path="src/Wiina.Core/Wiina.Core.csproj" />
     <Project Path="src/Wiina.Mpv/Wiina.Mpv.csproj" />
+    <Project Path="src/Wiina.Uninstall/Wiina.Uninstall.csproj" />
   </Folder>
 </Solution>

@@ -1,10 +1,15 @@
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Wiina.App.Interop;
+using Wiina.Core.Settings;
 
 namespace Wiina.App.Controls;
 
 public sealed partial class TitleBarView : UserControl
 {
+    private ChromeBlurLayer? _blur;
+    private bool _docked;
+
     public TitleBarView()
     {
         InitializeComponent();
@@ -12,6 +17,8 @@ public sealed partial class TitleBarView : UserControl
         // document icon/title so it can fade with the rest of the chrome.
         ButtonPanel.Visibility = Visibility.Collapsed;
         SizeChanged += OnSizeChanged;
+        Loaded += OnLoaded;
+        Unloaded += OnUnloaded;
     }
 
     private void OnSizeChanged(object sender, SizeChangedEventArgs e)
@@ -95,8 +102,86 @@ public sealed partial class TitleBarView : UserControl
 
     public void SetDocked(bool docked)
     {
-        TranslucentBackground.Visibility = docked ? Visibility.Collapsed : Visibility.Visible;
+        _docked = docked;
         OpaqueBackground.Visibility = docked ? Visibility.Visible : Visibility.Collapsed;
+        ApplyBlurVisuals();
+    }
+
+    private void OnLoaded(object sender, RoutedEventArgs e)
+    {
+        ChromeBlur.ModeChanged += OnBlurModeChanged;
+        EnsureAttached();
+        ApplyBlurVisuals();
+    }
+
+    private void EnsureAttached()
+    {
+        // Early calls can arrive before the element is in a XamlRoot; retry
+        // once the layout pass has produced one.
+        if (_blur is not null || XamlRoot is null)
+        {
+            return;
+        }
+
+        // Real blurred frames of the video sitting behind the titlebar. Until
+        // the first frame arrives, and in Solid mode, the opaque/solid
+        // ChromeSolidBrush stays in place.
+        if (!ChromeBlur.TryAttach(BackdropBlurHost, 0, out ChromeBlurLayer layer))
+        {
+            return;
+        }
+
+        _blur = layer;
+        _blur.FirstFrame += OnFirstBlurFrame;
+        _blur.RaiseFirstFrameIfReady();
+    }
+
+    private void OnBlurModeChanged(object? sender, EventArgs e)
+    {
+        EnsureAttached();
+        ApplyBlurVisuals();
+    }
+
+    private void OnFirstBlurFrame(object? sender, EventArgs e) => ApplyBlurVisuals();
+
+    private void ApplyBlurVisuals()
+    {
+        bool live = ChromeBlur.Current.Mode != ChromeBlurMode.Solid;
+        if (_blur is not null)
+        {
+            // The canvas is an effect, not chrome: never let it eat input.
+            _blur.Visibility = live ? Visibility.Visible : Visibility.Collapsed;
+        }
+
+        // Docked videos live in the layout below the titlebar, so the blurred
+        // overlay frame would not match what is behind the bar; stay opaque.
+        bool blurred = live && !_docked && _blur is { HasFrame: true };
+        if (blurred)
+        {
+            TranslucentBackground.Visibility = Visibility.Collapsed;
+            BlurTint.Visibility = Visibility.Visible;
+            TopOscAcrylicLayer.Visibility = Visibility.Collapsed;
+            TopOscBlurTintLayer.Visibility = Visibility.Visible;
+            return;
+        }
+
+        BlurTint.Visibility = Visibility.Collapsed;
+        TopOscBlurTintLayer.Visibility = Visibility.Collapsed;
+        TopOscAcrylicLayer.Visibility = Visibility.Visible;
+        TranslucentBackground.Visibility = _docked
+            ? Visibility.Collapsed
+            : Visibility.Visible;
+    }
+
+    private void OnUnloaded(object sender, RoutedEventArgs e)
+    {
+        ChromeBlur.ModeChanged -= OnBlurModeChanged;
+        if (_blur is not null)
+        {
+            _blur.FirstFrame -= OnFirstBlurFrame;
+        }
+
+        _blur = null;
     }
 
     private void OnPinClick(object sender, RoutedEventArgs e) =>

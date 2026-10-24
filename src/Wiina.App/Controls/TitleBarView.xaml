@@ -26,6 +26,11 @@
     </UserControl.Resources>
 
     <Grid>
+        <Border x:Name="BackdropBlurHost" IsHitTestVisible="False" />
+        <Border x:Name="BlurTint"
+                Background="{ThemeResource TitleBarBlurTintBrush}"
+                Visibility="Collapsed"
+                IsHitTestVisible="False" />
         <Border x:Name="TranslucentBackground" Background="{ThemeResource ChromeSolidBrush}" />
         <Border x:Name="OpaqueBackground"
                 Background="{ThemeResource TitleBarOpaqueBrush}"
@@ -161,6 +166,10 @@
                 <Grid>
                     <Border x:Name="TopOscAcrylicLayer"
                             Background="{ThemeResource ChromeSolidBrush}" />
+                    <Border x:Name="TopOscBlurTintLayer"
+                            Background="{ThemeResource OscBlurTintBrush}"
+                            Visibility="Collapsed"
+                            IsHitTestVisible="False" />
                     <Grid x:Name="TopOscRoot" Margin="10,0,8,0">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto" />

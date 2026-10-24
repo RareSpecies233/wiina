@@ -1,8 +1,8 @@
-# Performance measurements (v1.2.3)
+# Performance measurements (v1.2.4)
 
 Measured on the development machine on 2026-10-19 (Asia/Hong_Kong), at v1.0.0.
 The numbers below are the historical baseline; they were **not** re-measured
-for 1.2.3 (see “What changed in 1.2.3” for the known deltas). Numbers are what
+for 1.2.4 (see “What changed in 1.2.4” for the known deltas). Numbers are what
 this machine produced; they are not universal guarantees.
 
 ## Environment
@@ -69,35 +69,71 @@ scenarios (peak 265.7 MB at 4K). Private bytes exceed 300 MB at 4K because the
 GPU/driver surfaces and the video swapchain are charged to the process; this is
 reported honestly rather than trimmed by a smaller measurement window.
 
-## What changed in 1.2.3
+## What changed in 1.2.4
 
-- **Capture/blur pipeline removed (issue 2).** Up to 1.2.2 the chrome sampled
-  one libmpv frame every 125 ms, downscaled it to 320 px, and blurred it with
-  Win2D: about 45 ms and 3.7 MB per 1280×720 frame, roughly a third of one CPU
-  core at 720p, with more at 4K. 1.2.3 paints an opaque `ChromeSolidBrush`
-  mixed with 16 % system accent instead — one solid fill per chrome surface, no
-  frame readback, no worker thread, no Win2D package. See
-  [ADR-0004](architecture/0004-solid-chrome.md).
-- **Statistics panel.** The old path pushed a handful of properties through mpv
-  `show-text` every second (competing with every other OSD message). The native
-  WinUI card reads about 30 properties once per second, renders a normal XAML
-  list of ~29 rows, and fills immediately when enabled rather than waiting for a
-  live frame.
-- **Settings grew**: 12 pages / 119 rows (was 11 / 114), because
-  Settings → 文件关联 was added. Row construction is still code-generated and
-  showed no visible stall.
-- Settings rail templating no longer animates a hover brush on unselected
-  items, so it does strictly less work per pointer move.
-- Startup/memory were not re-measured for this version; the capture pipeline's
-  removal can only lower steady-state chrome cost, and no new background
-  threads were added.
+### Chrome blur cost depends on the mode
+
+| Mode | Capture work | Approximate cost |
+|---|---|---|
+| 固定（静态帧） | one `screenshot-raw` per chrome show | one frame's readback per show |
+| 动态（跟随视频） | ~8 fps while the chrome is visible | ~45 ms / 3.7 MB per 1280×720 frame, ≈⅓ core at 720p |
+| 始终（持续计算） | ~8 fps whenever the player runs | same as Dynamic, continuing while chrome is hidden |
+| 关闭毛玻璃（纯色） | none — no worker, no Win2D device | one solid fill per surface |
+
+The 1.0.0–1.2.2 measurements above were taken with the blur pipeline active
+(Dynamic), so they already include its steady-state cost. The 1.2.3 release
+temporarily removed the pipeline and therefore cost less; 1.2.4 restores it, so
+treat the historical numbers as the “blur on” baseline and Solid as strictly
+cheaper. There is no separate measurement of Solid on this host — its per-frame
+work is one brush fill.
+
+### PiP / mini player render at full resolution
+
+- The 640×360 compositor-upscale cap is gone. `PipGeometry.RenderSize` now
+  returns the window's full physical pixel size, so a large PiP window asks mpv
+  to render (and the compositor to present) more pixels than before. That is a
+  real GPU/compositor cost increase for big PiP windows — it buys a sharp
+  picture, and it is not a capture readback.
+- The mini player was never capped; it still saves cost only through its
+  simplified UI (no blur, no shadow over the video).
+
+### Snapping and DWM queries
+
+- `WindowInterop.TryGetFrameMargins` calls `DwmGetWindowAttribute` once per
+  window/DPI pair and caches the result; the cache is invalidated on
+  `WM_DPICHANGED` and on window changes that can alter the frame. Snapping
+  therefore does not add a per-frame or per-tick DWM query.
+- Snapping itself is position math on `WM_MOVING`; it adds no rendering work.
+
+### Statistics panel
+
+- The native WinUI card reads about 30 mpv properties once per second, renders
+  a normal XAML list of 29 rows, and fills immediately when enabled rather than
+  waiting for a live frame. The old path pushed a four-field string through
+  `show-text`, competing with every other OSD message.
+- The card now follows the OSD placement setting and re-applies the theme at
+  runtime; that is a layout pass per OSD-position change, not per tick.
+
+### Settings and packaging
+
+- Settings grew to **12 pages / 121 rows** (1.2.3 had 119): the blur-mode row is
+  back and the deband row moved to 视频 → 画面. Row construction is still
+  code-generated and showed no visible stall.
+- The settings rail no longer animates a hover brush on unselected items, so it
+  does strictly less work per pointer move.
+- `scripts/package.ps1` now publishes the trimmed single-file uninstaller
+  first (a small, independent build) and verifies it inside the payload before
+  zipping; this adds a few seconds to packaging, not to app startup.
+- Core tests: 644 passed / 0 failed (Lead's release verification; not re-run by
+  the docs pass).
+- Startup/memory were not re-measured for this version.
 
 ## UI-thread behavior
 
 - Thumbnails (scrub peek) and the inspector run off the UI thread; the UI shows
   placeholder/loading state while data arrives. No synchronous file or IPC work
   was observed blocking the window during the measurements.
-- Settings/page navigation builds rows in code; 12 pages with 119 rows total
+- Settings/page navigation builds rows in code; 12 pages with 121 rows total
   render without a visible stall on this machine.
 - Library scanning is not a feature of this stage; playlist import is bounded
   by the files the user opens.
@@ -107,7 +143,9 @@ reported honestly rather than trimmed by a smaller measurement window.
 The measurements above were taken at the machine's scaling (100 %). 125/150/200 %
 were reviewed in source (all sizes are DIPs; no pixel constants), but were not
 re-measured here because changing system scaling requires a session
-sign-out/restart. `docs/accessibility.md` documents the manual check.
+sign-out/restart. `docs/accessibility.md` documents the manual check. Snapping
+scales its 10 DIP / 22 DIP thresholds by the monitor scale factor, and DWM frame
+margins are cached per DPI, but mixed-DPI monitor moves remain a manual check.
 
 ## HDR and tone-mapping limits
 

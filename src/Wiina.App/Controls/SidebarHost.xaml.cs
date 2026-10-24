@@ -45,10 +45,14 @@ public sealed partial class SidebarHost : UserControl
     private double _animFromOpacity;
     private double _animToOpacity;
     private long _animStart;
+    private ChromeBlurLayer? _blur;
 
     public SidebarHost()
     {
         InitializeComponent();
+        Loaded += OnLoaded;
+        Unloaded += OnUnloaded;
+        ActualThemeChanged += (_, _) => ApplyBlurVisuals();
         _animTimer = DispatcherQueue.CreateTimer();
         _animTimer.Interval = TimeSpan.FromMilliseconds(15);
         _animTimer.IsRepeating = true;
@@ -70,6 +74,73 @@ public sealed partial class SidebarHost : UserControl
             new PointerEventHandler(OnGripPointerReleased),
             handledEventsToo: true);
         RootGrid.PointerCaptureLost += OnGripPointerCaptureLost;
+    }
+
+    private void OnLoaded(object sender, RoutedEventArgs e)
+    {
+        ChromeBlur.ModeChanged += OnBlurModeChanged;
+        EnsureAttached();
+        ApplyBlurVisuals();
+    }
+
+    private void EnsureAttached()
+    {
+        if (_blur is not null || XamlRoot is null)
+        {
+            return;
+        }
+
+        // Real blurred frame behind the sidebar; the opaque panel paint stays
+        // until the first blurred frame is available, and in Solid mode.
+        if (!ChromeBlur.TryAttach(BackdropBlurHost, 0, out ChromeBlurLayer layer))
+        {
+            return;
+        }
+
+        _blur = layer;
+        _blur.FirstFrame += OnFirstBlurFrame;
+        _blur.RaiseFirstFrameIfReady();
+    }
+
+    private void OnBlurModeChanged(object? sender, EventArgs e)
+    {
+        EnsureAttached();
+        ApplyBlurVisuals();
+    }
+
+    private void OnFirstBlurFrame(object? sender, EventArgs e) => ApplyBlurVisuals();
+
+    private void ApplyBlurVisuals()
+    {
+        bool live = ChromeBlur.Current.Mode != ChromeBlurMode.Solid;
+        if (_blur is not null)
+        {
+            _blur.Visibility = live ? Visibility.Visible : Visibility.Collapsed;
+        }
+
+        if (live && _blur is { HasFrame: true })
+        {
+            // The blur host sits behind the panel, so the panel paint has to
+            // step aside for it; hit-testing lives on RootGrid, not the paint.
+            PanelBorder.Background = null;
+            SidebarBlurTintLayer.Visibility = Visibility.Visible;
+            return;
+        }
+
+        PanelBorder.Background =
+            ChromeBlur.ResolveSolidBrush(this) ?? PanelBorder.Background;
+        SidebarBlurTintLayer.Visibility = Visibility.Collapsed;
+    }
+
+    private void OnUnloaded(object sender, RoutedEventArgs e)
+    {
+        ChromeBlur.ModeChanged -= OnBlurModeChanged;
+        if (_blur is not null)
+        {
+            _blur.FirstFrame -= OnFirstBlurFrame;
+        }
+
+        _blur = null;
     }
 
     /// <summary>Optional diagnostic sink wired by the shell to its trace file.</summary>

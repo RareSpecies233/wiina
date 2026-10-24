@@ -1,14 +1,21 @@
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Wiina.App.Interop;
+using Wiina.Core.Settings;
 
 namespace Wiina.App.Controls;
 
 public sealed partial class OscBottomView : UserControl
 {
+    private ChromeBlurLayer? _blur;
+
     public OscBottomView()
     {
         InitializeComponent();
         SizeChanged += OnSizeChanged;
+        Loaded += OnLoaded;
+        Unloaded += OnUnloaded;
+        ActualThemeChanged += (_, _) => ApplyBlurVisuals();
     }
 
     public TimelineControl Timeline => InnerTimeline;
@@ -16,6 +23,73 @@ public sealed partial class OscBottomView : UserControl
     public OscToolbar Toolbar => ToolbarGroup;
 
     public VolumeSlider Volume => VolumeGroup;
+
+    private void OnLoaded(object sender, RoutedEventArgs e)
+    {
+        ChromeBlur.ModeChanged += OnBlurModeChanged;
+        EnsureAttached();
+        ApplyBlurVisuals();
+    }
+
+    private void EnsureAttached()
+    {
+        if (_blur is not null || XamlRoot is null)
+        {
+            return;
+        }
+
+        // Live blurred frame behind the docked OSC. Until the first frame
+        // arrives, and whenever the mode is Solid, the opaque strip stays.
+        if (!ChromeBlur.TryAttach(BackdropBlurHost, 0, out ChromeBlurLayer layer))
+        {
+            return;
+        }
+
+        _blur = layer;
+        _blur.FirstFrame += OnFirstBlurFrame;
+        _blur.RaiseFirstFrameIfReady();
+    }
+
+    private void OnBlurModeChanged(object? sender, EventArgs e)
+    {
+        EnsureAttached();
+        ApplyBlurVisuals();
+    }
+
+    private void OnFirstBlurFrame(object? sender, EventArgs e) => ApplyBlurVisuals();
+
+    private void ApplyBlurVisuals()
+    {
+        bool live = ChromeBlur.Current.Mode != ChromeBlurMode.Solid;
+        if (_blur is not null)
+        {
+            _blur.Visibility = live ? Visibility.Visible : Visibility.Collapsed;
+        }
+
+        if (live && _blur is { HasFrame: true })
+        {
+            // Let the blurred frame through: the panel's opaque paint would
+            // otherwise cover it, since the blur sits inside the panel.
+            OscAcrylicPanel.Background = null;
+            OscBlurTintLayer.Visibility = Visibility.Visible;
+            return;
+        }
+
+        OscAcrylicPanel.Background =
+            ChromeBlur.ResolveSolidBrush(this) ?? OscAcrylicPanel.Background;
+        OscBlurTintLayer.Visibility = Visibility.Collapsed;
+    }
+
+    private void OnUnloaded(object sender, RoutedEventArgs e)
+    {
+        ChromeBlur.ModeChanged -= OnBlurModeChanged;
+        if (_blur is not null)
+        {
+            _blur.FirstFrame -= OnFirstBlurFrame;
+        }
+
+        _blur = null;
+    }
 
     private void OnSizeChanged(object sender, SizeChangedEventArgs e)
     {
