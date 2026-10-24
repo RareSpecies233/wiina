@@ -170,6 +170,12 @@ public sealed partial class MainWindow
                 }
 
                 break;
+            case "video.thumbnail-acceleration":
+                // Live apply: the extraction worker rebuilds its headless mpv
+                // instance on the next job, so a GPU-averse driver can be
+                // bypassed without restarting playback. Cached frames survive.
+                _thumbnailService?.SetAcceleration(_settings.ThumbnailAcceleration);
+                break;
             case "video.thumbnail-cache-mb":
                 _thumbnailService?.SetDiskCacheLimit(
                     Math.Clamp(_settings.ThumbnailCacheMegabytes, 0, 4096));

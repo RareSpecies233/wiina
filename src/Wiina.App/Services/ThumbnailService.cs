@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Globalization;
 using System.Runtime.InteropServices.WindowsRuntime;
 using Wiina.Core.Caching;
+using Wiina.Core.Settings;
 using Wiina.Core.State;
 using Wiina.Mpv;
 using Windows.Graphics.Imaging;
@@ -42,14 +43,20 @@ public sealed class ThumbnailService : IDisposable
     private readonly ThumbnailCache<ThumbnailFrame> _cache;
     private readonly ThumbnailDiskCache? _disk;
     private readonly double _bucketSeconds;
+    private readonly int _floorCapacity;
     private MpvPlayer? _player;
     private TaskCompletionSource<bool>? _fileLoaded;
     private string? _loadedPath;
+    private string? _sourcePath;
+    private long _frameBytes = ThumbnailCacheSizing.FrameBytes(160, 90);
     private Task? _worker;
     private Thread? _workerThread;
     private CancellationTokenSource? _pregenCts;
     private DateTime _lastInteractionUtc = DateTime.UtcNow;
     private volatile bool _slowMode;
+    private volatile bool _cpuOnly;
+    private bool _restartPlayer;
+    private bool _loggedDecodePath;
     private bool _disposed;
 
     public ThumbnailService(
@@ -58,15 +65,18 @@ public sealed class ThumbnailService : IDisposable
         Action<string>? log = null,
         string? diskCacheDirectory = null,
         int diskCacheMegabytes = 512,
-        bool slowMode = false)
+        bool slowMode = false,
+        ThumbnailAcceleration acceleration = ThumbnailAcceleration.Auto)
     {
         _slowMode = slowMode;
+        _cpuOnly = acceleration == ThumbnailAcceleration.Cpu;
         _bucketSeconds = double.IsFinite(bucketSeconds) && bucketSeconds > 0
             ? bucketSeconds
             : 5;
         _cache = new ThumbnailCache<ThumbnailFrame>(
             Math.Max(1, cacheCount),
             _bucketSeconds);
+        _floorCapacity = Math.Max(1, cacheCount);
         Log = log;
 
         long budget = Math.Max(0, diskCacheMegabytes) * 1024L * 1024L;
@@ -95,6 +105,53 @@ public sealed class ThumbnailService : IDisposable
 
     public bool TryGetCached(double seconds, out ThumbnailFrame frame) =>
         _cache.TryGet(seconds, out frame);
+
+    /// <summary>
+    /// Sizes the memory cache for the current source. Every time bucket of the
+    /// file gets a slot (the configured count is only a floor), so hovering
+    /// anywhere on the timeline is answered from memory after pre-generation.
+    /// Passing a different <paramref name="mediaPath"/> (or <c>null</c>) drops
+    /// the previous file's frames first; the disk cache is never touched here.
+    /// Safe to call repeatedly with the same source.
+    /// </summary>
+    public void SetSource(string? mediaPath, double durationSeconds)
+    {
+        bool sourceChanged = !string.Equals(_sourcePath, mediaPath, StringComparison.OrdinalIgnoreCase);
+        int frames = string.IsNullOrWhiteSpace(mediaPath)
+            ? _floorCapacity
+            : ThumbnailCacheSizing.FramesForDuration(
+                durationSeconds,
+                _bucketSeconds,
+                _floorCapacity);
+
+        if (!sourceChanged && frames == _cache.Capacity)
+        {
+            return;
+        }
+
+        _sourcePath = mediaPath;
+        if (sourceChanged)
+        {
+            _cache.Clear();
+        }
+
+        _cache.Resize(frames);
+
+        long bytes = ThumbnailCacheSizing.EstimateBytes(frames, _frameBytes);
+        Log?.Invoke(
+            string.IsNullOrWhiteSpace(mediaPath)
+                ? $"memory thumbnail cache: cleared ({_cache.Count} frames kept)"
+                : $"memory thumbnail cache: {frames} frames ≈ " +
+                  $"{ThumbnailCacheSizing.Megabyte(bytes):0.0} MB " +
+                  $"({durationSeconds:0}s / {_bucketSeconds:0.##}s buckets)");
+    }
+
+    /// <summary>
+    /// Releases the memory frames of the finished source and shrinks back to the
+    /// configured floor. Called when thumbnails are switched off, when slow mode
+    /// starts, or when the disk budget is zeroed.
+    /// </summary>
+    public void ClearSource() => SetSource(null, 0);
 
     /// <summary>
     /// Slow thumbnail mode: the single extraction worker waits between jobs and
@@ -136,6 +193,48 @@ public sealed class ThumbnailService : IDisposable
     public void SetSlowMode(bool enabled) => SlowMode = enabled;
 
     /// <summary>
+    /// Decode path for thumbnails. <see cref="ThumbnailAcceleration.Auto"/> keeps
+    /// libmpv's <c>hwdec=auto-safe</c> (GPU when the driver works, software
+    /// otherwise), <see cref="ThumbnailAcceleration.Cpu"/> forces <c>hwdec=no</c>.
+    /// Changing it restarts the headless player on the next extraction.
+    /// </summary>
+    public ThumbnailAcceleration Acceleration
+    {
+        get => _cpuOnly ? ThumbnailAcceleration.Cpu : ThumbnailAcceleration.Auto;
+        set
+        {
+            bool cpuOnly = value == ThumbnailAcceleration.Cpu;
+            if (_cpuOnly == cpuOnly)
+            {
+                return;
+            }
+
+            _cpuOnly = cpuOnly;
+            _loggedDecodePath = false;
+
+            // The extraction worker owns the player; ask it to rebuild on the
+            // next job instead of disposing underneath an in-flight capture.
+            lock (_gate)
+            {
+                _restartPlayer = true;
+            }
+
+            Log?.Invoke(
+                "thumbnail acceleration: " + (cpuOnly ? "CPU only" : "auto (GPU when available)"));
+            try
+            {
+                _wake.Release();
+            }
+            catch (ObjectDisposedException)
+            {
+            }
+        }
+    }
+
+    /// <summary>Live-apply entry point used by the settings window.</summary>
+    public void SetAcceleration(ThumbnailAcceleration acceleration) => Acceleration = acceleration;
+
+    /// <summary>
     /// Requests a thumbnail for <paramref name="seconds"/>. Concurrent requests
     /// for the same source/time share one extraction. The memory cache answers
     /// immediately, the disk cache answers after an IO hop, and anything else is
@@ -160,6 +259,13 @@ public sealed class ThumbnailService : IDisposable
             _lastInteractionUtc = DateTime.UtcNow;
         }
 
+        // Hover requests can arrive before (or without) a pre-generation pass;
+        // track the source here too so another file's frames never show up.
+        if (!string.Equals(_sourcePath, mediaPath, StringComparison.OrdinalIgnoreCase))
+        {
+            SetSource(mediaPath, durationSeconds);
+        }
+
         if (_cache.TryGet(seconds, out ThumbnailFrame cached))
         {
             return cached;
@@ -181,6 +287,7 @@ public sealed class ThumbnailService : IDisposable
             {
                 diskClock.Stop();
                 _cache.Put(bucketTime, diskFrame);
+                _frameBytes = ThumbnailCacheSizing.FrameBytes(diskFrame.Width, diskFrame.Height);
                 Log?.Invoke(
                     $"thumbnail {bucketTime:0.0}s from disk in " +
                     $"{diskClock.Elapsed.TotalMilliseconds:0} ms");
@@ -243,6 +350,11 @@ public sealed class ThumbnailService : IDisposable
         int targetHeight = PreGenerationHeight)
     {
         StopPreGeneration();
+
+        // Size the memory cache before any early return (slow mode, disk cache
+        // disabled) so hovering still fills a cache that covers the whole file.
+        SetSource(mediaPath, durationSeconds);
+
         if (_slowMode)
         {
             // Slow mode never walks the timeline up front; frames are extracted
@@ -334,7 +446,10 @@ public sealed class ThumbnailService : IDisposable
                 if (_disk is not null
                     && await TryReadDiskAsync(path, duration, seconds, height).ConfigureAwait(false) is { } cached)
                 {
-                    _cache.Put(seconds, cached);
+                    if (string.Equals(_sourcePath, path, StringComparison.OrdinalIgnoreCase))
+                    {
+                        _cache.Put(seconds, cached);
+                    }
                     reused++;
                     continue;
                 }
@@ -545,9 +660,24 @@ public sealed class ThumbnailService : IDisposable
             return null;
         }
 
-        _cache.Put(job.Seconds, frame);
+        // The user may have switched files while this seek was in flight; a stale
+        // frame must never land in the new source's cache.
+        if (string.Equals(_sourcePath, job.Path, StringComparison.OrdinalIgnoreCase))
+        {
+            _cache.Put(job.Seconds, frame);
+            _frameBytes = ThumbnailCacheSizing.FrameBytes(frame.Width, frame.Height);
+        }
         clock.Stop();
         long extractedMs = clock.ElapsedMilliseconds;
+        if (!_loggedDecodePath)
+        {
+            _loggedDecodePath = true;
+            string? hwdec = player.GetPropertyString("hwdec-current");
+            Log?.Invoke(
+                "thumbnail decode path: " +
+                (string.IsNullOrWhiteSpace(hwdec) ? "unknown" : hwdec) +
+                (_cpuOnly ? " (CPU only requested)" : " (auto)"));
+        }
         if (_disk is not null && job.Duration > 0)
         {
             await WriteDiskAsync(job, frame).ConfigureAwait(false);
@@ -566,10 +696,20 @@ public sealed class ThumbnailService : IDisposable
 
     private MpvPlayer? EnsurePlayer()
     {
-        if (_player is { IsRunning: true })
+        if (_player is { IsRunning: true } && !_restartPlayer)
         {
             return _player;
         }
+
+        if (_restartPlayer && _player is not null)
+        {
+            Log?.Invoke("thumbnail mpv restarting for decode-path change");
+            _player.Dispose();
+            _player = null;
+            _loadedPath = null;
+        }
+
+        _restartPlayer = false;
 
         try
         {
@@ -579,7 +719,7 @@ public sealed class ThumbnailService : IDisposable
             player.FileLoadFailed += (_, message) =>
                 _fileLoaded?.TrySetException(
                     new InvalidOperationException(message ?? "thumbnail load failed"));
-            player.Start(1280, 720, headless: true);
+            player.Start(1280, 720, headless: true, hwdec: _cpuOnly ? "no" : null);
             _player = player;
             return player;
         }

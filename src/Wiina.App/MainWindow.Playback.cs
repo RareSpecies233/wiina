@@ -338,7 +338,10 @@ public sealed partial class MainWindow
 
             string name = $"wiina-{DateTime.Now:yyyyMMdd-HHmmss}.png";
             string path = Path.Combine(folder.Path, name);
-            SendPlayerCommandAsync("screenshot-to-file", path, "subtitles");
+            SendPlayerCommandAsync(
+                "screenshot-to-file",
+                path,
+                _settings.ScreenshotWithSubtitles ? "subtitles" : "video");
             ShowOsd(Loc.T("osd.screenshotSaved"), path);
         }
         catch (Exception ex)
@@ -862,6 +865,33 @@ public sealed partial class MainWindow
         SendPlayerCommandAsync("playlist-next");
     }
 
+    /// <summary>
+    /// OSC transport arrows. The default is playlist skip; when the user picks
+    /// 快退/快进 in settings they seek inside the current file instead, with
+    /// Ctrl stretching the step to 30 seconds.
+    /// </summary>
+    private void OscPrevious()
+    {
+        if (_settings.OscPrevNextMode == OscPrevNextMode.Seek)
+        {
+            SeekRelative(WindowInterop.IsKeyDown(VirtualKey.Control) ? -30 : -5);
+            return;
+        }
+
+        PlaylistPrevious();
+    }
+
+    private void OscNext()
+    {
+        if (_settings.OscPrevNextMode == OscPrevNextMode.Seek)
+        {
+            SeekRelative(WindowInterop.IsKeyDown(VirtualKey.Control) ? 30 : 5);
+            return;
+        }
+
+        PlaylistNext();
+    }
+
     private void CycleAbLoop()
     {
         if (!HasMedia())
@@ -997,7 +1027,10 @@ public sealed partial class MainWindow
                 folder,
                 $"wiina-{DateTime.Now:yyyyMMdd-HHmmss}.png");
             Trace($"screenshot -> {path}");
-            SendPlayerCommandAsync("screenshot-to-file", path, "subtitles");
+            SendPlayerCommandAsync(
+                "screenshot-to-file",
+                path,
+                _settings.ScreenshotWithSubtitles ? "subtitles" : "video");
             ShowOsd(Loc.T("osd.screenshotSaved"), path);
         }
         catch (Exception ex)

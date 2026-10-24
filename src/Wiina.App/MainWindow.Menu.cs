@@ -47,6 +47,26 @@ public sealed partial class MainWindow
         };
         pin.Click += (_, _) => TogglePin();
         flyout.Items.Add(pin);
+
+        // Playback-rate presets sit directly under the pin action: the OSC
+        // transport has no room for a rate picker, and the quick menu keeps
+        // only the continuous slider on its video page.
+        flyout.Items.Add(BuildSpeedMenu());
+
+        // Screenshot options sit right under the pin action so the two most
+        // frequent one-off toggles are reachable without opening a submenu.
+        var screenshotSubtitles = new ToggleMenuFlyoutItem
+        {
+            Text = Loc.T("ui.screenshotSubtitles"),
+            IsChecked = _settings.ScreenshotWithSubtitles,
+        };
+        screenshotSubtitles.Click += (_, _) =>
+        {
+            _settings.ScreenshotWithSubtitles = screenshotSubtitles.IsChecked;
+            SaveSettings();
+            ShowChrome();
+        };
+        flyout.Items.Add(screenshotSubtitles);
         flyout.Items.Add(new MenuFlyoutSeparator());
 
         foreach (MenuGroupDefinition group in MenuCatalog.Build(state, Loc.CurrentLanguage))
@@ -102,6 +122,33 @@ public sealed partial class MainWindow
         flyout.Items.Add(settings);
 
         flyout.ShowAt(anchor);
+    }
+
+    /// <summary>
+    /// Fixed playback-rate presets for the expanded OSC menu. Kept here (not in
+    /// <see cref="MenuCatalog"/>) because the list is an OSC-only shortcut; the
+    /// quick menu exposes a continuous slider instead.
+    /// </summary>
+    private MenuFlyoutSubItem BuildSpeedMenu()
+    {
+        var menu = new MenuFlyoutSubItem { Text = Loc.T("osd.labelSpeed") };
+        foreach (double speed in new[] { 0.5, 0.75, 1, 1.25, 1.5, 2, 2.5, 3, 4 })
+        {
+            double target = speed;
+            var item = new ToggleMenuFlyoutItem
+            {
+                Text = $"{speed:0.##}×",
+                IsChecked = Math.Abs(_oscVm.Speed - speed) < 0.005,
+            };
+            item.Click += (_, _) =>
+            {
+                SetSpeed(target);
+                ShowChrome();
+            };
+            menu.Items.Add(item);
+        }
+
+        return menu;
     }
 
     /// <summary>
@@ -165,7 +212,6 @@ public sealed partial class MainWindow
         {
             KeyBindingProfiles.Wiina => Loc.T("menu.profileWiina"),
             KeyBindingProfiles.Mpv => Loc.T("menu.profileMpv"),
-            KeyBindingProfiles.Iina => Loc.T("menu.profileIina"),
             KeyBindingProfiles.Custom => Loc.T("menu.profileCustom"),
             var custom => custom,
         };
@@ -484,10 +530,13 @@ public sealed partial class MainWindow
             Text = item.IsChecked ? "✓ " + item.Label : item.Label,
             IsEnabled = item.Enabled,
         };
-        if (!string.IsNullOrWhiteSpace(item.Shortcut))
+        // Show the chord that is actually effective for the current profile.
+        // The catalog shortcut is only a fallback: commands without a static
+        // shortcut (e.g. some window actions) still get their gesture hint.
+        string? hint = ResolveAcceleratorText(item.Command) ?? item.Shortcut;
+        if (!string.IsNullOrWhiteSpace(hint))
         {
-            flyoutItem.KeyboardAcceleratorTextOverride =
-                ResolveAcceleratorText(item.Command) ?? item.Shortcut;
+            flyoutItem.KeyboardAcceleratorTextOverride = hint;
         }
 
         if (!item.Enabled && !string.IsNullOrWhiteSpace(item.DisabledReason))

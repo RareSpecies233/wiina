@@ -127,6 +127,8 @@ public static class WiinaInputDefaults
                 return PlayerActions.Stop;
             case "screenshot":
                 return PlayerActions.Screenshot;
+            case "settings":
+                return PlayerActions.Settings;
             case "ab-loop":
                 return PlayerActions.AbLoop;
             case "playlist-next":

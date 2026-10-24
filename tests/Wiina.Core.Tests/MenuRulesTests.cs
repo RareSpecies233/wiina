@@ -9,11 +9,11 @@ public sealed class MenuRulesTests
         MenuCatalog.Flatten(MenuCatalog.Build(state)).Single(item => item.Id == id);
 
     [Fact]
-    public void EightTopLevelMenusInSpecOrder()
+    public void SevenTopLevelMenusInSpecOrderWithoutDuplicateVideoGroup()
     {
         IReadOnlyList<MenuGroupDefinition> groups = MenuCatalog.Build(new MenuState());
         Assert.Equal(
-            new[] { "文件", "播放", "视频", "音频", "字幕", "插件", "窗口", "帮助" },
+            new[] { "文件", "播放", "音频", "字幕", "插件", "窗口", "帮助" },
             groups.Select(group => group.Title));
         Assert.All(groups, group => Assert.NotEmpty(group.Items));
     }
@@ -168,7 +168,6 @@ public sealed class MenuRulesTests
         Assert.True(Find(state, "playback.ab-loop").IsChecked);
         Assert.True(Find(state, "playback.loop-one").IsChecked);
         Assert.False(Find(state, "playback.loop-off").IsChecked);
-        Assert.True(Find(state, "playback.speed.1.5").IsChecked);
         Assert.True(Find(state, "video.aspect.4:3").IsChecked);
         Assert.True(Find(state, "video.crop.5:4").IsChecked);
         Assert.True(Find(state, "video.rotate.90").IsChecked);
@@ -177,10 +176,12 @@ public sealed class MenuRulesTests
     }
 
     [Fact]
-    public void SpeedAndShortcutTextArePresent()
+    public void SpeedMenuIsGoneAndShortcutTextIsPresent()
     {
         var state = new MenuState { HasMedia = true, Speed = 2.0 };
-        Assert.Equal("速度：2×", Find(state, "playback.speed").Label);
+        Assert.DoesNotContain(
+            MenuCatalog.Flatten(MenuCatalog.Build(state)),
+            item => item.Id == "playback.speed");
         Assert.Equal("Ctrl+,", Find(state, "window.settings").Shortcut);
         Assert.Equal("Ctrl+Shift+O", Find(state, "file.open-url").Shortcut);
         Assert.Equal("F11", Find(state, "video.fullscreen").Shortcut);
@@ -204,7 +205,6 @@ public sealed class MenuRulesTests
         Assert.Equal(MenuItemKind.Submenu, Find(state, "file.recent").Kind);
         Assert.Equal(MenuItemKind.Submenu, Find(state, "video.aspect").Kind);
         Assert.NotEmpty(Find(state, "video.aspect").Children);
-        Assert.NotEmpty(Find(state, "playback.speed").Children);
     }
 
     [Fact]

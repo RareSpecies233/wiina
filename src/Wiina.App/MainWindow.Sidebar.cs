@@ -643,6 +643,11 @@ public sealed partial class MainWindow
                 ApplyMpvString("hwdec", EffectiveHwdecValue());
                 ApplyVideoFilters();
                 break;
+            case QuickSettingKey.ScreenshotWithSubtitles:
+                // Read at capture time by CaptureScreenshot/ScreenshotToFolder;
+                // the handler tail persists and notifies the other entry points.
+                _settings.ScreenshotWithSubtitles = e.Flag;
+                break;
             case QuickSettingKey.Zoom:
                 _settings.VideoZoom = QuickSettings.ClampZoom(e.Number);
                 ApplyMpvString("video-zoom", FormatDouble(_settings.VideoZoom));

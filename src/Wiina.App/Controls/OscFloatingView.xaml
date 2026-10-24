@@ -41,12 +41,6 @@
                             Spacing="16"
                             HorizontalAlignment="Center"
                             VerticalAlignment="Center">
-                    <TextBlock x:Name="LeftSpeed"
-                               Text="{Binding SpeedText}"
-                               Visibility="{Binding ShowSpeed, Converter={StaticResource BoolToVisibility}}"
-                               Width="30"
-                               TextAlignment="Right"
-                               Style="{StaticResource CaptionTextStyle}" />
                     <Button Style="{StaticResource OscIconButtonStyle}"
                             Content="&#xE892;"
                             Command="{Binding PreviousCommand}"

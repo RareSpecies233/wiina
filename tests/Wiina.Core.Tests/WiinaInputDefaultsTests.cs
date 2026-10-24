@@ -15,9 +15,9 @@ public sealed class WiinaInputDefaultsTests
     {
         IReadOnlyList<KeyBindingSetting> bindings = WiinaInputDefaults.Create();
 
-        // 82 binding lines; PLAY/PAUSE/PLAYPAUSE/PLAYONLY/PAUSEONLY collapse onto
-        // the single Windows media play/pause key, leaving 78 unique chords.
-        Assert.Equal(78, bindings.Count);
+        // 83 binding lines; PLAY/PAUSE/PLAYPAUSE/PLAYONLY/PAUSEONLY collapse onto
+        // the single Windows media play/pause key, leaving 79 unique chords.
+        Assert.Equal(79, bindings.Count);
         Assert.All(bindings, binding => Assert.True(
             PlayerActionCatalog.IsKnown(binding.Action),
             binding.Action));
@@ -56,6 +56,7 @@ public sealed class WiinaInputDefaultsTests
     [InlineData("Shift+0", PlayerActions.AudioDelayDecrease05)]
     [InlineData("Shift+-", PlayerActions.AudioDelayReset)]
     [InlineData("Ctrl+\\", PlayerActions.SpeedReset)]
+    [InlineData("Ctrl+,", PlayerActions.Settings)]
     [InlineData("Alt+Ctrl+[", PlayerActions.SpeedSlower)]
     [InlineData("Alt+Ctrl+]", PlayerActions.SpeedFaster)]
     public void RepresentativeChordsMapToActions(string chordText, string expectedAction)
@@ -115,5 +116,6 @@ public sealed class WiinaInputDefaultsTests
     {
         string conf = WiinaInputDefaults.ReadConf();
         Assert.Contains("Shift+Alt+v", conf, StringComparison.Ordinal);
+        Assert.Contains("Ctrl+, settings", conf, StringComparison.Ordinal);
     }
 }

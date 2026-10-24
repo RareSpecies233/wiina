@@ -188,8 +188,6 @@ public static class KeyBindingProfiles
     /// <summary>Optional plain mpv profile.</summary>
     public const string Mpv = "mpv";
 
-    public const string Iina = "IINA";
-
     /// <summary>Virtual name used by the editor for user-created profiles.</summary>
     public const string Custom = "Custom";
 
@@ -203,7 +201,7 @@ public static class KeyBindingProfiles
     /// Built-in profiles. "Custom" is intentionally absent: custom profiles are
     /// named user records and can be renamed or deleted.
     /// </summary>
-    public static IReadOnlyList<string> All { get; } = new[] { Wiina, Mpv, Iina };
+    public static IReadOnlyList<string> All { get; } = new[] { Wiina, Mpv };
 
     /// <summary>Normalizes persisted/user values; legacy names map to the new ids.</summary>
     public static string Normalize(string? value)
@@ -227,9 +225,11 @@ public static class KeyBindingProfiles
             return Mpv;
         }
 
-        if (Matches(trimmed, Iina) || Matches(trimmed, "IINA 默认"))
+        // The IINA profile was removed in 1.3.1. Persisted values from older
+        // builds migrate to the Wiina profile so the label never reappears.
+        if (Matches(trimmed, "IINA") || Matches(trimmed, "IINA 默认"))
         {
-            return Iina;
+            return Wiina;
         }
 
         // Note: "自定义" is deliberately *not* aliased. Older builds created
@@ -247,8 +247,7 @@ public static class KeyBindingProfiles
         Normalize(value) switch
         {
             Wiina => "Wiina 默认",
-            Mpv => "mpv 默认",
-            Iina => "IINA",
+            Mpv => "mpv",
             Custom => "自定义",
             var custom => custom,
         };
@@ -257,8 +256,7 @@ public static class KeyBindingProfiles
         Normalize(value) switch
         {
             Wiina => "Wiina Default",
-            Mpv => "mpv Default",
-            Iina => "IINA",
+            Mpv => "mpv",
             Custom => "Custom",
             var custom => custom,
         };
@@ -312,73 +310,11 @@ public static class KeyBindings
             new(PlayerActions.FrameNext, "."),
         };
 
-    /// <summary>
-    /// IINA profile, corrected against docs/reference/iina-shortcuts.md §4.1/4.2.
-    /// </summary>
-    public static IReadOnlyList<KeyBindingSetting> CreateIinaDefaults() =>
-        new List<KeyBindingSetting>
-        {
-            new(PlayerActions.PlayPause, "Space"),
-            new(PlayerActions.PlayPause, "P"),
-            new(PlayerActions.Stop, "Ctrl+."),
-            new(PlayerActions.SeekBack5, "Left"),
-            new(PlayerActions.SeekForward5, "Right"),
-            new(PlayerActions.FramePrevious, "Alt+Left"),
-            new(PlayerActions.FrameNext, "Alt+Right"),
-            new(PlayerActions.SubtitleSeekPrevious, "Shift+Left"),
-            new(PlayerActions.SubtitleSeekNext, "Shift+Right"),
-            new(PlayerActions.VolumeUp5, "Up"),
-            new(PlayerActions.VolumeDown5, "Down"),
-            new(PlayerActions.VolumeUp1, "Alt+Up"),
-            new(PlayerActions.VolumeDown1, "Alt+Down"),
-            new(PlayerActions.ToggleFullscreen, "F"),
-            new(PlayerActions.ToggleFullscreen, "Enter"),
-            new(PlayerActions.ExitFullscreen, "Esc"),
-            new(PlayerActions.ToggleTopmost, "Ctrl+T"),
-            new(PlayerActions.Mute, "M"),
-            new(PlayerActions.Mute, "Ctrl+/"),
-            new(PlayerActions.Screenshot, "Ctrl+S"),
-            new(PlayerActions.Open, "O"),
-            new(PlayerActions.PlaylistPrevious, "Ctrl+Left"),
-            new(PlayerActions.PlaylistNext, "Ctrl+Right"),
-            new(PlayerActions.ChapterPrevious, "Ctrl+PageUp"),
-            new(PlayerActions.ChapterNext, "Ctrl+PageDown"),
-            new(PlayerActions.AbLoop, "Ctrl+L"),
-            new(PlayerActions.LoopMode, "Ctrl+Shift+L"),
-            new(PlayerActions.SpeedHalf, "Ctrl+["),
-            new(PlayerActions.SpeedDouble, "Ctrl+]"),
-            new(PlayerActions.SpeedSlower, "Alt+Ctrl+["),
-            new(PlayerActions.SpeedFaster, "Alt+Ctrl+]"),
-            new(PlayerActions.SpeedReset, "Ctrl+\\"),
-            new(PlayerActions.SubtitleVisibility, "V"),
-            new(PlayerActions.SubtitleDelayDecrease, "Z"),
-            new(PlayerActions.SubtitleDelayIncrease, "X"),
-            new(PlayerActions.SubtitleDelayReset, "C"),
-            new(PlayerActions.SubtitleScaleIncrease, "Shift+G"),
-            new(PlayerActions.SubtitleScaleDecrease, "Shift+F"),
-            new(PlayerActions.SubtitlePositionDown, "R"),
-            new(PlayerActions.SubtitlePositionUp, "Shift+R"),
-            new(PlayerActions.AudioDelayIncrease05, "Shift+9"),
-            new(PlayerActions.AudioDelayDecrease05, "Shift+0"),
-            new(PlayerActions.AudioDelayReset, "Shift+-"),
-            new(PlayerActions.WindowHalf, "Ctrl+0"),
-            new(PlayerActions.WindowNormal, "Ctrl+1"),
-            new(PlayerActions.WindowDouble, "Ctrl+2"),
-            new(PlayerActions.WindowShrink, "Ctrl+-"),
-            new(PlayerActions.WindowGrow, "Ctrl+="),
-            new(PlayerActions.FitToScreen, "Ctrl+3"),
-            new(PlayerActions.Settings, "Ctrl+,"),
-            new(PlayerActions.PictureInPicture, "Ctrl+Shift+P"),
-            new(PlayerActions.CloseWindow, "Ctrl+W"),
-            new(PlayerActions.Quit, "Q"),
-        };
-
     /// <summary>Defaults for a profile.</summary>
     public static IReadOnlyList<KeyBindingSetting> CreateProfileDefaults(string? profile) =>
         KeyBindingProfiles.Normalize(profile) switch
         {
             KeyBindingProfiles.Mpv => CreateMpvDefaults(),
-            KeyBindingProfiles.Iina => CreateIinaDefaults(),
             _ => CreateDefaults(),
         };
 
@@ -423,11 +359,6 @@ public static class KeyBindings
         if (normalizedProfile == KeyBindingProfiles.Mpv)
         {
             return CreateMpvDefaults();
-        }
-
-        if (normalizedProfile == KeyBindingProfiles.Iina)
-        {
-            return CreateIinaDefaults();
         }
 
         return ResolveStored(stored);

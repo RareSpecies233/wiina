@@ -1,8 +1,8 @@
-# Performance measurements (v1.3.0)
+# Performance measurements (v1.3.1)
 
 Measured on the development machine on 2026-10-19 (Asia/Hong_Kong), at v1.0.0.
 The numbers below are the historical baseline; they were **not** re-measured
-for 1.2.4 through 1.3.0 (see the per-version notes below for
+for 1.2.4 through 1.3.1 (see the per-version notes below for
 the known deltas). Numbers are what
 this machine produced; they are not universal guarantees.
 
@@ -69,6 +69,27 @@ Idle memory target: **< 300 MB** → met for working set in all measured
 scenarios (peak 265.7 MB at 4K). Private bytes exceed 300 MB at 4K because the
 GPU/driver surfaces and the video swapchain are charged to the process; this is
 reported honestly rather than trimmed by a smaller measurement window.
+
+## What changed in 1.3.1
+
+- **Thumbnail decode can use the GPU.** The new `video.thumbnail-acceleration`
+  setting selects Auto (`hwdec=auto-safe`) or CPU only (`hwdec=no`) for the
+  headless thumbnail instance. Maintainer measurement on a 1080p HEVC file:
+  Auto ≈ **29 ms wall / 15.6 ms CPU per frame**, CPU only ≈ **104 ms / 461 ms**.
+  Auto falls back to software decode when the driver cannot use the GPU, so the
+  worst case equals CPU-only.
+- **The in-memory thumbnail cache covers the whole current file.** Every 5 s
+  bucket is kept: about **57.6 KB per bucket**, i.e. ≈**41 MB per hour** —
+  24 minutes ≈16 MB, 2 hours ≈83 MB. This is RAM only; the disk budget is still
+  `ui.thumbnail-cache-mb` (default 512 MB, LRU by bytes).
+- **Screenshots with/without subtitles** only change the mpv screenshot flags;
+  no measurable per-frame cost.
+- **No new per-frame work.** The menu merge, speed flyout, ±5 s previous/next
+  and the pointer-leave hide are all event-driven. The uninstaller elevation
+  adds nothing at runtime.
+- Counts for this snapshot: **11 settings pages / 129 rows**, 563 localization
+  keys, **780** Core tests. Startup, memory, blur and 4K numbers were **not**
+  re-measured for 1.3.1.
 
 ## What changed in 1.3.0
 
@@ -214,8 +235,9 @@ work is one brush fill.
 - Thumbnails (scrub peek) and the inspector run off the UI thread; the UI shows
   placeholder/loading state while data arrives. No synchronous file or IPC work
   was observed blocking the window during the measurements.
-- Settings/page navigation builds rows in code; 12 pages with 122 rows total
-  render without a visible stall on this machine.
+- Settings/page navigation builds rows in code; 11 page destinations (12 catalog
+  entries, KeyBindings redirects) with 129 rows total render without a visible
+  stall on this machine.
 - Library scanning is not a feature of this stage; playlist import is bounded
   by the files the user opens.
 

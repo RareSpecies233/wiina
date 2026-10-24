@@ -29,9 +29,9 @@
 
 #define MyAppName "Wiina"
 ; Overridable so a test build can be produced without touching the release
-; version: ISCC.exe /DMyAppVersion=1.3.0 installer\wiina.iss
+; version: ISCC.exe /DMyAppVersion=1.3.1 installer\wiina.iss
 #ifndef MyAppVersion
-  #define MyAppVersion "1.3.0"
+  #define MyAppVersion "1.3.1"
 #endif
 #define MyAppPublisher "Wiina contributors"
 #define MyAppUrl "https://github.com/RareSpecies233/wiina"
@@ -222,39 +222,99 @@ begin
     RegValueExists(HKLM, RegisteredApplicationsKey, 'Wiina');
 end;
 
+{ A per-user install (PrivilegesRequired=lowest) also has an unelevated
+  uninstaller, but associations can exist in HKLM after the app's elevated
+  "associate as administrator" path. Remove those through a one-shot elevated
+  PowerShell script so the uninstaller itself keeps running unelevated. The
+  script mirrors RemoveAssociations(HKLM): both ProgID trees, the two
+  OpenWithProgids values on every extension, a class default that points at a
+  Wiina ProgID, the capabilities tree and the RegisteredApplications value. }
+procedure RemoveMachineAssociationsElevated;
+var
+  Script, ScriptPath: String;
+  ResultCode: Integer;
+  Started: Boolean;
+begin
+  Script :=
+    '$ErrorActionPreference = "SilentlyContinue"' + #13#10 +
+    'Remove-Item -LiteralPath "HKLM:\Software\Classes\Wiina.Video" -Recurse -Force' + #13#10 +
+    'Remove-Item -LiteralPath "HKLM:\Software\Classes\Wiina.Audio" -Recurse -Force' + #13#10 +
+    '$exts = "' + OpenWithExtensions + '".Split("|")' + #13#10 +
+    'foreach ($e in $exts) {' + #13#10 +
+    '  $ow = "HKLM:\Software\Classes\." + $e + "\OpenWithProgids"' + #13#10 +
+    '  Remove-ItemProperty -LiteralPath $ow -Name "Wiina.Video"' + #13#10 +
+    '  Remove-ItemProperty -LiteralPath $ow -Name "Wiina.Audio"' + #13#10 +
+    '  $cls = "HKLM:\Software\Classes\." + $e' + #13#10 +
+    '  $key = Get-Item -LiteralPath $cls' + #13#10 +
+    '  if ($null -ne $key) {' + #13#10 +
+    '    $d = $key.GetValue("")' + #13#10 +
+    '    if ($d -eq "Wiina.Video" -or $d -eq "Wiina.Audio") {' +
+        ' Remove-ItemProperty -LiteralPath $cls -Name "(default)" }' + #13#10 +
+    '  }' + #13#10 +
+    '}' + #13#10 +
+    'Remove-Item -LiteralPath "HKLM:\Software\Wiina" -Recurse -Force' + #13#10 +
+    'Remove-ItemProperty -LiteralPath "HKLM:\Software\RegisteredApplications" -Name "Wiina"' + #13#10 +
+    'exit 0';
+
+  ScriptPath := ExpandConstant('{tmp}\wiina-machine-cleanup.ps1');
+  Started := SaveStringToFile(ScriptPath, Script, False);
+  if Started then
+  begin
+    Started := ShellExec(
+      'runas',
+      ExpandConstant('{sys}\WindowsPowerShell\v1.0\powershell.exe'),
+      '-NoProfile -ExecutionPolicy Bypass -File "' + ScriptPath + '"',
+      '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+    DeleteFile(ScriptPath);
+  end;
+
+  if Started then
+    Log('associations: machine-wide cleanup finished (exit code ' + IntToStr(ResultCode) + ')')
+  else
+    Log('associations: machine-wide cleanup could not be elevated (UAC declined)');
+end;
+
+{ Path-filtered stop of the installed copy, shared by the installer and the
+  uninstaller. Inno is a 32-bit process, so the kill runs through PowerShell
+  rather than taskkill (which can only filter by image name), and the path
+  filter keeps a portable/dev build running elsewhere untouched. }
+function InstalledWiinaStopCommand: String;
+begin
+  Result :=
+    'Get-Process -Name Wiina -ErrorAction SilentlyContinue | ' +
+    'Where-Object { $_.Path -eq ''' + ExpandConstant('{app}\{#MyAppExeName}') + ''' } | ' +
+    'Stop-Process -Force -ErrorAction SilentlyContinue';
+end;
+
+procedure RunStopCommand(Command: String);
+var
+  ResultCode: Integer;
+begin
+  Exec(
+    ExpandConstant('{sys}\WindowsPowerShell\v1.0\powershell.exe'),
+    '-NoProfile -NonInteractive -Command "' + Command + '"',
+    '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+end;
+
+procedure StopInstalledWiina;
+begin
+  RunStopCommand(InstalledWiinaStopCommand);
+  { Give the stopped process a moment to release its file handles, then retry
+    once for a process that was still starting up during the first pass. }
+  Sleep(500);
+  RunStopCommand(InstalledWiinaStopCommand);
+end;
+
 // In-place upgrade: a running Wiina keeps its own files locked and the previous
 // version has to be removed before the new files are copied, so close it here.
 // Inno's Restart Manager (CloseApplications=yes) also asks apps that hold files
 // in the app directory to close gracefully; this explicit stop covers the case
-// where the old window does not answer (mpv fullscreen etc.) and is limited to
-// the installed copy's path so a portable/dev build running elsewhere stays up.
-// Inno is a 32-bit process, so the kill runs through PowerShell rather than
-// taskkill, which can only filter by image name.
+// where the old window does not answer (mpv fullscreen etc.).
 function PrepareToInstall(var NeedsRestart: Boolean): String;
-var
-  Cmd: String;
-  ResultCode: Integer;
 begin
   Result := '';
   NeedsRestart := False;
-
-  Cmd :=
-    'Get-Process -Name Wiina -ErrorAction SilentlyContinue | ' +
-    'Where-Object { $_.Path -eq ''' + ExpandConstant('{app}\{#MyAppExeName}') + ''' } | ' +
-    'Stop-Process -Force -ErrorAction SilentlyContinue';
-
-  Exec(
-    ExpandConstant('{sys}\WindowsPowerShell\v1.0\powershell.exe'),
-    '-NoProfile -NonInteractive -Command "' + Cmd + '"',
-    '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
-
-  { Give the stopped process a moment to release its file handles, then retry
-    once for a process that was still starting up during the first pass. }
-  Sleep(600);
-  Exec(
-    ExpandConstant('{sys}\WindowsPowerShell\v1.0\powershell.exe'),
-    '-NoProfile -NonInteractive -Command "' + Cmd + '"',
-    '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  StopInstalledWiina;
 end;
 
 function InitializeUninstall: Boolean;
@@ -286,12 +346,30 @@ var
 begin
   if CurUninstallStep = usUninstall then
   begin
+    { The file list cannot be removed while the installed Wiina holds its
+      executable open; the path-filtered stop mirrors the installer so a
+      portable copy running elsewhere stays up. }
+    StopInstalledWiina;
+
     { Associations are always removed, whether or not the config is kept. }
     RemovedUser := 0;
     RemovedMachine := 0;
     RemoveAssociations(HKCU, RemovedUser);
-    RemoveAssociations(HKLM, RemovedMachine);
-    Log('associations: ' + IntToStr(RemovedUser) + ' per-user and ' +
+    if IsAdmin then
+    begin
+      RemoveAssociations(HKLM, RemovedMachine);
+      Log('associations: machine-wide keys removed directly (uninstaller is elevated)');
+    end
+    else if MachineAssociationsRemain then
+    begin
+      { The per-user uninstaller is unelevated, so HKLM needs a UAC prompt. }
+      RemoveMachineAssociationsElevated;
+      if MachineAssociationsRemain then
+        Log('associations: machine-wide keys remain after the elevated cleanup')
+      else
+        RemovedMachine := RemovedMachine + 1;
+    end;
+    Log('associations: ' + IntToStr(RemovedUser) + ' per-user item(s) removed, ' +
       IntToStr(RemovedMachine) + ' machine-wide item(s) removed');
 
     if not KeepUserData then

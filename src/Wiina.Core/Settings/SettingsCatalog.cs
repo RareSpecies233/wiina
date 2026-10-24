@@ -179,6 +179,14 @@ public static class SettingsCatalog
             (settings, value) => settings.OscAutoHideSeconds = Math.Clamp(value, 0.5, 30),
             "osc autohide delay seconds 自动隐藏 延时 秒"));
         rows.Add(ChoiceRow(
+            "ui.osc-prev-next", SettingsPageId.Ui, "窗口与 OSC",
+            "OSC 上一首/下一首", "按钮是跟随播放列表切换，还是在当前文件内快退/快进；按住 Ctrl 时快退/快进 30 秒。",
+            new[] { "上一首 / 下一首", "快退 / 快进" },
+            settings => (int)settings.OscPrevNextMode,
+            (settings, value) => settings.OscPrevNextMode =
+                (OscPrevNextMode)Math.Clamp(value, 0, 1),
+            "osc prev next seek skip 上一首 下一首 快退 快进"));
+        rows.Add(ChoiceRow(
             "ui.blur-mode", SettingsPageId.Ui, "窗口与 OSC",
             "毛玻璃模式", "固定/动态/始终会抓取视频帧做高斯模糊；关闭后使用不透明纯色 + 重点色染色，性能最好且不透出画面。",
             new[] { "固定（静态帧）", "动态（跟随视频）", "始终（持续计算）", "关闭毛玻璃（纯色）" },
@@ -253,7 +261,7 @@ public static class SettingsCatalog
             "thumbnail bucket interval 缩略图 间隔"));
         rows.Add(NumberRow(
             "video.thumbnail-cache", SettingsPageId.Video, "缩略图",
-            "缩略图缓存数量", "内存中保留的缩略图张数。",
+            "缩略图缓存下限", "内存至少保留的张数；实际会缓存当前视频的全部时间点，便于快速预览（约每 5 秒一张、每张 58 KB）。",
             10, 240, 10, " 张",
             settings => settings.ThumbnailCacheCount,
             (settings, value) => settings.ThumbnailCacheCount = (int)Math.Round(Math.Clamp(value, 10, 240)),
@@ -273,6 +281,15 @@ public static class SettingsCatalog
             settings => settings.ThumbnailSlowMode,
             (settings, value) => settings.ThumbnailSlowMode = value,
             "slow thumbnail single core 慢速 缩略图 单核 低配 性能"));
+        rows.Add(ChoiceRow(
+            "video.thumbnail-acceleration", SettingsPageId.Video, "缩略图",
+            "预览图硬件加速",
+            "自动：显卡可用时用 GPU 解码，驱动不支持时由 libmpv 自动回退软解；仅 CPU：强制软解，避免个别驱动花屏或驱动级卡顿。",
+            new[] { "自动（推荐）", "仅 CPU" },
+            settings => (int)settings.ThumbnailAcceleration,
+            (settings, value) => settings.ThumbnailAcceleration =
+                (ThumbnailAcceleration)Math.Clamp(value, 0, 1),
+            "thumbnail acceleration gpu hwdec hardware decode cpu 缩略图 硬件加速 显卡 解码"));
         rows.Add(InfoRow(
             "video.thumbnail-hint", SettingsPageId.Video, "缩略图",
             "预生成提示",
@@ -512,6 +529,12 @@ public static class SettingsCatalog
             settings => settings.VideoPanY,
             (settings, value) => settings.VideoPanY = QuickSettings.ClampPan(value),
             "pan vertical 平移"));
+        rows.Add(BoolRow(
+            "video.screenshot-subtitles", SettingsPageId.Video, "截图",
+            "截图包含字幕", "开启时保存当前字幕；关闭时只保存画面。",
+            settings => settings.ScreenshotWithSubtitles,
+            (settings, value) => settings.ScreenshotWithSubtitles = value,
+            "screenshot subtitles 截图 字幕"));
         rows.Add(ActionRow(
             "general.screenshot-folder", SettingsPageId.Video, "截图",
             "截图文件夹",
@@ -796,12 +819,12 @@ public static class SettingsCatalog
         rows.Add(ChoiceRow(
             "control.key-profile", SettingsPageId.Control, "键盘",
             "键盘方案",
-            "Wiina 默认来自随附的 wiina.txt（78 个常用绑定）；也可切换 mpv 默认或 IINA。在按键编辑器中修改会创建可命名的自定义方案。",
+            "Wiina 默认来自随附的 wiina.txt（79 个常用绑定，含 Ctrl+, 打开设置）；也可切换为精简的 mpv 方案。在按键编辑器中修改会创建可命名的自定义方案。",
             keyProfileLabels,
             settings => IndexOf(KeyBindingProfiles.Normalize(settings.KeyBindingProfile), keyProfiles, 0),
             (settings, value) => settings.KeyBindingProfile =
                 keyProfiles[Math.Clamp(value, 0, keyProfiles.Length - 1)],
-            "keyboard profile iina mpv wiina 键盘方案 快捷键 默认"));
+            "keyboard profile mpv wiina 键盘方案 快捷键 默认"));
         rows.Add(ActionRow(
             "control.reset", SettingsPageId.Control, "重置",
             "还原控制设置", "鼠标动作、滚轮步长与方向恢复默认。",

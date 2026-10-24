@@ -167,6 +167,32 @@ public sealed class SettingsSearchTests
     }
 
     [Fact]
+    public void ThumbnailAccelerationRowDefaultsToAutoAndOnlyOffersCpuFallback()
+    {
+        SettingsRowDefinition row = Assert.Single(
+            SettingsCatalog.Rows,
+            row => row.Id == "video.thumbnail-acceleration");
+        Assert.Equal(SettingsPageId.Video, row.Page);
+        Assert.Equal(SettingsRowKind.Choice, row.Kind);
+        Assert.Equal(2, row.Choices.Count);
+
+        var settings = new AppSettings();
+        Assert.Equal(ThumbnailAcceleration.Auto, settings.ThumbnailAcceleration);
+        Assert.Equal(0, row.Value(settings));
+
+        row.Apply(settings, 1);
+        Assert.Equal(ThumbnailAcceleration.Cpu, settings.ThumbnailAcceleration);
+        Assert.Equal(1, row.Value(settings));
+
+        // Out-of-range values clamp to the CPU entry rather than throwing.
+        row.Apply(settings, 7);
+        Assert.Equal(ThumbnailAcceleration.Cpu, settings.ThumbnailAcceleration);
+
+        row.Apply(settings, 0);
+        Assert.Equal(ThumbnailAcceleration.Auto, settings.ThumbnailAcceleration);
+    }
+
+    [Fact]
     public void MediaKeysRowIsAToggleThatDefaultsToOn()
     {
         SettingsRowDefinition row = Assert.Single(

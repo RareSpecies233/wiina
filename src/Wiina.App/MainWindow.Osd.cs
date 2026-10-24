@@ -30,6 +30,7 @@ public sealed partial class MainWindow
     private CancellationTokenSource? _thumbnailCts;
     private long _thumbnailRequest;
     private string? _thumbnailPregenPath;
+    private bool _thumbnailSourceHooked;
     private TimelineControl? _previewTimeline;
     private double _previewRatio;
     private double _previewPointerX;
@@ -500,28 +501,23 @@ public sealed partial class MainWindow
             Trace,
             Path.Combine(App.DataFolder, "thumbnails"),
             Math.Clamp(_settings.ThumbnailCacheMegabytes, 0, 4096),
-            _settings.ThumbnailSlowMode);
+            _settings.ThumbnailSlowMode,
+            _settings.ThumbnailAcceleration);
 
     /// <summary>
-    /// Warms the on-disk thumbnail cache for the file that just opened. Runs
-    /// once per file, on the service's background worker, and stops as soon as
-    /// another file starts loading. Slow mode skips this entirely.
+    /// Sizes the in-memory thumbnail cache for the file that just opened and,
+    /// unless slow mode is on, warms it by walking the timeline on the service's
+    /// background worker. Runs once per file and stops as soon as another file
+    /// starts loading.
     /// </summary>
     private void StartThumbnailPreGeneration()
     {
-        if (!ThumbnailPolicy.AllowsPreGeneration(
-                _settings.ThumbnailPreviewEnabled,
-                _settings.ThumbnailSlowMode,
-                _settings.ThumbnailCacheMegabytes)
-            || string.IsNullOrWhiteSpace(_currentPath)
-            || IsUrlPath(_currentPath)
-            || string.Equals(
-                _thumbnailPregenPath,
-                _currentPath,
-                StringComparison.OrdinalIgnoreCase))
+        if (string.IsNullOrWhiteSpace(_currentPath) || IsUrlPath(_currentPath))
         {
             return;
         }
+
+        EnsureThumbnailLifecycleHook();
 
         double duration = _player?.GetPropertyDouble("duration") ?? 0;
         if (duration <= 0)
@@ -531,13 +527,67 @@ public sealed partial class MainWindow
             return;
         }
 
+        ThumbnailService service = GetThumbnailService();
+
+        // Memory is sized for the whole file even when the walk is skipped
+        // (slow mode); hovering then fills a cache that never evicts mid-file.
+        service.SetSource(_currentPath, duration);
+
+        if (!ThumbnailPolicy.AllowsPreGeneration(
+                _settings.ThumbnailPreviewEnabled,
+                _settings.ThumbnailSlowMode,
+                _settings.ThumbnailCacheMegabytes)
+            || string.Equals(
+                _thumbnailPregenPath,
+                _currentPath,
+                StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
         _thumbnailPregenPath = _currentPath;
-        GetThumbnailService().StartPreGeneration(_currentPath, duration, 90);
+        service.StartPreGeneration(_currentPath, duration, 90);
+    }
+
+    /// <summary>
+    /// Watches mpv for the end of a source (<c>idle-active</c>, or an empty
+    /// <c>path</c>) so closing the file releases the memory frames immediately
+    /// instead of keeping the last video's buckets resident. Hooking here keeps
+    /// the playback file untouched.
+    /// </summary>
+    private void EnsureThumbnailLifecycleHook()
+    {
+        if (_thumbnailSourceHooked || _player is null)
+        {
+            return;
+        }
+
+        _thumbnailSourceHooked = true;
+
+        // A stop command makes mpv idle; the file's path is no longer current.
+        _player.FlagPropertyChanged += (name, value) =>
+        {
+            if (value && string.Equals(name, "idle-active", StringComparison.Ordinal))
+            {
+                DispatcherQueue.TryEnqueue(StopThumbnailPreGeneration);
+            }
+        };
+
+        // An unavailable path is reported as an empty string on some builds.
+        _player.StringPropertyChanged += (name, value) =>
+        {
+            if (string.Equals(name, "path", StringComparison.Ordinal) &&
+                string.IsNullOrEmpty(value))
+            {
+                DispatcherQueue.TryEnqueue(StopThumbnailPreGeneration);
+            }
+        };
     }
 
     private void StopThumbnailPreGeneration()
     {
         _thumbnailPregenPath = null;
+        _thumbnailService?.ClearSource();
         _thumbnailService?.StopPreGeneration();
     }
 

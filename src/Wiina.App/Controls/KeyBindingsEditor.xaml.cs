@@ -112,8 +112,7 @@ public sealed partial class KeyBindingsEditor : UserControl
 
     private static bool IsBuiltInProfile(string? profile) =>
         string.Equals(profile, KeyBindingProfiles.Wiina, StringComparison.Ordinal) ||
-        string.Equals(profile, KeyBindingProfiles.Mpv, StringComparison.Ordinal) ||
-        string.Equals(profile, KeyBindingProfiles.Iina, StringComparison.Ordinal);
+        string.Equals(profile, KeyBindingProfiles.Mpv, StringComparison.Ordinal);
 
     private void BuildProfileChoices()
     {

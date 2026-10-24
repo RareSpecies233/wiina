@@ -197,7 +197,6 @@ public static class MenuCatalog
         {
             FileMenu(state),
             PlaybackMenu(state),
-            VideoMenu(state),
             AudioMenu(state),
             SubtitlesMenu(state),
             PluginMenu(state),
@@ -283,20 +282,6 @@ public static class MenuCatalog
                 Item("playback.jump-start", "跳到开头", MenuCommands.JumpToStart,
                     enabled: state.HasMedia),
                 Separator(),
-                Submenu("playback.speed", $"速度：{state.Speed:0.##}×", MenuCommands.Speed,
-                    enabled: state.HasMedia,
-                    children: new[]
-                    {
-                        SpeedItem(state, 0.5),
-                        SpeedItem(state, 0.75),
-                        SpeedItem(state, 1.0),
-                        SpeedItem(state, 1.25),
-                        SpeedItem(state, 1.5),
-                        SpeedItem(state, 2.0),
-                        Sep(),
-                        Item("playback.speed-reset", "重置 1×", MenuCommands.SpeedReset,
-                            shortcut: "Ctrl+Backspace", enabled: state.HasMedia),
-                    }),
                 Item("playback.screenshot", "截图", MenuCommands.Screenshot, shortcut: "Ctrl+S",
                     enabled: state.HasMedia),
                 Item("playback.ab-loop", "A-B 循环", MenuCommands.AbLoop, shortcut: "Ctrl+L",
@@ -325,59 +310,6 @@ public static class MenuCatalog
                     enabled: state.ChapterCount > 0),
                 Item("playback.chapter-next", "下一章", MenuCommands.ChapterNext,
                     enabled: state.ChapterCount > 0),
-            });
-
-    private static MenuGroupDefinition VideoMenu(MenuState state) =>
-        new(
-            "video",
-            "视频",
-            new[]
-            {
-                Item("video.panel", "显示视频面板", MenuCommands.VideoPanel),
-                Submenu("video.tracks", "视频轨道", MenuCommands.VideoTracks,
-                    enabled: state.HasVideo),
-                Separator(),
-                Item("video.half", "0.5× 窗口", MenuCommands.VideoHalf, enabled: state.HasMedia),
-                Item("video.normal", "1× 窗口", MenuCommands.VideoNormal, enabled: state.HasMedia),
-                Item("video.double", "2× 窗口", MenuCommands.VideoDouble, enabled: state.HasMedia),
-                Item("video.fit", "适合屏幕", MenuCommands.VideoFit, enabled: state.HasMedia),
-                Item("video.zoom-in", "放大窗口", MenuCommands.VideoZoomIn, enabled: state.HasMedia),
-                Item("video.zoom-out", "缩小窗口", MenuCommands.VideoZoomOut, enabled: state.HasMedia),
-                Separator(),
-                Item("video.pip", state.IsPip ? "退出画中画" : "画中画", MenuCommands.Pip,
-                    shortcut: "Ctrl+Shift+P", isChecked: state.IsPip),
-                Item("video.fullscreen", state.IsFullscreen ? "退出全屏" : "进入全屏",
-                    MenuCommands.Fullscreen, shortcut: "F11", isChecked: state.IsFullscreen),
-                Item("video.topmost", "窗口置顶", MenuCommands.Topmost,
-                    isChecked: state.AlwaysOnTop),
-                Item("video.lock-aspect", "锁定宽高比", MenuCommands.LockAspect,
-                    isChecked: state.LockAspect),
-                Item("video.music-mode", state.IsMini ? "退出音乐模式" : "音乐模式",
-                    MenuCommands.MusicMode, shortcut: "Ctrl+Shift+M", isChecked: state.IsMini),
-                Separator(),
-                Submenu("video.aspect", "宽高比", MenuCommands.Aspect,
-                    enabled: state.HasMedia,
-                    children: AspectItems(state)),
-                Submenu("video.crop", "裁剪", MenuCommands.Crop,
-                    enabled: state.HasMedia,
-                    children: CropItems(state)),
-                Submenu("video.rotate", "旋转", MenuCommands.Rotate,
-                    enabled: state.HasMedia,
-                    children: new[]
-                    {
-                        RotationItem(state, 0, "0°"),
-                        RotationItem(state, 90, "90°"),
-                        RotationItem(state, 180, "180°"),
-                        RotationItem(state, 270, "270°"),
-                    }),
-                Item("video.flip-h", "水平翻转", MenuCommands.FlipHorizontal,
-                    enabled: state.HasMedia, isChecked: state.FlipHorizontal),
-                Item("video.flip-v", "垂直翻转", MenuCommands.FlipVertical,
-                    enabled: state.HasMedia, isChecked: state.FlipVertical),
-                Item("video.deinterlace", "去隔行", MenuCommands.Deinterlace,
-                    enabled: state.HasMedia, isChecked: state.Deinterlace),
-                Item("video.filters", "视频滤镜…", MenuCommands.VideoFilters,
-                    enabled: true),
             });
 
     private static MenuGroupDefinition AudioMenu(MenuState state) =>
@@ -469,6 +401,9 @@ public static class MenuCatalog
                 Item("plugin.folder", "打开插件文件夹", MenuCommands.PluginFolder),
             });
 
+    // One 窗口 submenu carries the whole window/picture family. The separate
+    // 视频 group duplicated most of these entries (half/normal/double/fit), so
+    // its unique items now live here instead of behind a second submenu.
     private static MenuGroupDefinition WindowMenu(MenuState state) =>
         new(
             "window",
@@ -485,6 +420,48 @@ public static class MenuCatalog
                 Item("window.normal", "1× 窗口", MenuCommands.VideoNormal),
                 Item("window.double", "2× 窗口", MenuCommands.VideoDouble),
                 Item("window.fit", "适合屏幕", MenuCommands.VideoFit),
+                Item("window.zoom-in", "放大窗口", MenuCommands.VideoZoomIn,
+                    enabled: state.HasMedia),
+                Item("window.zoom-out", "缩小窗口", MenuCommands.VideoZoomOut,
+                    enabled: state.HasMedia),
+                Separator(),
+                Item("video.panel", "显示视频面板", MenuCommands.VideoPanel),
+                Submenu("video.tracks", "视频轨道", MenuCommands.VideoTracks,
+                    enabled: state.HasVideo),
+                Item("video.pip", state.IsPip ? "退出画中画" : "画中画", MenuCommands.Pip,
+                    shortcut: "Ctrl+Shift+P", isChecked: state.IsPip),
+                Item("video.fullscreen", state.IsFullscreen ? "退出全屏" : "进入全屏",
+                    MenuCommands.Fullscreen, shortcut: "F11", isChecked: state.IsFullscreen),
+                Item("video.topmost", "窗口置顶", MenuCommands.Topmost,
+                    isChecked: state.AlwaysOnTop),
+                Item("video.lock-aspect", "锁定宽高比", MenuCommands.LockAspect,
+                    isChecked: state.LockAspect),
+                Item("video.music-mode", state.IsMini ? "退出音乐模式" : "音乐模式",
+                    MenuCommands.MusicMode, shortcut: "Ctrl+Shift+M", isChecked: state.IsMini),
+                Separator(),
+                Submenu("video.aspect", "宽高比", MenuCommands.Aspect,
+                    enabled: state.HasMedia,
+                    children: AspectItems(state)),
+                Submenu("video.crop", "裁剪", MenuCommands.Crop,
+                    enabled: state.HasMedia,
+                    children: CropItems(state)),
+                Submenu("video.rotate", "旋转", MenuCommands.Rotate,
+                    enabled: state.HasMedia,
+                    children: new[]
+                    {
+                        RotationItem(state, 0, "0°"),
+                        RotationItem(state, 90, "90°"),
+                        RotationItem(state, 180, "180°"),
+                        RotationItem(state, 270, "270°"),
+                    }),
+                Item("video.flip-h", "水平翻转", MenuCommands.FlipHorizontal,
+                    enabled: state.HasMedia, isChecked: state.FlipHorizontal),
+                Item("video.flip-v", "垂直翻转", MenuCommands.FlipVertical,
+                    enabled: state.HasMedia, isChecked: state.FlipVertical),
+                Item("video.deinterlace", "去隔行", MenuCommands.Deinterlace,
+                    enabled: state.HasMedia, isChecked: state.Deinterlace),
+                Item("video.filters", "视频滤镜…", MenuCommands.VideoFilters,
+                    enabled: true),
                 Separator(),
                 Item("window.inspector", "检查器…", MenuCommands.Inspector),
                 Item("window.log", "日志查看器…", MenuCommands.LogViewer),
@@ -552,15 +529,6 @@ public static class MenuCatalog
             enabled: state.HasMedia,
             isChecked: state.Rotation == degrees);
 
-    private static MenuItemDefinition SpeedItem(MenuState state, double speed) =>
-        Item(
-            $"playback.speed.{speed:0.##}",
-            $"{speed:0.##}×",
-            MenuCommands.Speed,
-            argument: speed.ToString(System.Globalization.CultureInfo.InvariantCulture),
-            enabled: state.HasMedia,
-            isChecked: Math.Abs(state.Speed - speed) < 0.01);
-
     private static MenuItemDefinition Item(
         string id,
         string label,
@@ -606,6 +574,4 @@ public static class MenuCatalog
             Label = string.Empty,
             Kind = MenuItemKind.Separator,
         };
-
-    private static MenuItemDefinition Sep() => Separator();
 }

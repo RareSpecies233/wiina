@@ -39,7 +39,7 @@ public sealed class PlaybackSettingsTests
                 AutoLoadSmartSubtitles = false,
                 PreferredSubtitleLanguage = SubtitleLanguagePreferences.TraditionalChinese,
                 AutoLoadExternalAudio = false,
-                KeyBindingProfile = KeyBindingProfiles.Iina,
+                KeyBindingProfile = KeyBindingProfiles.Mpv,
                 AutoPlaylistMode = AutoPlaylistMode.IncludeSubfolders,
             };
             store.Save(saved);
@@ -49,8 +49,40 @@ public sealed class PlaybackSettingsTests
             Assert.False(loaded.AutoLoadSmartSubtitles);
             Assert.Equal(SubtitleLanguagePreferences.TraditionalChinese, loaded.PreferredSubtitleLanguage);
             Assert.False(loaded.AutoLoadExternalAudio);
-            Assert.Equal(KeyBindingProfiles.Iina, loaded.KeyBindingProfile);
+            Assert.Equal(KeyBindingProfiles.Mpv, loaded.KeyBindingProfile);
             Assert.Equal(AutoPlaylistMode.IncludeSubfolders, loaded.AutoPlaylistMode);
+        }
+        finally
+        {
+            try
+            {
+                Directory.Delete(directory, recursive: true);
+            }
+            catch (IOException)
+            {
+                // Best effort for the test sandbox.
+            }
+        }
+    }
+
+    [Fact]
+    public void LegacyIinaProfileInSettingsJsonMigratesToWiinaOnLoad()
+    {
+        string directory = Path.Combine(
+            Path.GetTempPath(),
+            "wiina-settings-tests",
+            Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        string path = Path.Combine(directory, "settings.json");
+
+        try
+        {
+            // Raw JSON as written by builds before 1.3.1.
+            File.WriteAllText(path, "{\n  \"KeyBindingProfile\": \"IINA\"\n}\n");
+
+            AppSettings loaded = new SettingsStore(path).Load();
+
+            Assert.Equal(KeyBindingProfiles.Wiina, loaded.KeyBindingProfile);
         }
         finally
         {

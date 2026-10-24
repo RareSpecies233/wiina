@@ -1,11 +1,78 @@
 # Wiina release notes
 
-Release date (1.3.0): 2026-10-24
+Release date (1.3.1): 2026-10-24
 
 Windows-native, IINA-inspired mpv front end built with WinUI 3, Windows App
 SDK 2.5, and libmpv.
 
-## What's new in 1.3.0
+## What's new in 1.3.1
+
+### Key-binding profiles: Wiina and mpv only
+
+The approximate IINA preset is gone. `KeyBindingProfiles.All` now exposes
+`Wiina` (79 chords generated from `wiina-defaults.conf`, including `Ctrl+,` for
+settings) and `mpv` (18 chords); "mpv" no longer carries a "默认/default"
+suffix. Persisted `IINA`/`IINA 默认` values migrate to Wiina on load, and custom
+profiles are untouched.
+
+### OSC menus are de-duplicated
+
+- Duplicate Video/Window entries collapse into the Window menu: screenshot,
+  deband, filters and quality moved there, and the Video menu no longer repeats
+  them. Accelerator text is resolved from the active profile, so it matches the
+  keys that actually fire.
+- Speed presets live only in `⋯ → 置顶 → 速度 ▸` (0.5/0.75/1/1.25/1.5/2/2.5/3/4×);
+  the quick-settings home page no longer duplicates them and the player page
+  keeps its slider. The speed label appears on the right side only.
+- Previous/next can act as ±5 s (Ctrl = ±30 s) through `ui.osc-prev-next`.
+- Moving the pointer out of the window now hides the OSC immediately instead
+  of waiting for the idle delay; an open flyout or a held mouse button defers
+  the hide until the popup closes.
+- The transient dropped-frame notice is anchored to the left-middle of the
+  picture via ASS tags, so it no longer sits under the statistics panel.
+
+### Thumbnails can use the GPU, and the memory cache covers the whole file
+
+- New "缩略图加速" setting: Auto (recommended) keeps libmpv's
+  `hwdec=auto-safe`; CPU only forces `hwdec=no`. Measured per frame: 29 ms wall
+  / 15.6 ms CPU (auto) vs 104 ms / 461 ms (CPU only).
+- The in-memory cache now keeps every 5-second bucket of the current file: about
+  57.6 KB per bucket, ≈41 MB/hour (24 min ≈16 MB, 2 h ≈83 MB). The disk budget
+  (`ui.thumbnail-cache-mb`) still applies.
+
+### Screenshots can include subtitles
+
+One persisted switch in Settings → Video → 截图 and the expanded OSC menu
+(default on; there is no quick-settings entry for it). The value is applied through mpv's
+`subtitles`/`video` screenshot flags.
+
+### The uninstaller always removes associations; the portable one always elevates
+
+The portable uninstaller manifest is now `requireAdministrator`: it always asks
+for elevation, offers to force-close a running Wiina, removes both HKCU and HKLM
+associations, and only asks whether to keep the configuration. The installer
+itself stays per-user (`PrivilegesRequired=lowest`), so installing never needs
+administrator rights; the installed copy's Inno uninstaller therefore starts
+unelevated and asks for UAC only when machine-wide associations still exist.
+Both uninstallers remove file associations unconditionally, and the prompt only
+covers keeping the configuration.
+
+### Cursor hiding: implemented, not confirmed
+
+A transparent cursor resource (id 101), `ProtectedCursor` on all 489 elements
+under `RootGrid`, and a 60 ms helper-thread `SetCursor(NULL)` all build and pass
+tests, but no stable hidden pointer was observed — CoreMessaging re-applies the
+arrow within milliseconds. This is documented as partial, not as fixed; see
+`../reports/known-issues-1.3.1.md` (K26).
+
+### A known-issues list you can triage
+
+`../reports/known-issues-1.3.1.md` collects 30 issues (P0/P1/P2) with symptoms,
+causes, workarounds, rough fix cost, involved files and a checkbox per item.
+
+780 tests pass (Core).
+
+## 1.3.0 — previous release
 
 ### The settings window got a layout pass
 

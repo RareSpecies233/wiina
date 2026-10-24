@@ -4,6 +4,12 @@ namespace Wiina.Uninstall;
 /// Command-line switches for the portable uninstaller. Interactive use passes
 /// nothing at all; the switches exist for the packaging pipeline's smoke tests
 /// and for silent/managed deployments where a message box would block.
+///
+/// The uninstaller always requires administrator rights (see app.manifest), so
+/// a silent run only works when the caller is already elevated; a manifestless
+/// launch (e.g. <c>dotnet Wiina.Uninstall.dll</c>) exits with code 2.
+/// <c>--silent</c> implies "keep the settings" and, like other installers,
+/// force-closes a Wiina process from the folder being removed instead of asking.
 /// </summary>
 internal sealed class UninstallOptions
 {

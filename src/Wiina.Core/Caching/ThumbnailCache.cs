@@ -8,7 +8,7 @@ namespace Wiina.Core.Caching;
 /// </summary>
 public sealed class ThumbnailCache<T> where T : class
 {
-    private readonly int _capacity;
+    private int _capacity;
     private readonly double _bucketSeconds;
     private readonly Action<T>? _onEvict;
     private readonly Dictionary<long, LinkedListNode<Entry>> _map = new();
@@ -32,7 +32,16 @@ public sealed class ThumbnailCache<T> where T : class
         _onEvict = onEvict;
     }
 
-    public int Capacity => _capacity;
+    public int Capacity
+    {
+        get
+        {
+            lock (_gate)
+            {
+                return _capacity;
+            }
+        }
+    }
 
     public double BucketSeconds => _bucketSeconds;
 
@@ -109,6 +118,38 @@ public sealed class ThumbnailCache<T> where T : class
                 _map[key] = node;
             }
 
+            while (_map.Count > _capacity && _order.Last is { } last)
+            {
+                _order.RemoveLast();
+                _map.Remove(last.Value.Key);
+                evicted.Add(last.Value.Value);
+            }
+        }
+
+        foreach (T item in evicted)
+        {
+            _onEvict?.Invoke(item);
+        }
+
+        return evicted;
+    }
+
+    /// <summary>
+    /// Changes the capacity in place. The most recently used entries survive;
+    /// anything above the new size is evicted from the LRU end and returned in
+    /// eviction order (the same callback fires as for <see cref="Put"/>).
+    /// </summary>
+    public IReadOnlyList<T> Resize(int capacity)
+    {
+        if (capacity <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(capacity), "Capacity must be positive.");
+        }
+
+        var evicted = new List<T>();
+        lock (_gate)
+        {
+            _capacity = capacity;
             while (_map.Count > _capacity && _order.Last is { } last)
             {
                 _order.RemoveLast();

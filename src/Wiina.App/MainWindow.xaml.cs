@@ -90,6 +90,13 @@ public sealed partial class MainWindow : Window
     private bool _pointerOverChrome;
     private bool _windowActive = true;
     private int _openFlyoutCount;
+
+    /// <summary>
+    /// Set when the pointer leaves the window while a chrome flyout still owns
+    /// it; the hide is deferred until the popup closes so the menu is not
+    /// yanked away, then applied immediately instead of after the idle delay.
+    /// </summary>
+    private bool _pointerLeftDuringFlyout;
     private MenuFlyout? _applicationMenu;
     private Storyboard? _chromeStoryboard;
     private bool? _animationsEnabled;
@@ -316,8 +323,8 @@ public sealed partial class MainWindow : Window
         _oscVm.VolumeRequested += SetVolume;
         _oscVm.PlayPauseRequested += TogglePlayPause;
         _oscVm.MuteRequested += ToggleMute;
-        _oscVm.PreviousRequested += PlaylistPrevious;
-        _oscVm.NextRequested += PlaylistNext;
+        _oscVm.PreviousRequested += OscPrevious;
+        _oscVm.NextRequested += OscNext;
         _oscVm.FullscreenRequested += ToggleFullscreen;
         _oscVm.SettingsRequested += ShowSettingsSidebar;
         _oscVm.PlaylistRequested += ShowPlaylistSidebar;
@@ -438,6 +445,7 @@ public sealed partial class MainWindow : Window
         }
 
         Point point = e.GetCurrentPoint(RootGrid).Position;
+        _pointerLeftDuringFlyout = false;
         _oscState.EnterWindow(point.X, point.Y, _idleClock.Elapsed);
         ShowChrome();
     }
@@ -475,7 +483,7 @@ public sealed partial class MainWindow : Window
 
     private void OnRootPointerExited(object sender, PointerRoutedEventArgs e)
     {
-        if (_mode.Current != PlayerMode.Normal)
+        if (!ChromeInteractionEnabled)
         {
             _pointerOverChrome = false;
             return;
@@ -483,9 +491,15 @@ public sealed partial class MainWindow : Window
 
         // A flyout or an active drag temporarily owns the pointer outside the
         // window; hiding the chrome underneath it made menus and sliders appear
-        // to "go crazy" mid-interaction.
+        // to "go crazy" mid-interaction. Remember the leave so the popup's
+        // close handler can hide immediately instead of waiting out the timer.
         if (_openFlyoutCount > 0 || WindowInterop.IsLeftButtonDown())
         {
+            if (!WindowInterop.IsCursorInsideWindow(this))
+            {
+                _pointerLeftDuringFlyout = true;
+            }
+
             return;
         }
 
@@ -575,15 +589,38 @@ public sealed partial class MainWindow : Window
         flyout.Opened += (_, _) =>
         {
             _openFlyoutCount++;
+            _pointerLeftDuringFlyout = false;
             _autoHideTimer.Stop();
         };
         flyout.Closed += (_, _) =>
         {
             _openFlyoutCount = Math.Max(0, _openFlyoutCount - 1);
-            if (_openFlyoutCount == 0)
+            if (_openFlyoutCount > 0)
             {
-                ResetAutoHideTimer();
+                return;
             }
+
+            // A popup dismissed by clicking another window leaves the pointer
+            // outside but may not raise another root PointerExited, so finish
+            // the leave that was deferred while the flyout was open.
+            bool leftWhileOpen = _pointerLeftDuringFlyout;
+            _pointerLeftDuringFlyout = false;
+            if (leftWhileOpen &&
+                !WindowInterop.IsCursorInsideWindow(this) &&
+                !WindowInterop.IsLeftButtonDown() &&
+                ChromeInteractionEnabled)
+            {
+                _pointerOverChrome = false;
+                _oscState.ResetPointerAnchor();
+                CloseApplicationMenu();
+                if (!HasVisibleSidebar)
+                {
+                    HideChrome(force: true);
+                    return;
+                }
+            }
+
+            ResetAutoHideTimer();
         };
     }
 
@@ -621,9 +658,29 @@ public sealed partial class MainWindow : Window
         {
             // Report a rate, not a raw delta: one hiccup becomes a visible burst
             // in a three-second window, which is exactly what the user cares about.
+            // The notice is pinned to the left edge, vertically centered: the
+            // default top-centre OSD slot is fully covered whenever the title bar
+            // is visible. The ASS tags only affect this one message, so every
+            // other OSD keeps its configured position.
+            long osdWidth = Int(player, "osd-width");
+            long osdHeight = Int(player, "osd-height");
+            if (osdWidth <= 0 || osdHeight <= 0)
+            {
+                osdWidth = Int(player, "width");
+                osdHeight = Int(player, "height");
+            }
+
+            if (osdWidth <= 0 || osdHeight <= 0)
+            {
+                osdWidth = 1920;
+                osdHeight = 1080;
+            }
+
+            long left = Math.Max(16, osdWidth / 40);
+            long center = osdHeight / 2;
             player.Command(
                 "show-text",
-                $"Wiina · 丢帧 {notice.PerMinute:0} 帧/分" +
+                $"{{\\an4\\pos({left},{center})}}Wiina · 丢帧 {notice.PerMinute:0} 帧/分" +
                 $"（{notice.Seconds:0.#} 秒内 {notice.Drops} 帧，累计 {notice.TotalDrops}）",
                 "2200");
             Trace(
@@ -800,10 +857,42 @@ public sealed partial class MainWindow : Window
         }
 
         _protectedCursorHidden = hidden;
-        WindowInterop.SetProtectedCursor(RootGrid, hidden);
-        WindowInterop.SetProtectedCursor(VideoHost, hidden);
-        WindowInterop.SetProtectedCursor(FindCursorSurface(), hidden);
-        Trace($"[cursor] protected hidden={hidden}");
+        // The cursor WinUI displays comes from the deepest element under the
+        // pointer, and the video area is covered by several stacked layers
+        // (SwapChainPanel, gesture overlays, mini-player surfaces). Giving the
+        // whole tree the blank cursor means whichever layer wins the hit test
+        // still reports "no cursor"; restoring clears them back to their own
+        // cursors.
+        int applied = 0;
+        foreach (FrameworkElement element in EnumerateCursorHosts(RootGrid))
+        {
+            if (WindowInterop.SetProtectedCursor(element, hidden))
+            {
+                applied++;
+            }
+        }
+
+        Trace($"[cursor] protected hidden={hidden} elements={applied}");
+    }
+
+    private static IEnumerable<FrameworkElement> EnumerateCursorHosts(DependencyObject root)
+    {
+        var stack = new Stack<DependencyObject>();
+        stack.Push(root);
+        while (stack.Count > 0)
+        {
+            DependencyObject node = stack.Pop();
+            if (node is FrameworkElement element)
+            {
+                yield return element;
+            }
+
+            int count = VisualTreeHelper.GetChildrenCount(node);
+            for (int i = 0; i < count; i++)
+            {
+                stack.Push(VisualTreeHelper.GetChild(node, i));
+            }
+        }
     }
 
     /// <summary>
@@ -909,6 +998,7 @@ public sealed partial class MainWindow : Window
         if (_cursorDiagTick++ % 8 == 0)
         {
             WindowInterop.LogCursorState("tick");
+            WindowInterop.LogCursorResourceState("tick");
         }
     }
 

@@ -1,6 +1,20 @@
-# Known issues — Wiina v1.3.0
+# Known issues — Wiina v1.3.1
 
-Nothing here is hidden; these are known limitations of the v1.3.0 build.
+Nothing here is hidden; these are known limitations of the v1.3.1 build. The full decision list (with fix cost and checkboxes) lives in [../reports/known-issues-1.3.1.md](../reports/known-issues-1.3.1.md).
+
+## What changed in 1.3.1
+
+- Key-binding profiles: `Wiina` + `mpv`; the IINA preset was removed and old
+  values migrate to Wiina.
+- OSC: duplicate Video/Window entries merged, speed presets only in the expanded
+  menu, ±5 s previous/next option, immediate hide on pointer leave.
+- Thumbnails: optional GPU decode (`video.thumbnail-acceleration`), whole-file
+  memory cache (≈41 MB/hour).
+- Screenshots: one subtitle switch shared by settings and the expanded OSC menu
+  (there is no quick-settings entry for it).
+- Uninstaller: both uninstallers always remove associations; the portable one
+  always elevates, while the installed per-user copy asks for one UAC prompt only
+  when machine-wide (HKLM) associations remain. Setup stays per-user.
 
 ## Settings layout in 1.3.0
 
@@ -12,9 +26,9 @@ authoritative map; update it whenever the catalog changes.
 ## Key binding editor
 
 - One chord per action; modifier+key only, no multi-stroke sequences.
-- Conflict handling is Wiina's own (mpv itself is last-wins). IINA's editor has
-  no conflict detection or export, so the IINA preset is a best-effort
-  translation; `../reference/iina-shortcuts.md` lists every deviation.
+- Conflict handling is Wiina's own (mpv itself is last-wins). The IINA preset
+  was removed in 1.3.1; Wiina and mpv remain, and old `IINA` values migrate to
+  Wiina. `../reference/iina-shortcuts.md` records the history and deviations.
 - Built-in profiles are read-only by design; edits always land in a custom
   profile.
 
@@ -35,11 +49,13 @@ no side panels. Nothing is installed or patched by Wiina.
 
 Dropped-frame numbers come from mpv counters and are estimates; the rate is
 measured over a 3-second window with a 12-second cooldown, so a single bad
-frame does not spam the OSD. The statistics panel remains the detailed view.
+frame does not spam the OSD. Since 1.3.1 the notice is anchored to the
+left-middle of the picture (ASS `\an4`) instead of the top-right corner. The
+statistics panel remains the detailed view.
 
-## Cursor auto-hide does not work under WinUI 3 (1.3.0)
+## Cursor hiding is still unreliable (1.3.0–1.3.1)
 
-Status: known limitation, root-caused, not fixed in 1.3.0.
+Status: known limitation, root-caused; a second attempt landed in 1.3.1 and is still unverified.
 
 The desktop pointer over a WinUI 3 client area is driven by CoreMessaging, not
 by the window procedure or the XAML thread. Three mechanisms were implemented
@@ -63,6 +79,13 @@ load it via `InputDesktopResourceCursor.CreateFromResourceId`, and assign it to
 `ProtectedCursor`; alternatively adopt a WinAppSDK that exposes
 `InputCursor.CreateFromVisual`. Until then, use the Windows pointer settings if
 an always-hidden pointer is required.
+1.3.1 attempt: an embedded 1×1 transparent `.cur` (resource id 101), the
+reflected `ProtectedCursor` assigned to all 489 elements under `RootGrid`, and a
+60 ms helper-thread `SetCursor(NULL)` re-assert. It builds and passes tests but
+still did not hide the pointer on a real session — CoreMessaging re-applies the
+arrow within milliseconds. Treat the feature as partial; the remaining routes
+are the CoreMessaging `SetCursor` export or hosting the video in a Win32 child
+window (both need a real-machine test).
 
 ## Slow thumbnail mode
 
@@ -110,6 +133,10 @@ instant). The default mode (pre-generation) is unchanged.
   Thumbnails → Thumbnail cache, 0 disables it) and eviction is byte-based LRU.
   Hovering reads disk/memory first; misses are queued to the single extraction
   worker and jump ahead of the pre-generation backlog.
+- **1.3.1:** thumbnails can decode on the GPU (`video.thumbnail-acceleration`:
+  Auto keeps `hwdec=auto-safe`, CPU only forces `hwdec=no`; measured 29 ms wall /
+  15.6 ms CPU vs 104 ms / 461 ms per frame), and the **memory** cache now keeps
+  every 5-second bucket of the current file (≈57.6 KB per bucket, ≈41 MB/hour).
 - Limits: the cache key includes file size and mtime, so an in-place replacement
   with identical size/mtime can hit a stale frame; dragging the timeline is not
   throttled (only stale results are dropped); network/UNC sources are
@@ -229,10 +256,19 @@ instant). The default mode (pre-generation) is unchanged.
 ## Installer and portable uninstaller
 
 - The installer is unsigned, so SmartScreen may warn. It installs per user
-  under `%LOCALAPPDATA%\Programs\Wiina`; a machine-wide install is not offered.
+  under `%LOCALAPPDATA%\Programs\Wiina` (no administrator needed); a machine-wide
+  install is not offered.
+- The **portable** `Uninstall Wiina.exe` always elevates (`requireAdministrator`
+  in `src/Wiina.Uninstall/app.manifest`). The Inno uninstaller of the installed
+  copy starts unelevated because the install is per-user, and only requests one
+  UAC prompt when machine-wide (HKLM) associations are still present.
+- Any uninstaller prompts before force-closing a running Wiina, always removes
+  both HKCU and HKLM associations, and only asks whether to keep the
+  configuration.
 - The uninstaller asks 「是否保留配置文件？」 and defaults to **keep**; a silent
   uninstall also keeps settings. Only an explicit “否” (or
-  `--remove-config`) deletes `%LOCALAPPDATA%\Wiina` and Wiina's own HKCU keys.
+  `--remove-config`) deletes `%LOCALAPPDATA%\Wiina` and `HKCU\Software\Wiina`;
+  associations are removed either way.
 - The portable `Uninstall Wiina.exe` cannot delete its own running image, so it
   starts a detached batch file that retries for ~30 s. If another process holds
   a file in the folder (antivirus, an open log), deletion may fail and the exe
@@ -314,7 +350,7 @@ instant). The default mode (pre-generation) is unchanged.
 
 - Closing now stops UI timers first, saves settings once, detaches the video
   panel before disposing mpv, stops the statistics refresh while the card is
-  hidden (`MainWindow.xaml.cs:2268-2299`), and calls
+  hidden (`MainWindow.xaml.cs` `OnClosed`, 2690+), and calls
   `ChromeBlur.SetActive(false)` + `ChromeBlur.Shutdown()` (worker joined for up
   to one second) before the player is disposed, so the 8 Hz screenshot thread
   can no longer touch a disposed mpv handle.

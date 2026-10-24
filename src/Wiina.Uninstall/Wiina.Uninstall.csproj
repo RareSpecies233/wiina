@@ -9,6 +9,12 @@
       UI is user32!MessageBoxW (see NativeMethods.cs).
     -->
     <OutputType>WinExe</OutputType>
+    <!--
+      requireAdministrator: the uninstaller always asks for elevation (UAC at
+      launch) because it must remove HKLM association keys and clean the hives
+      of the invoking user. See app.manifest.
+    -->
+    <ApplicationManifest>app.manifest</ApplicationManifest>
     <TargetFramework>net10.0-windows10.0.19041.0</TargetFramework>
     <SupportedOSPlatformVersion>10.0.19041.0</SupportedOSPlatformVersion>
     <RootNamespace>Wiina.Uninstall</RootNamespace>

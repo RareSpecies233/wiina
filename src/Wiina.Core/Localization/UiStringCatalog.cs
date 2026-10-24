@@ -167,6 +167,8 @@ public static class UiStrings
     public const string ui_on = "ui.on";
     public const string ui_clear = "ui.clear";
     public const string ui_deinterlace = "ui.deinterlace";
+    public const string ui_screenshot = "ui.screenshot";
+    public const string ui_screenshotSubtitles = "ui.screenshotSubtitles";
     public const string ui_fullscreen = "ui.fullscreen";
     public const string ui_fullscreenShortcut = "ui.fullscreenShortcut";
     public const string ui_osdPreview = "ui.osdPreview";
@@ -328,7 +330,6 @@ public static class UiStrings
     public const string menu_profileDefault = "menu.profileDefault";
     public const string menu_profileWiina = "menu.profileWiina";
     public const string menu_profileMpv = "menu.profileMpv";
-    public const string menu_profileIina = "menu.profileIina";
     public const string menu_profileCustom = "menu.profileCustom";
     public const string osd_controlsHint = "osd.controlsHint";
     public const string osd_controlsHintSecondary = "osd.controlsHintSecondary";
@@ -812,6 +813,8 @@ public static class UiStrings
         Add("ui.on", "开", "On");
         Add("ui.clear", "清除", "Clear");
         Add("ui.deinterlace", "去隔行", "Deinterlace");
+        Add("ui.screenshot", "截图", "Screenshots");
+        Add("ui.screenshotSubtitles", "截图包含字幕", "Include subtitles in screenshots");
         Add("ui.fullscreen", "全屏", "Fullscreen");
         Add("ui.fullscreenShortcut", "全屏 (F11)", "Fullscreen (F11)");
         Add("ui.osdPreview", "OSD 与预览", "OSD & previews");
@@ -970,8 +973,7 @@ public static class UiStrings
         Add("menu.keyboardProfile", "键盘方案", "Keyboard Profile");
         Add("menu.profileDefault", "默认", "Default");
         Add("menu.profileWiina", "Wiina 默认", "Wiina Default");
-        Add("menu.profileMpv", "mpv 默认", "mpv Default");
-        Add("menu.profileIina", "IINA", "IINA");
+        Add("menu.profileMpv", "mpv", "mpv");
         Add("menu.profileCustom", "自定义", "Custom");
         Add("osd.controlsHint", "按 Ctrl+O 打开文件", "Press Ctrl+O to open a file");
         Add("osd.controlsHintSecondary", "也可以拖放文件、文件夹或 URL", "You can also drop files, folders, or a URL");

@@ -73,6 +73,12 @@ public sealed partial class AppSettings
     /// </summary>
     public bool ThumbnailSlowMode { get; set; }
 
+    /// <summary>
+    /// Whether timeline thumbnails may use the GPU decoder (libmpv probes the
+    /// driver and falls back on its own) or must always decode on the CPU.
+    /// </summary>
+    public ThumbnailAcceleration ThumbnailAcceleration { get; set; }
+
     // ---- Quick settings: video (persisted and re-applied on startup) ----
 
     public string VideoAspect { get; set; } = "no";
@@ -95,6 +101,18 @@ public sealed partial class AppSettings
     public double VideoPanX { get; set; }
 
     public double VideoPanY { get; set; }
+
+    /// <summary>
+    /// What the OSC prev/next buttons do: skip playlist tracks (default) or
+    /// seek inside the current file.
+    /// </summary>
+    public OscPrevNextMode OscPrevNextMode { get; set; } = OscPrevNextMode.TrackSkip;
+
+    /// <summary>
+    /// Include the current subtitle track when saving a screenshot. Off keeps
+    /// only the video frame.
+    /// </summary>
+    public bool ScreenshotWithSubtitles { get; set; } = true;
 
     /// <summary>
     /// mpv <c>deband</c> post-processing for the current window. Off by default;

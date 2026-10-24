@@ -22,8 +22,16 @@ public sealed partial class AppSettings
     /// </summary>
     public bool AutoLoadExternalAudio { get; set; } = true;
 
+    private string _keyBindingProfile = KeyBindingProfiles.Default;
+
     /// <summary>One of <see cref="KeyBindingProfiles.All"/>.</summary>
-    public string KeyBindingProfile { get; set; } = KeyBindingProfiles.Default;
+    public string KeyBindingProfile
+    {
+        get => _keyBindingProfile;
+        // Older builds could persist the removed IINA profile. Normalizing in
+        // the setter migrates it on load and guarantees it never reaches the UI.
+        set => _keyBindingProfile = KeyBindingProfiles.Normalize(value);
+    }
 
     /// <summary>
     /// How opening one media file fills the playlist. Defaults to the files

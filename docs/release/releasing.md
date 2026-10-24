@@ -5,7 +5,7 @@ version, builds and verifies the portable zip, then compiles the per-user
 installer when Inno Setup 6 is available.
 
 ```powershell
-pwsh -File scripts/release.ps1 -Version 1.3.0
+pwsh -File scripts/release.ps1 -Version 1.3.1
 ```
 
 Use `-NoInstaller` to build only the portable zip, or `-SkipPackage` to check
@@ -15,8 +15,8 @@ Artifacts (both gitignored, both uploaded to the GitHub release):
 
 | File | Produced by |
 |---|---|
-| `artifacts/wiina-1.3.0-win-x64.zip` | `scripts/package.ps1` |
-| `artifacts/Wiina-Setup-1.3.0-x64.exe` | `scripts/release.ps1` (Inno Setup `ISCC.exe`) |
+| `artifacts/wiina-1.3.1-win-x64.zip` | `scripts/package.ps1` |
+| `artifacts/Wiina-Setup-1.3.1-x64.exe` | `scripts/release.ps1` (Inno Setup `ISCC.exe`) |
 
 ## What the script does
 
@@ -53,16 +53,16 @@ whether to keep user data on uninstall (default: keep). See
 ```powershell
 # 1) Build + stage + zip; fails if any required file, the portable uninstaller,
 #    or the Wiina.dll version is wrong
-pwsh -File scripts/package.ps1 -Version 1.3.0
+pwsh -File scripts/package.ps1 -Version 1.3.1
 
 # 2) Confirm the payload version instead of trusting the file name
-$dll = '.\artifacts\wiina-1.3.0-win-x64\Wiina.dll'
-[System.Diagnostics.FileVersionInfo]::GetVersionInfo($dll).FileVersion   # 1.3.0.0
-(Get-Item $dll).VersionInfo.ProductVersion                               # 1.3.0+<commit>
+$dll = '.\artifacts\wiina-1.3.1-win-x64\Wiina.dll'
+[System.Diagnostics.FileVersionInfo]::GetVersionInfo($dll).FileVersion   # 1.3.1.0
+(Get-Item $dll).VersionInfo.ProductVersion                               # 1.3.1+<commit>
 
 # 3) Confirm the portable uninstaller is inside the archive
 Add-Type -AssemblyName System.IO.Compression.FileSystem
-$zip = [System.IO.Compression.ZipFile]::OpenRead('.\artifacts\wiina-1.3.0-win-x64.zip')
+$zip = [System.IO.Compression.ZipFile]::OpenRead('.\artifacts\wiina-1.3.1-win-x64.zip')
 try { $zip.Entries | Where-Object FullName -eq 'Uninstall Wiina.exe' } finally { $zip.Dispose() }
 ```
 
@@ -80,10 +80,10 @@ for the same version (timestamps, commit id). Always read the values printed by
 `release.ps1`, and record the shipped ones in the version's acceptance page:
 
 ```powershell
-Get-FileHash .\artifacts\wiina-1.3.0-win-x64.zip      -Algorithm SHA256
-Get-FileHash .\artifacts\Wiina-Setup-1.3.0-x64.exe    -Algorithm SHA256
-(Get-Item .\artifacts\wiina-1.3.0-win-x64.zip).Length
-(Get-Item .\artifacts\Wiina-Setup-1.3.0-x64.exe).Length
+Get-FileHash .\artifacts\wiina-1.3.1-win-x64.zip      -Algorithm SHA256
+Get-FileHash .\artifacts\Wiina-Setup-1.3.1-x64.exe    -Algorithm SHA256
+(Get-Item .\artifacts\wiina-1.3.1-win-x64.zip).Length
+(Get-Item .\artifacts\Wiina-Setup-1.3.1-x64.exe).Length
 ```
 
 Artifacts are gitignored. Commit the version source changes (and any
@@ -100,31 +100,31 @@ the release commit to `main` and building them:
    ```powershell
    git switch main
    git pull --ff-only origin main
-   git tag -a v1.3.0 -m "Wiina 1.3.0"
+   git tag -a v1.3.1 -m "Wiina 1.3.1"
    git push origin main
-   git push origin v1.3.0
+   git push origin v1.3.1
    ```
 
 2. Publish with GitHub CLI (recommended, reproducible):
 
    ```powershell
    gh auth login
-   gh release create v1.3.0 `
-     artifacts/wiina-1.3.0-win-x64.zip `
-     artifacts/Wiina-Setup-1.3.0-x64.exe `
-     --title "Wiina 1.3.0" `
+   gh release create v1.3.1 `
+     artifacts/wiina-1.3.1-win-x64.zip `
+     artifacts/Wiina-Setup-1.3.1-x64.exe `
+     --title "Wiina 1.3.1" `
      --notes-file docs/release/notes.md `
      --latest
    ```
 
    `gh` uploads both files as release assets. They stay ignored by git.
 
-3. Or use the web UI: **Releases → Draft a new release**, choose tag `v1.3.0`
-   (target `main`), title `Wiina 1.3.0`, paste `docs/release/notes.md` as the
+3. Or use the web UI: **Releases → Draft a new release**, choose tag `v1.3.1`
+   (target `main`), title `Wiina 1.3.1`, paste `docs/release/notes.md` as the
    description, attach both artifacts, and publish as the latest release.
 
 4. Verify the sizes and SHA-256 values printed by `release.ps1` against the
-   record in `docs/acceptance/v1.3.0.md` (or whichever version was built).
+   record in `docs/acceptance/v1.3.1.md` (or whichever version was built).
 
 ## History
 

@@ -43,6 +43,7 @@ public enum QuickSettingKey
     FlipVertical,
     Deinterlace,
     HardwareDecode,
+    ScreenshotWithSubtitles,
     Zoom,
     PanX,
     PanY,
@@ -87,13 +88,11 @@ public sealed class QuickSettingChangedEventArgs : EventArgs
 public sealed partial class QuickSettingsView : UserControl
 {
     /// <summary>
-    /// Presets offered by the layout page. The video page slider is
-    /// continuous between 0.5× and 4×.
+    /// The video page slider is continuous between 0.5× and 4×; discrete
+    /// presets live in the expanded OSC menu instead of the quick menu.
     /// </summary>
-    private static readonly double[] SpeedPresets =
-    {
-        0.5, 0.75, 1, 1.25, 1.5, 2, 2.5, 3, 4,
-    };
+    private const double MinSpeed = 0.5;
+    private const double MaxSpeed = 4;
 
     private readonly List<TrackInfo> _tracks = new();
     private bool _loading;
@@ -120,17 +119,16 @@ public sealed partial class QuickSettingsView : UserControl
     public QuickSettingsPage CurrentPage => _page;
 
     /// <summary>
-    /// Mirrors the player's current rate into both speed controls without
+    /// Mirrors the player's current rate into the video-page slider without
     /// raising a change event; the shell owns the mpv rate.
     /// </summary>
     public void SetSpeed(double speed)
     {
-        double clamped = Math.Clamp(speed, SpeedPresets[0], SpeedPresets[^1]);
+        double clamped = Math.Clamp(speed, MinSpeed, MaxSpeed);
         _loading = true;
         try
         {
             SpeedSlider.Value = clamped;
-            SpeedPresetBox.SelectedIndex = NearestSpeedPreset(clamped);
         }
         finally
         {
@@ -138,20 +136,6 @@ public sealed partial class QuickSettingsView : UserControl
         }
 
         UpdateRangeLabels();
-    }
-
-    private static int NearestSpeedPreset(double speed)
-    {
-        int nearest = 0;
-        for (int i = 1; i < SpeedPresets.Length; i++)
-        {
-            if (Math.Abs(SpeedPresets[i] - speed) < Math.Abs(SpeedPresets[nearest] - speed))
-            {
-                nearest = i;
-            }
-        }
-
-        return nearest;
     }
 
     private void SetupStaticOptions()
@@ -177,10 +161,6 @@ public sealed partial class QuickSettingsView : UserControl
         CropBox.SelectedValuePath = "Aspect";
 
         RotationBox.ItemsSource = QuickSettings.Rotations;
-
-        SpeedPresetBox.ItemsSource = SpeedPresets
-            .Select(speed => $"{speed:0.##}×")
-            .ToArray();
 
         SubtitleColorBox.ItemsSource = QuickSettings.SubtitleColors;
         SubtitleColorBox.DisplayMemberPath = "Label";
@@ -261,6 +241,7 @@ public sealed partial class QuickSettingsView : UserControl
             FlipVerticalSwitch.IsOn = settings.VideoFlipVertical;
             DeinterlaceSwitch.IsOn = settings.VideoDeinterlace;
             HardwareDecodeSwitch.IsOn = settings.VideoHardwareDecode;
+            ScreenshotSubtitlesSwitch.IsOn = settings.ScreenshotWithSubtitles;
             ZoomSlider.Value = QuickSettings.ClampZoom(settings.VideoZoom);
             PanXSlider.Value = QuickSettings.ClampPan(settings.VideoPanX);
             PanYSlider.Value = QuickSettings.ClampPan(settings.VideoPanY);
@@ -725,16 +706,6 @@ public sealed partial class QuickSettingsView : UserControl
             case nameof(ThemeBox):
                 Raise(QuickSettingKey.Theme, number: ThemeBox.SelectedIndex);
                 break;
-            case nameof(SpeedPresetBox):
-                if (SpeedPresetBox.SelectedIndex >= 0 &&
-                    SpeedPresetBox.SelectedIndex < SpeedPresets.Length)
-                {
-                    Raise(
-                        QuickSettingKey.Speed,
-                        number: SpeedPresets[SpeedPresetBox.SelectedIndex]);
-                }
-
-                break;
             case nameof(LayoutBox):
                 Raise(QuickSettingKey.Layout, number: LayoutBox.SelectedIndex);
                 break;
@@ -857,6 +828,11 @@ public sealed partial class QuickSettingsView : UserControl
                 break;
             case nameof(FlipHorizontalSwitch):
                 Raise(QuickSettingKey.FlipHorizontal, flag: FlipHorizontalSwitch.IsOn);
+                break;
+            case nameof(ScreenshotSubtitlesSwitch):
+                Raise(
+                    QuickSettingKey.ScreenshotWithSubtitles,
+                    flag: ScreenshotSubtitlesSwitch.IsOn);
                 break;
             case nameof(FlipVerticalSwitch):
                 Raise(QuickSettingKey.FlipVertical, flag: FlipVerticalSwitch.IsOn);

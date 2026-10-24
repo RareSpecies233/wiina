@@ -4,12 +4,12 @@ using Wiina.Core.Files;
 namespace Wiina.Uninstall;
 
 /// <summary>
-/// Removes only the registry state that Wiina owns (issue 8). This mirrors
+/// Removes only the registry state that Wiina owns (issues 8/9). This mirrors
 /// <c>Wiina.App.Services.FileAssociationService.Unregister</c>: the per-user
-/// half always goes, and the machine-wide half created by the app's elevated
-/// "associate as administrator" action is removed when this process happens to
-/// have the rights (a normal per-user uninstall does not, so the leftovers are
-/// reported instead of being silently ignored). The catalog of progids and
+/// half and the machine-wide half created by the app's elevated "associate as
+/// administrator" action are both removed, because the uninstaller always runs
+/// elevated (app.manifest) — <see cref="MachineLeftovers"/> stays as a safety
+/// net for keys protected by policy or ACLs. The catalog of progids and
 /// extensions is compiled in from Wiina.Core (FileAssociationCatalog) so the
 /// uninstaller cannot drift from the app.
 /// </summary>
@@ -57,6 +57,89 @@ internal static class RegistryCleanup
 
         NativeMethods.NotifyAssociationsChanged();
         return removed;
+    }
+
+    /// <summary>
+    /// Removes Wiina's keys from the loaded hives of <em>other</em> people's
+    /// profiles (issue 9, item 7). When UAC elevates a standard user by typing an
+    /// administrator's credentials, the app's associations live in HKCU of the
+    /// standard user, not of the elevated administrator; <paramref name="preferredSid"/>
+    /// (the shell owner found by <see cref="ShellUser"/>) is tried first, then
+    /// every other loaded hive that actually contains Wiina keys. Only Wiina's
+    /// own progids/values are deleted, never another application's data.
+    /// Unloaded profiles are skipped: those keys are removed the next time that
+    /// user runs the uninstaller themselves.
+    /// </summary>
+    public static int RemoveOtherUsers(List<string> log, string? preferredSid)
+    {
+        int removed = 0;
+        string currentSid = CurrentUserSid();
+
+        List<string> candidates = [];
+        try
+        {
+            foreach (string name in Registry.Users.GetSubKeyNames())
+            {
+                if (string.IsNullOrEmpty(name) ||
+                    name.EndsWith("_Classes", StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(name, ".DEFAULT", StringComparison.OrdinalIgnoreCase) ||
+                    name is "S-1-5-18" or "S-1-5-19" or "S-1-5-20" ||
+                    string.Equals(name, currentSid, StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                candidates.Add(name);
+            }
+        }
+        catch (Exception ex)
+        {
+            log.Add($"registry: cannot enumerate HKEY_USERS ({ex.GetType().Name}: {ex.Message})");
+            return removed;
+        }
+
+        if (preferredSid is not null)
+        {
+            candidates = candidates
+                .OrderByDescending(name => string.Equals(name, preferredSid, StringComparison.OrdinalIgnoreCase))
+                .ToList();
+        }
+
+        foreach (string sid in candidates)
+        {
+            try
+            {
+                using RegistryKey? user = Registry.Users.OpenSubKey(sid, writable: true);
+                if (user is null || !HasRegistration(user))
+                {
+                    continue;
+                }
+
+                int count = RemoveFromHive(user, $@"{user.Name}", log);
+                if (count > 0)
+                {
+                    log.Add($"registry: removed {count} item(s) from another user's hive ({sid})");
+                    removed += count;
+                }
+            }
+            catch (Exception ex) when (ex is UnauthorizedAccessException or System.Security.SecurityException)
+            {
+                log.Add($"registry: another user's hive {sid} is protected; skipped");
+            }
+            catch (Exception ex)
+            {
+                log.Add($"registry: another user's hive {sid} skipped ({ex.GetType().Name}: {ex.Message})");
+            }
+        }
+
+        return removed;
+    }
+
+    private static string CurrentUserSid()
+    {
+        string name = Registry.CurrentUser.Name ?? string.Empty;
+        int separator = name.LastIndexOf('\\');
+        return separator >= 0 ? name[(separator + 1)..] : name;
     }
 
     /// <summary>

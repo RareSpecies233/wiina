@@ -32,6 +32,7 @@ public static class SettingsLocalization
         ["ui.osc-position"] = new("OSC position", "Playback controls floating, docked at the bottom, or in the top titlebar.", new[] { "Floating", "Bottom", "Top" }),
         ["ui.osc-autohide"] = new("OSC auto-hide", "Fade out after the idle delay configured below; stays visible in Docked layout.", null),
         ["ui.osc-autohide-seconds"] = new("Auto-hide delay", "Idle seconds before the OSC and titlebar hide (0.5–30 s).", null),
+        ["ui.osc-prev-next"] = new("OSC previous/next buttons", "Skip playlist tracks, or seek inside the current file; hold Ctrl to seek 30 seconds.", new[] { "Previous / Next track", "Rewind / Forward" }),
         ["ui.blur-mode"] = new("Chrome blur mode", "Fixed / Dynamic / Always capture the video frame for a Gaussian blur; Solid uses an opaque panel colour with an accent tint (cheapest, never see-through).", new[] { "Fixed (static frame)", "Dynamic (follow video)", "Always (continuous)", "No blur (solid colour)" }),
         ["ui.osd-enabled"] = new("Show OSD messages", "Status hints for volume, seeking, track changes, and more.", null),
         ["ui.osd-position"] = new("OSD position", "Six placements: bottom/top left or right, plus top or bottom center; the fullscreen clock stays bottom left.", new[] { "Bottom right", "Bottom left", "Top right", "Top left", "Top center", "Bottom center" }),
@@ -43,9 +44,10 @@ public static class SettingsLocalization
         ["video.thumbnail-preview"] = new("Timeline thumbnails", "Show a time preview and video frame when hovering the progress bar.", null),
         ["video.thumbnail-width"] = new("Thumbnail width", "80–320 DIP; height follows the video aspect.", null),
         ["video.thumbnail-bucket"] = new("Thumbnail interval", "Cache buckets per second; larger saves memory but is less precise.", null),
-        ["video.thumbnail-cache"] = new("Thumbnail cache size", "Number of thumbnails kept in memory.", null),
+        ["video.thumbnail-cache"] = new("Thumbnail cache floor", "Minimum number of frames kept in memory; every time point of the current video is cached for instant preview (one frame per ~5 s, ~58 KB each).", null),
         ["video.thumbnail-cache-mb"] = new("Thumbnail disk cache", "Disk budget in megabytes; 0 disables the cache, and least-recently-used frames are evicted when the limit is exceeded.", null),
         ["video.thumbnail-slow"] = new("Slow thumbnail mode (single core)", "Generate frames one at a time on a single low-priority worker and never pre-generate a whole file; weak devices stay responsive at the cost of a slower first hover.", null),
+        ["video.thumbnail-acceleration"] = new("Thumbnail hardware acceleration", "Auto decodes thumbnails on the GPU when the hardware decoder works and lets libmpv fall back to software decoding otherwise; \"CPU only\" forces software decoding for drivers that produce corrupted frames.", new[] { "Auto (recommended)", "CPU only" }),
         ["video.thumbnail-hint"] = new("Pre-generation heads-up", "After a file opens, Wiina walks the whole timeline in the background to fill the thumbnail cache. On weak devices that can steal CPU and cause brief stutter — turn on \"Slow thumbnail mode (single core)\" if it happens.", null),
         ["video.thumbnail-cache-clear"] = new("Clear thumbnail cache", "Delete cached thumbnails on disk and in memory, then report the freed space.", null),
         ["video.hwdec"] = new("Hardware decoding", "Use auto-safe; falls back to software decoding when unsupported.", null),
@@ -54,6 +56,7 @@ public static class SettingsLocalization
         ["video.quality"] = new("Video quality preset", "Two built-in profiles: Default matches mpv/IINA defaults (Lanczos upscaling, Hermite downscaling, bilinear chroma); Performance first uses bilinear everywhere for weak GPUs. 23 fine-grained options and import/export live under Manage quality presets….", new[] { "Default", "Performance first" }),
         ["video.quality-editor"] = new("Manage quality presets…", "Create, rename, and import/export 23 quality options (scaling, chroma, dithering, deband parameters, interpolation, sync, other); the deband master toggle is separate below.", null),
         ["video.deband"] = new("Deband", "Off by default; reduces colour banding in gradients at the cost of slightly softer detail and a little extra GPU work.", null),
+        ["video.screenshot-subtitles"] = new("Include subtitles in screenshots", "On saves the current subtitle track with the frame; off saves the bare video frame.", null),
         ["video.mpv-stats"] = new("mpv statistics overlay", "Show raw mpv frame, render, and playback statistics on screen; useful for diagnosing dropped frames.", null),
         ["video.frame-drop-osd"] = new("Frame-drop OSD", "Show a short OSD message whenever the dropped-frame counter increases during playback.", null),
         ["video.tone-mapping"] = new("HDR tone mapping", "mpv tone-mapping algorithm used to show HDR content on SDR screens.", new[] { "Auto", "BT.2390", "ST2094-40", "ST2094-10", "Spline", "Hable", "Clip", "Gamma", "Reinhard", "Mobius" }),
@@ -139,7 +142,7 @@ public static class SettingsLocalization
         ["subtitles.smart-autoload"] = new("Smart subtitles", "Automatically find sidecar subtitles next to the video and pick the preferred language.", null),
         ["subtitles.preferred-language"] = new("Preferred subtitle language", "Auto prefers Simplified Chinese, then Traditional Chinese, English, and Japanese.", new[] { "Auto", "Simplified Chinese", "Traditional Chinese", "English", "Japanese" }),
         ["audio.auto-external"] = new("Auto-load external audio", "Automatically load a same-name .mka next to the video; unrelated audio files are never loaded.", null),
-        ["control.key-profile"] = new("Keyboard profile", "Choose Wiina, mpv, or IINA. Each profile ships its own defaults; edits fork a named custom profile.", new[] { "Wiina", "mpv", "IINA" }),
+        ["control.key-profile"] = new("Keyboard profile", "Choose the Wiina profile (the shipped wiina.txt bindings, including Ctrl+, to open settings) or the plain mpv profile. Edits fork a named custom profile.", new[] { "Wiina Default", "mpv" }),
     };
 
     private static readonly Dictionary<string, (string Title, string Summary)> EnglishPages = new(StringComparer.Ordinal)

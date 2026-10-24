@@ -1,33 +1,33 @@
-# Wiina 设置布局快照（1.3.0）
+# Wiina 设置布局快照（1.3.1）
 
-> **快照版本（1.3.0）**：本文是 v1.3.0 工作树的设置界面完整快照：**11 页 / 126 行 / 39 个页面-分节对（34 个不同分节名）**。
+> **快照版本（1.3.1）**：本文是 v1.3.1 工作树的设置界面完整快照：**11 页 / 129 行 / 39 个页面-分节对（34 个不同分节名）/ 563 个本地化键**。
 > 与 1.2.7（12 页 / 125 行）相比：缩略图 8 项从「界面」迁到「视频 → 缩略图」，「工具」页并入「高级 → 工具」，
 > 字体设置页与 `utilities.font` 移除，`utilities.open-url` 移到「通用 → 播放与历史」，
 > `general.screenshot-folder` 移到「视频 → 截图」，新增 `control.media-keys`。完整增删移清单见 §6.4。
 
 > **用途**：设置菜单重排的对照基线。这是一份**静态快照**（非运行时截图）；所有数字与行内容都从源码统计，
-> 日期 **2026-10-24**（Asia/Hong_Kong），分支 **`feat/v1.3.0`**。
+> 日期 **2026-10-24**（Asia/Hong_Kong），分支 **`feat/v1.3.1`**。
 >
-> **覆盖范围**：设置窗口的 11 个页面 / 126 行 / 控件与保存管线、设置能打开的全部窗口与对话框、
+> **覆盖范围**：设置窗口的 11 个页面 / 129 行 / 控件与保存管线、设置能打开的全部窗口与对话框、
 > 主窗口快速设置侧栏（含重复入口）、以及仍未解决的布局问题与重构契约。
 >
 > **不包含**：主窗口菜单、OSC 菜单、欢迎窗口（不由设置打开）、插件系统（未实现）。
 >
-> **如何重新生成**：以 `src/Wiina.Core/Settings/SettingsCatalog.cs` 的 `BuildRows()` 为准（`rows.Add(` 共 126 处），
+> **如何重新生成**：以 `src/Wiina.Core/Settings/SettingsCatalog.cs` 的 `BuildRows()` 为准（`rows.Add(` 共 129 处），
 > 配合 `SettingsLocalization.cs` 的英文覆盖、`AppSettings*.cs` 的默认值、`SettingsWindow.xaml.cs` 的
-> `RunActionAsync` 分支、`MainWindow.Sidebar.cs` 的 `OnQuickSettingChanged` 分支统计。行号均指 1.3.0 工作树。
+> `RunActionAsync` 分支、`MainWindow.Sidebar.cs` 的 `OnQuickSettingChanged` 分支统计。行号均指 1.3.1 工作树（以 id 为准；新增行会使后续行号顺延）。
 
 ## 0. 关键数字
 
 | 项目 | 数值 | 来源 |
 |---|---|---|
 | 设置页面 | **11**（目录 11 项；`KeyBindings` 在页枚举里但左栏跳过，可点击 10 项 + 1 个隐藏页） | `SettingsCatalog.cs:19-29`；`SettingsWindow.xaml.cs` `BuildNavigation` |
-| 设置行 | **126** | `SettingsCatalog.cs` `BuildRows()` 内 `rows.Add(` 计数 |
+| 设置行 | **129** | `SettingsCatalog.cs` `BuildRows()` 内 `rows.Add(` 计数 |
 | 页面-分节对 / 分节名 | **39** / **34**（音频「音量与输出」、字幕「外观」各出现两次；`重置` ×4） | 各页 `Section` 序列 |
 | 动作行（Button） | **30** | 第 3 节控件列 = Button |
 | 行控件种类 | 8 种目录行（Toggle/Choice/Number/Text/AudioDevice/Action/Info/Font）+ 2 种运行时面板（KeyBindings / PluginList） | `SettingsModels.cs` |
-| 英文覆盖 | **122 / 126** 行（缺失 4 行，见 §6.1） | `SettingsLocalization.cs` |
-| 快速设置分支 | **50** 个 `QuickSettingKey`，其中 **37** 个直接写 `_settings.<属性>` | `MainWindow.Sidebar.cs` `OnQuickSettingChanged` |
+| 英文覆盖 | **129 / 129** 行（1.3.1 补齐） | `SettingsLocalization.cs` |
+| 快速设置分支 | **50** 个 `QuickSettingKey`，向 **44** 个不同的 `_settings.*` 属性写入（40 个设置项 + 4 个侧栏状态：`SidebarSide`/`SidebarType`/`SidebarWidth`/`QuickSettingsPage`） | `MainWindow.Sidebar.cs` `OnQuickSettingChanged` |
 | 设置窗口默认尺寸 | 760×600 DIP（最小 600×440） | `AppSettings.Shell.cs`；`SettingsWindow.xaml:9-11` |
 | 左栏宽度 / 搜索框 | 200 DIP（内容区最小 400）；搜索框 280×32 | `SettingsWindow.xaml:160-186` |
 
@@ -70,8 +70,8 @@
 | # | PageId | 中文 | English | 摘要 | 图标 | 行数 | 分节 |
 |---|---|---|---|---|---|---|---|
 | 1 | `General` | 通用 | General | 启动、外观与历史记录 | U+E713 | 8 | 外观与启动 / 播放与历史 / 播放列表 |
-| 2 | `Ui` | 界面 | Interface | 窗口布局、OSC 与 OSD | U+E790 | 17 | 窗口与 OSC / OSD / 全屏状态栏 |
-| 3 | `Video` | 视频 | Video | 解码、缩略图、画质与画面变换 | U+E714 | 36 | 缩略图 / 解码 / HDR 与色彩 / 滤镜 / 去 Logo / 画面 / 截图 / 重置 |
+| 2 | `Ui` | 界面 | Interface | 窗口布局、OSC 与 OSD | U+E790 | 18 | 窗口与 OSC / OSD / 全屏状态栏 |
+| 3 | `Video` | 视频 | Video | 解码、缩略图、画质与画面变换 | U+E714 | 38 | 缩略图 / 解码 / HDR 与色彩 / 滤镜 / 去 Logo / 画面 / 截图 / 重置 |
 | 4 | `Audio` | 音频 | Audio | 音量上限、延迟与输出设备 | U+E767 | 11 | 音量与输出 / 延迟 / 均衡器 / 滤镜 / 重置 |
 | 5 | `Subtitles` | 字幕 | Subtitles | 字体、颜色、位置与延迟 | U+E8D8 | 15 | 外观 / 时间与位置 / ASS 字幕 / 智能加载 / 重置 |
 | 6 | `Network` | 网络 | Network | 缓存、代理与请求头 | U+E774 | 6 | 缓存 / 网络 |
@@ -116,7 +116,7 @@ English：General — Startup, appearance, and history
 |---|---|---|---|---|---|---|
 | `general.auto-playlist` | ComboBox | 自动添加播放列表 | 打开单个视频时，自动把同目录的媒体加入播放列表；手动模式只播放选中的文件。 | 默认 AutoPlaylistMode.SameFolder；选项：同目录文件 / 仅手动添加 / 同目录及子文件夹 | Auto-add to playlist — When a single video opens, also queue other media from its folder; manual mode plays only the selected file. | SettingsCatalog.cs:106 → `AppSettings.AutoPlaylistMode` |
 
-### 页面：界面（`Ui`，17 行，图标 U+E790）
+### 页面：界面（`Ui`，18 行，图标 U+E790）
 
 页面说明：窗口布局、OSC 与 OSD
 
@@ -135,6 +135,7 @@ English：Interface — Window layout, OSC, and OSD
 | `ui.osc-position` | ComboBox | OSC 位置 | 浮动、贴底或顶部标题栏内的播放控制条。 | 默认 OscPosition.Floating；选项：浮动 / 底部 / 顶部 | OSC position — Playback controls floating, docked at the bottom, or in the top titlebar. | SettingsCatalog.cs:161 → `AppSettings.OscPosition` |
 | `ui.osc-autohide` | ToggleSwitch | OSC 自动隐藏 | 鼠标静止超过下面的延时后淡出；Docked 布局下不隐藏。 | 默认 true | OSC auto-hide — Fade out after the idle delay configured below; stays visible in Docked layout. | SettingsCatalog.cs:168 → `AppSettings.OscAutoHide` |
 | `ui.osc-autohide-seconds` | NumberBox | 自动隐藏延时 | 鼠标静止多少秒后隐藏 OSC 与标题栏；0.5–30 秒。 | 默认 2.5；范围 0.5–30，步进 0.5 秒 | Auto-hide delay — Idle seconds before the OSC and titlebar hide (0.5–30 s). | SettingsCatalog.cs:174 → `AppSettings.OscAutoHideSeconds` |
+| `ui.osc-prev-next` | ComboBox | OSC 上一首/下一首 | 按钮是跟随播放列表切换，还是在当前文件内快退/快进；按住 Ctrl 时快退/快进 30 秒。 | 默认 OscPrevNextMode.TrackSkip；选项：上一首 / 下一首 / 快退 / 快进 | OSC previous/next buttons — Skip playlist tracks, or seek inside the current file; hold Ctrl to seek 30 seconds. | SettingsCatalog.cs:182 → `AppSettings.OscPrevNextMode` |
 | `ui.blur-mode` | ComboBox | 毛玻璃模式 | 固定/动态/始终会抓取视频帧做高斯模糊；关闭后使用不透明纯色 + 重点色染色，性能最好且不透出画面。 | 默认 ChromeBlurMode.Dynamic；选项：固定（静态帧） / 动态（跟随视频） / 始终（持续计算） / 关闭毛玻璃（纯色） | Chrome blur mode — Fixed / Dynamic / Always capture the video frame for a Gaussian blur; Solid uses an opaque panel colour with an accent tint (cheapest, never see-through). | SettingsCatalog.cs:181 → `AppSettings.ChromeBlurMode` |
 #### 分节：OSD / OSD
 
@@ -152,7 +153,7 @@ English：Interface — Window layout, OSC, and OSD
 | `ui.fullscreen-battery` | ToggleSwitch | 全屏电量 | 全屏时在左下角显示电池与充电状态。 | 默认 true | Fullscreen battery — Show battery and charging state in the bottom-left corner in fullscreen. | SettingsCatalog.cs:221 → `AppSettings.FullscreenBatteryEnabled` |
 | `ui.fullscreen-title` | ToggleSwitch | 全屏显示标题 | 在左下角状态行中包含当前媒体标题。 | 默认 false（C# 默认） | Show title in fullscreen — Include the current media title in the bottom-left status line. | SettingsCatalog.cs:227 → `AppSettings.FullscreenTitleEnabled` |
 
-### 页面：视频（`Video`，36 行，图标 U+E714）
+### 页面：视频（`Video`，38 行，图标 U+E714）
 
 页面说明：解码、缩略图、画质与画面变换
 
@@ -170,6 +171,7 @@ English：Video — Decoding, thumbnails, picture quality, aspect, crop, and tra
 | `video.thumbnail-slow` | ToggleSwitch | 慢速预览图模式（单核） | 只用一个低优先级工作线程逐张生成，全片不做预生成；低配设备更不容易卡顿，首次悬停会稍慢。 | 默认 false（C# 默认） | Slow thumbnail mode (single core) — Generate frames one at a time on a single low-priority worker and never pre-generate a whole file; weak devices stay responsive at the cost of a slower first hover. | SettingsCatalog.cs:269 → `AppSettings.ThumbnailSlowMode` |
 | `video.thumbnail-hint` | 只读文本 | 预生成提示 | 打开文件后会在后台遍历整段视频生成缩略图。低配设备上这可能抢占 CPU 造成短暂卡顿——遇到卡顿就打开上面的“慢速预览图模式（单核）”。 |  | Pre-generation heads-up — After a file opens, Wiina walks the whole timeline in the background to fill the thumbnail cache. On weak devices that can steal CPU and cause brief stutter — turn on \"Slow thumbnail mode (single core)\" if it happens. | SettingsCatalog.cs:276 |
 | `video.thumbnail-cache-clear` | Button | 清除缩略图缓存 | 删除磁盘与内存中缓存的缩略图，并报告释放的空间。 | 动作 `clear-thumbnails`（SettingsWindow.xaml.cs:1141） | Clear thumbnail cache — Delete cached thumbnails on disk and in memory, then report the freed space. | SettingsCatalog.cs:282 |
+| `video.thumbnail-acceleration` | ComboBox | 预览图硬件加速 | 自动：显卡可用时用 GPU 解码，驱动不支持时由 libmpv 自动回退软解；仅 CPU：强制软解，避免个别驱动花屏或驱动级卡顿。 | 默认 ThumbnailAcceleration.Auto；选项：自动（推荐） / 仅 CPU | Thumbnail hardware acceleration — Auto decodes on the GPU when the hardware decoder works and lets libmpv fall back to software decoding otherwise; "CPU only" forces software decoding for drivers that produce corrupted frames. | SettingsCatalog.cs:285 → `AppSettings.ThumbnailAcceleration` |
 #### 分节：解码 / Decoding
 
 | id | 控件 | 标题 | 说明 | 默认 / 范围 / 选项 | English | 来源（定义 → 设置项） |
@@ -220,6 +222,7 @@ English：Video — Decoding, thumbnails, picture quality, aspect, crop, and tra
 
 | id | 控件 | 标题 | 说明 | 默认 / 范围 / 选项 | English | 来源（定义 → 设置项） |
 |---|---|---|---|---|---|---|
+| `video.screenshot-subtitles` | ToggleSwitch | 截图包含字幕 | 开启时保存当前字幕；关闭时只保存画面。 | 默认 true | Include subtitles in screenshots — On saves the current subtitle track with the frame; off saves the bare video frame. | SettingsCatalog.cs:533 → `AppSettings.ScreenshotWithSubtitles` |
 | `general.screenshot-folder` | Button | 截图文件夹 | Ctrl+S 保存截图的目录（默认 图片\\Wiina Screenshots）。 | 动作 `choose-screenshot-folder`（SettingsWindow.xaml.cs:1011） |  | SettingsCatalog.cs:515 |
 #### 分节：重置 / Reset
 
@@ -518,13 +521,14 @@ English：Plugins — Not implemented yet (Stage 9): placeholder and folder entr
   `QuickSettingsPage` 默认 `Video`，`QuickSettingsView.xaml.cs:95,101`）。
 - 每个页签内部按卡片分组（外观、窗口、OSC、OSD、侧栏、视频轨道、画面、音频、字幕……），
   卡片标题带「重置本卡片」按钮；切页时滚动位置归零（1.3.0 修复）。
-- 1.3.0 在「布局」页新增**播放速度档位下拉**（0.5× / 0.75× / 1× / 1.25× / 1.5× / 2× / 2.5× / 3× / 4×），
-  与速度滑杆（0–4×）双向同步；它不是 `AppSettings` 项，因此不在 §5.2 映射表里。
+- 1.3.0 曾在「布局」页加过**播放速度档位下拉**（0.5× / 0.75× / 1× / 1.25× / 1.5× / 2× / 2.5× / 3× / 4×）；
+  按 1.3.1 的澄清已移除，档位只保留在 OSC 展开菜单 `⋯ → 置顶 → 速度 ▸`，快速设置「视频」页只剩速度滑杆（0–4×）。
 
 ### 5.2 快速设置 → 设置项映射
 
-`MainWindow.Sidebar.cs` 的 `OnQuickSettingChanged` 共 **50** 个 `QuickSettingKey` 分支，其中 **37** 个
-直接写进 `AppSettings` 并立即应用（其余处理轨道/设备/动作）。与设置页行的对应关系：
+`MainWindow.Sidebar.cs` 的 `OnQuickSettingChanged` 共 **50** 个 `QuickSettingKey` 分支，
+向 **44** 个不同的 `_settings.*` 属性写入（其中 40 个是 `AppSettings` 设置项，4 个是侧栏状态），其余分支处理
+轨道/设备/动作。写设置项的 40 个分支都会立即应用。与设置页行的对应关系：
 
 | 快速设置分支（QuickSettingKey） | 写入的设置项 | 同名设置页行 |
 |---|---|---|
@@ -576,13 +580,13 @@ English：Plugins — Not implemented yet (Stage 9): placeholder and folder entr
 - 侧栏本身受「布局（Edge-to-edge/Docked）」「侧栏位置/宽度」「窗口宽度自动收起」影响；
   这些又都在设置页的「界面」里重复出现。
 
-## 6. 1.3.0 的变化与仍未解决的问题
+## 6. 1.3.0 / 1.3.1 的变化与仍未解决的问题
 
 ### 6.1 1.3.0 已解决的问题（对照 1.2.7）
 
 | 原编号 | 问题 | 1.3.0 处理 |
 |---|---|---|
-| P1 | 行数口径不一致（旧文档 119/122/125 混用） | 本快照按源码统计 **126**，并给出可复现方法 |
+| P1 | 行数口径不一致（旧文档 119/122/125/126 混用） | 本快照按源码统计 **129**，并给出可复现方法 |
 | P2 | 页面行数失衡（视频 27、界面 21） | 视频 36 / 界面 17（缩略图并入视频），仍失衡但按内容聚拢 |
 | P12 | 高级/工具/文件关联边界模糊 | 「工具」页并入「高级 → 工具」；「打开 URL」回通用；截图目录回视频 |
 | P13 | 无「恢复本页默认」 | 仍无分页默认，但缩略图整组有独立清理动作（`clear-thumbnails`） |
@@ -598,7 +602,7 @@ English：Plugins — Not implemented yet (Stage 9): placeholder and folder entr
 | R1 | **`KeyBindings` 仍是隐藏页**：在页枚举里但左栏跳过，只能从控制页动作打开 | `SettingsWindow.xaml.cs` `BuildNavigation` |
 | R2 | **分节名跨页重复**：`重置` ×4、`外观` 与 `外观与启动` 语义重叠、`维护` ×2、`滤镜` ×2 | 第 3 节分节标题 |
 | R3 | **图标重复**：`Control` 与 `KeyBindings` 同为 `U+E765` | `SettingsCatalog.cs` PageList |
-| R4 | **英文覆盖缺口 4 行**：`general.screenshot-folder`、`advanced.config-folder`、`advanced.log-folder`、`plugin.folder` | 统计 122/126 |
+| R4（1.3.1 已解决） | **英文覆盖缺口 4 行**：`general.screenshot-folder`、`advanced.config-folder`、`advanced.log-folder`、`plugin.folder` | 统计 122/126 |
 | R5 | **行 id 前缀与页面不一致**：`general.edge-snap` 在界面页、`general.data-folder` 在高级页、`utilities.open-url` 在通用页、`utilities.*` 在高级页 | 第 3 节 |
 | R6 | **设置/快速设置双入口**：37 个分支与设置行同属性，两套 clamp/文案 | §5.2 |
 | R7 | **重置语义三套**：分页 reset + 高级 reset-all + 快速设置卡片 reset | §4.3、§5.3 |
@@ -623,7 +627,20 @@ English：Plugins — Not implemented yet (Stage 9): placeholder and folder entr
 | 移动 | `utilities.open-url` → General/播放与历史；`general.screenshot-folder` → Video/截图；`utilities.log-viewer`、`utilities.inspector`、`utilities.about` → Advanced/工具 |
 | 删除 | `ui.thumbnail-*`（6 行，改名后迁到视频页）、`utilities.font`（字体设置页移除） |
 
+
+### 6.5 1.3.0 → 1.3.1 增删移清单
+
+| 变化 | 行 id | 说明 |
+|---|---|---|
+| 新增 | `ui.osc-prev-next` | 界面 / 窗口与 OSC；上一首/下一首 vs 快退/快进（Ctrl = ±30 秒） |
+| 新增 | `video.thumbnail-acceleration` | 视频 / 缩略图；自动（推荐）/ 仅 CPU |
+| 新增 | `video.screenshot-subtitles` | 视频 / 截图；默认开，三处入口（设置 / OSC 展开菜单 / 快速设置 → 视频） |
+| 改名 | `video.thumbnail-cache` | 改为「缩略图缓存下限」，描述改为内存至少保留的张数（实际缓存全片） |
+| 行为 | `video.thumbnail-cache-mb` | 仍为磁盘预算；内存缓存不再受此上限约束 |
+| 补齐 | 4 行英文 | `general.screenshot-folder`、`advanced.config-folder`、`advanced.log-folder`、`plugin.folder` 已有英文 |
 ## 7. 附录 A：全部行 id（按字母序）
+
+> 1.3.1 新增 3 行已按字母序并入并整体重新编号（共 129 行）。
 
 | # | 行 id | 页面 / 分节 | 控件 |
 |---|---|---|---|
@@ -708,55 +725,58 @@ English：Plugins — Not implemented yet (Stage 9): placeholder and folder entr
 | 79 | `ui.osc-autohide` | Ui / 窗口与 OSC | ToggleSwitch |
 | 80 | `ui.osc-autohide-seconds` | Ui / 窗口与 OSC | NumberBox |
 | 81 | `ui.osc-position` | Ui / 窗口与 OSC | ComboBox |
-| 82 | `ui.osd-duration` | Ui / OSD | NumberBox |
-| 83 | `ui.osd-enabled` | Ui / OSD | ToggleSwitch |
-| 84 | `ui.osd-position` | Ui / OSD | ComboBox |
-| 85 | `ui.osd-size` | Ui / OSD | NumberBox |
-| 86 | `ui.sidebar-side` | Ui / 窗口与 OSC | ComboBox |
-| 87 | `ui.sidebar-width` | Ui / 窗口与 OSC | NumberBox |
-| 88 | `utilities.about` | Advanced / 工具 | Button |
-| 89 | `utilities.inspector` | Advanced / 工具 | Button |
-| 90 | `utilities.log-viewer` | Advanced / 工具 | Button |
-| 91 | `utilities.open-url` | General / 播放与历史 | Button |
-| 92 | `video.aspect` | Video / 画面 | ComboBox |
-| 93 | `video.crop` | Video / 画面 | ComboBox |
-| 94 | `video.deband` | Video / 画面 | ToggleSwitch |
-| 95 | `video.deinterlace` | Video / 解码 | ToggleSwitch |
-| 96 | `video.delogo-enabled` | Video / 去 Logo | ToggleSwitch |
-| 97 | `video.delogo-height` | Video / 去 Logo | NumberBox |
-| 98 | `video.delogo-width` | Video / 去 Logo | NumberBox |
-| 99 | `video.delogo-x` | Video / 去 Logo | NumberBox |
-| 100 | `video.delogo-y` | Video / 去 Logo | NumberBox |
-| 101 | `video.filters` | Video / 滤镜 | Button |
-| 102 | `video.flip-h` | Video / 画面 | ToggleSwitch |
-| 103 | `video.flip-v` | Video / 画面 | ToggleSwitch |
-| 104 | `video.frame-drop-osd` | Video / 解码 | ToggleSwitch |
-| 105 | `video.hdr-compute-peak` | Video / HDR 与色彩 | ComboBox |
-| 106 | `video.hwdec` | Video / 解码 | ToggleSwitch |
-| 107 | `video.hwdec-mode` | Video / 解码 | ComboBox |
-| 108 | `video.mpv-stats` | Video / 解码 | ToggleSwitch |
-| 109 | `video.output-levels` | Video / HDR 与色彩 | ComboBox |
-| 110 | `video.pan-x` | Video / 画面 | NumberBox |
-| 111 | `video.pan-y` | Video / 画面 | NumberBox |
-| 112 | `video.quality` | Video / 画面 | ComboBox |
-| 113 | `video.quality-editor` | Video / 画面 | Button |
-| 114 | `video.reset` | Video / 重置 | Button |
-| 115 | `video.rotation` | Video / 画面 | ComboBox |
-| 116 | `video.target-peak` | Video / HDR 与色彩 | NumberBox |
-| 117 | `video.thumbnail-bucket` | Video / 缩略图 | NumberBox |
-| 118 | `video.thumbnail-cache` | Video / 缩略图 | NumberBox |
-| 119 | `video.thumbnail-cache-clear` | Video / 缩略图 | Button |
-| 120 | `video.thumbnail-cache-mb` | Video / 缩略图 | NumberBox |
-| 121 | `video.thumbnail-hint` | Video / 缩略图 | 只读文本 |
-| 122 | `video.thumbnail-preview` | Video / 缩略图 | ToggleSwitch |
-| 123 | `video.thumbnail-slow` | Video / 缩略图 | ToggleSwitch |
-| 124 | `video.thumbnail-width` | Video / 缩略图 | NumberBox |
-| 125 | `video.tone-mapping` | Video / HDR 与色彩 | ComboBox |
-| 126 | `video.zoom` | Video / 画面 | NumberBox |
+| 82 | `ui.osc-prev-next` | Ui / 窗口与 OSC | ComboBox |
+| 83 | `ui.osd-duration` | Ui / OSD | NumberBox |
+| 84 | `ui.osd-enabled` | Ui / OSD | ToggleSwitch |
+| 85 | `ui.osd-position` | Ui / OSD | ComboBox |
+| 86 | `ui.osd-size` | Ui / OSD | NumberBox |
+| 87 | `ui.sidebar-side` | Ui / 窗口与 OSC | ComboBox |
+| 88 | `ui.sidebar-width` | Ui / 窗口与 OSC | NumberBox |
+| 89 | `utilities.about` | Advanced / 工具 | Button |
+| 90 | `utilities.inspector` | Advanced / 工具 | Button |
+| 91 | `utilities.log-viewer` | Advanced / 工具 | Button |
+| 92 | `utilities.open-url` | General / 播放与历史 | Button |
+| 93 | `video.aspect` | Video / 画面 | ComboBox |
+| 94 | `video.crop` | Video / 画面 | ComboBox |
+| 95 | `video.deband` | Video / 画面 | ToggleSwitch |
+| 96 | `video.deinterlace` | Video / 解码 | ToggleSwitch |
+| 97 | `video.delogo-enabled` | Video / 去 Logo | ToggleSwitch |
+| 98 | `video.delogo-height` | Video / 去 Logo | NumberBox |
+| 99 | `video.delogo-width` | Video / 去 Logo | NumberBox |
+| 100 | `video.delogo-x` | Video / 去 Logo | NumberBox |
+| 101 | `video.delogo-y` | Video / 去 Logo | NumberBox |
+| 102 | `video.filters` | Video / 滤镜 | Button |
+| 103 | `video.flip-h` | Video / 画面 | ToggleSwitch |
+| 104 | `video.flip-v` | Video / 画面 | ToggleSwitch |
+| 105 | `video.frame-drop-osd` | Video / 解码 | ToggleSwitch |
+| 106 | `video.hdr-compute-peak` | Video / HDR 与色彩 | ComboBox |
+| 107 | `video.hwdec` | Video / 解码 | ToggleSwitch |
+| 108 | `video.hwdec-mode` | Video / 解码 | ComboBox |
+| 109 | `video.mpv-stats` | Video / 解码 | ToggleSwitch |
+| 110 | `video.output-levels` | Video / HDR 与色彩 | ComboBox |
+| 111 | `video.pan-x` | Video / 画面 | NumberBox |
+| 112 | `video.pan-y` | Video / 画面 | NumberBox |
+| 113 | `video.quality` | Video / 画面 | ComboBox |
+| 114 | `video.quality-editor` | Video / 画面 | Button |
+| 115 | `video.reset` | Video / 重置 | Button |
+| 116 | `video.rotation` | Video / 画面 | ComboBox |
+| 117 | `video.screenshot-subtitles` | Video / 截图 | ToggleSwitch |
+| 118 | `video.target-peak` | Video / HDR 与色彩 | NumberBox |
+| 119 | `video.thumbnail-acceleration` | Video / 缩略图 | ComboBox |
+| 120 | `video.thumbnail-bucket` | Video / 缩略图 | NumberBox |
+| 121 | `video.thumbnail-cache` | Video / 缩略图 | NumberBox |
+| 122 | `video.thumbnail-cache-clear` | Video / 缩略图 | Button |
+| 123 | `video.thumbnail-cache-mb` | Video / 缩略图 | NumberBox |
+| 124 | `video.thumbnail-hint` | Video / 缩略图 | 只读文本 |
+| 125 | `video.thumbnail-preview` | Video / 缩略图 | ToggleSwitch |
+| 126 | `video.thumbnail-slow` | Video / 缩略图 | ToggleSwitch |
+| 127 | `video.thumbnail-width` | Video / 缩略图 | NumberBox |
+| 128 | `video.tone-mapping` | Video / HDR 与色彩 | ComboBox |
+| 129 | `video.zoom` | Video / 画面 | NumberBox |
 
 ## 8. 附录 B：本地化键与覆盖
 
-SettingsLocalization.cs：页面英文 11 条、分节英文 34 条、行英文 122 条；行英文键即行 id。
+SettingsLocalization.cs：页面英文 11 条、分节英文 34 条、行英文 129 条；行英文键即行 id。
 
 | 页面 id | 中文页名 | English title | 行数 | 覆盖英文行 |
 |---|---|---|---|---|
@@ -772,7 +792,7 @@ SettingsLocalization.cs：页面英文 11 条、分节英文 34 条、行英文 
 | `Integration` | 文件关联 | File Associations | 7 | 7 |
 | `Plugin` | 插件 | Plugins | 4 | 3 |
 
-未覆盖英文的行：`general.screenshot-folder`、`advanced.config-folder`、`advanced.log-folder`、`plugin.folder`
+未覆盖英文的行：**无**（1.3.1 起 129 / 129 全部有英文）。1.3.0 缺失的 4 行（`general.screenshot-folder`、`advanced.config-folder`、`advanced.log-folder`、`plugin.folder`）已补齐。
 
 设置窗口与子窗口的 loc:Loc 键（共 54 个）：
 
