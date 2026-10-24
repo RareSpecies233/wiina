@@ -8,13 +8,13 @@ namespace Wiina.Core.Release;
 public static class PackageManifest
 {
     /// <summary>Product version stamped into the archive name and SOURCE.txt.</summary>
-    public const string Version = "1.2.4";
+    public const string Version = "1.2.5";
 
     /// <summary>Runtime identifier of the self-contained payload.</summary>
     public const string RuntimeIdentifier = "win-x64";
 
     /// <summary>Name of the archive written under artifacts/.</summary>
-    public const string ArchiveFileName = "wiina-1.2.4-win-x64.zip";
+    public const string ArchiveFileName = "wiina-1.2.5-win-x64.zip";
 
     /// <summary>Executable entry point of the packaged player.</summary>
     public const string ExecutableFileName = "Wiina.exe";

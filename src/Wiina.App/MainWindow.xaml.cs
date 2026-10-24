@@ -1163,23 +1163,27 @@ public sealed partial class MainWindow : Window
         }
     }
 
-    private void ApplyTheme()
+    /// <summary>
+    /// Re-resolves the theme for this player window. Also called by
+    /// <see cref="App"/> for every registered window on a theme switch.
+    /// </summary>
+    internal void ApplyTheme()
     {
-        ElementTheme theme = _settings.Theme switch
-        {
-            ThemeMode.Dark => ElementTheme.Dark,
-            ThemeMode.Light => ElementTheme.Light,
-            _ => ElementTheme.Default,
-        };
+        ElementTheme theme = App.ResolveTheme();
 
         RootGrid.RequestedTheme = theme;
         // OsdText is loaded before the first theme pass; its ThemeResource
         // brushes can otherwise keep the dark values used at construction.
         Osd.RequestedTheme = theme;
+        // PiP is a separate HWND; keep it in sync while it is open.
+        _pipWindow?.ApplyTheme();
         // Chrome paint is a solid colour mixed with the system accent, so it
         // must be recomputed whenever the theme (and therefore the resolved
         // theme-dictionary brush) changes.
         Services.ChromeTint.Recolor();
+        // The settings save is debounced; other windows should not keep the old
+        // theme until it lands (a nested call is a no-op).
+        App.SyncOpenWindowThemes();
 
         DispatcherQueue.TryEnqueue(ConfigureCaptionButtons);
     }
@@ -1200,7 +1204,7 @@ public sealed partial class MainWindow : Window
         TitleBar.ShowCustomCaptionButtons = true;
         bar.ExtendsContentIntoTitleBar = true;
 
-        bool dark = RootGrid.ActualTheme != ElementTheme.Light;
+        bool dark = App.IsDarkTheme;
 
         bar.BackgroundColor = Colors.Transparent;
         bar.InactiveBackgroundColor = Colors.Transparent;

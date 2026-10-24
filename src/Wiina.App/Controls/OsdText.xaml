@@ -13,12 +13,23 @@
             VerticalAlignment="Bottom"
             MinWidth="120"
             MaxWidth="460"
-            Padding="16,8"
+            Padding="0"
             CornerRadius="12"
             Background="{ThemeResource ChromeSolidBrush}"
             BorderBrush="{ThemeResource PanelBorderBrush}"
             BorderThickness="1"
             IsHitTestVisible="False">
+        <Grid>
+            <!-- The blurred video frame and its tint are children of the card,
+                 so they paint above the opaque theme brush exactly like the
+                 OSC surfaces; Solid collapses them and the brush shows as-is. -->
+            <Border x:Name="BackdropBlurHost" IsHitTestVisible="False" />
+            <Border x:Name="OsdBlurTintLayer"
+                    Background="{ThemeResource OscBlurTintBrush}"
+                    CornerRadius="12"
+                    Visibility="Collapsed"
+                    IsHitTestVisible="False" />
+        <Border x:Name="OsdContent" Padding="16,8">
         <StackPanel Spacing="2">
             <Grid x:Name="TitleRow" ColumnSpacing="6">
                 <Grid.ColumnDefinitions>
@@ -64,6 +75,8 @@
                         CornerRadius="2" />
             </Grid>
         </StackPanel>
+        </Border>
+        </Grid>
     </Border>
 </UserControl>
 

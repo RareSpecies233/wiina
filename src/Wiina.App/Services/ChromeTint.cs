@@ -15,7 +15,7 @@ internal static class ChromeTint
     /// <summary>How much of the system accent is mixed into the base panel.</summary>
     private const double AccentWeight = 0.16;
 
-    private static readonly Color DarkBase = Color.FromArgb(255, 0x15, 0x17, 0x1B);
+    private static readonly Color DarkBase = Color.FromArgb(255, 0x20, 0x22, 0x27);
     private static readonly Color LightBase = Color.FromArgb(255, 0xF3, 0xF3, 0xF3);
 
     private static UISettings? _uiSettings;

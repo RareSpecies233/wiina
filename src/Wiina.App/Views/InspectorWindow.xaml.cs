@@ -25,18 +25,13 @@ public sealed partial class InspectorWindow : Window
     {
         InitializeComponent();
         Title = Loc.T("inspector.title");
-        RootGrid.RequestedTheme = App.Settings.Theme switch
-        {
-            ThemeMode.Dark => ElementTheme.Dark,
-            ThemeMode.Light => ElementTheme.Light,
-            _ => ElementTheme.Default,
-        };
+        RootGrid.RequestedTheme = App.ResolveTheme();
         WindowShell.Prepare(
             this,
             660,
             600,
             resizable: true,
-            dark: App.Settings.Theme != ThemeMode.Light,
+            dark: App.IsDarkTheme,
             minWidth: 480,
             minHeight: 360);
 

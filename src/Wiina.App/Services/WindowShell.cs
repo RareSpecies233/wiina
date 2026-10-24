@@ -53,6 +53,7 @@ internal static class WindowShell
         }
 
         ConfigureCaptionButtons(window, dark);
+        WindowInterop.SetImmersiveDarkMode(window, dark);
 
         if (minWidth > 0 && minHeight > 0)
         {
@@ -83,6 +84,21 @@ internal static class WindowShell
     }
 
     public static nint Handle(Window window) => WindowNative.GetWindowHandle(window);
+
+    /// <summary>
+    /// Re-applies an element theme to an already-open secondary window and
+    /// refreshes its caption buttons so a runtime dark/light switch does not
+    /// leave black caption glyphs on a dark titlebar (or the reverse).
+    /// </summary>
+    public static void ApplyTheme(Window window, FrameworkElement root, ElementTheme theme)
+    {
+        bool dark = theme != ElementTheme.Light;
+        root.RequestedTheme = theme;
+        ConfigureCaptionButtons(window, dark);
+        // Native titlebars (inspector/log/about keep the system frame) only get
+        // the dark background/border from the DWM attribute.
+        WindowInterop.SetImmersiveDarkMode(window, dark);
+    }
 
     /// <summary>
     /// Restores a secondary window from minimize and raises it above the

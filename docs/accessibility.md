@@ -1,6 +1,6 @@
 # Accessibility, localization, DPI and motion
 
-This document records what Wiina v1.2.4 implements, how it was checked, and
+This document records what Wiina v1.2.5 implements, how it was checked, and
 what is intentionally limited. It is a summary, not a certification.
 
 ## 1. Keyboard and focus
@@ -115,7 +115,7 @@ generic text containers mirror.
 
 ## 7. Localization coverage
 
-- Runtime catalog: 544 keys in `UiStringCatalog.cs`, each with a non-empty
+- Runtime catalog: 550 keys in `UiStringCatalog.cs`, each with a non-empty
   zh-Hans and English string. Coverage includes the title bar, OSC, OSD, menus,
   sidebars, quick settings, all 12 settings pages (titles, summaries, section
   headers, row titles/descriptions/choices), welcome/about/log/inspector/open-URL

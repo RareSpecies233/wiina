@@ -84,4 +84,4 @@ Windows 功能更新、用户手动更改或其他播放器安装都可能重置
 
 `FileAssociationCatalogTests`（`tests/Wiina.Core.Tests`）覆盖扩展名清单、注册计划的键值
 形状、`OpenWithProgids` 二进制标记，以及取消关联只涉及自有 ProgID 的白名单。整套测试
-在 Release 下共 644 项通过（见 [v1.2.4 验收](acceptance/v1.2.4.md)）。
+在 Release 下共 659 项通过（见 [v1.2.5 验收](acceptance/v1.2.5.md)）。

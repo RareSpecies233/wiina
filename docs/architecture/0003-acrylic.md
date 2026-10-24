@@ -1,7 +1,8 @@
 # ADR-0003: Acrylic and video blur
 
-- **Status: Current** (accepted 2026-10-18 for 1.0.0; restored and extended in
-  v1.2.4 after the short-lived 1.2.3 solid-only experiment)
+- **Status: Current** (accepted 2026-10-18 for 1.0.0; restored in 1.2.4 after
+  the short-lived 1.2.3 solid-only experiment; extended in 1.2.5 with the OSD
+  surface and the opaque-Solid fix)
 - Related: [ADR-0004 — Solid mode](0004-solid-chrome.md) (the "no blur"
   option), `src/Wiina.App/Interop/ChromeBlur.cs`,
   `src/Wiina.Core/Settings/ChromeBlurMode.cs`, `Services/ChromeTint.cs`
@@ -12,7 +13,8 @@ Wiina has two blur stories:
    `Window.SystemBackdrop = DesktopAcrylicBackdrop`. That is DWM blur of the
    desktop behind the window; it is unchanged.
 2. **Chrome floating over the video** (titlebar, both OSC placements, the
-   sidebar) uses a real Gaussian blur of the *actual video frame*, produced by
+   sidebar and the OSD message card) uses a real Gaussian blur of the *actual
+   video frame*, produced by
    `src/Wiina.App/Interop/ChromeBlur.cs`. It is not a translucent color
    simulation, and it is **optional**.
 
@@ -38,6 +40,12 @@ Settings → 界面 → 窗口与 OSC → 毛玻璃模式 (row id `ui.blur-mode`
 | 始终（持续计算） | `Always = 2` | Keep calculating even while no chrome is visible | ~8 fps while the player runs |
 | 关闭毛玻璃（纯色） | `Solid = 3` | No capture and no blur; opaque accent-tinted panel | none |
 
+**Opaque by construction (1.2.5).** Chrome surfaces no longer assign
+`Background` from code at all: the opaque `ChromeSolidBrush` stays declared in
+XAML and the blur/tint layers are child elements toggled by `Visibility`. That
+is why Solid can never show video texture, and why leaving Solid restores the
+glass without a hide/show cycle.
+
 **Start/stop.** `ChromeBlur.SetActive(true)` is called from `ShowChrome` and
 `SetActive(false)` from `HideChrome` (`MainWindow.xaml.cs`). The worker loop
 parks while `!_active` for Fixed/Dynamic, ignores visibility for Always, and
@@ -47,8 +55,9 @@ worker is never started at all.
 
 **Solid bypass.** Solid does not create `CanvasDevice`, does not start the
 worker, and drops any in-flight frame. Each surface instead paints the opaque
-`ChromeSolidBrush` (`Themes/Tokens.xaml`: dark `#FF15171B`, light `#FFF3F3F3`,
-high contrast `SystemColorWindowColor`), mixed 16 % toward the system accent by
+`ChromeSolidBrush` (`Themes/Tokens.xaml`: dark `#FF202227` since 1.2.5, a dark
+gray rather than near-black; light `#FFF3F3F3`; high contrast
+`SystemColorWindowColor`), mixed 16 % toward the system accent by
 `Services/ChromeTint.cs`. `ChromeTint` subscribes to
 `UISettings.ColorValuesChanged` and re-mixes on the UI thread, so changing the
 Windows accent updates the chrome without a restart. A 1.2.3 settings file
@@ -89,7 +98,7 @@ effect-only and never take input.
 | Docked bottom OSC | `Controls/OscBottomView.xaml(.cs)` | 0 | |
 | Floating OSC | `Controls/OscFloatingView.xaml(.cs)` | 8 | |
 | Sidebar | `Controls/SidebarHost.xaml(.cs)` | 0 | |
-| OSD message | `Controls/OsdText` | — | **not blurred**; opaque in every mode |
+| OSD message | `Controls/OsdText.xaml(.cs)` | 12 | glass in the three blur modes, opaque in Solid; stays non-hit-testable |
 
 Each surface keeps its opaque brush until the first blurred frame arrives;
 `ChromeBlurLayer.FirstFrame` then hides it and shows a translucent tint above
@@ -101,9 +110,10 @@ behind it.
 
 Defined in `Themes/Tokens.xaml`:
 
-- `TitleBarBlurTintBrush`: dark `#99101114`, light `#99F3F3F3` (~60 %).
-- `OscBlurTintBrush`: dark `#B3101114`, light `#B3F3F3F3` (~70 %).
-- `SidebarBlurTintBrush`: dark `#A6101114`, light `#A6F3F3F3` (~65 %).
+- `TitleBarBlurTintBrush`: dark `#99202227`, light `#99F3F3F3` (~60 %).
+- `OscBlurTintBrush`: dark `#B3202227`, light `#B3F3F3F3` (~70 %); shared by the
+  docked/floating OSC and the OSD card.
+- `SidebarBlurTintBrush`: dark `#A6202227`, light `#A6F3F3F3` (~65 %).
 
 High contrast maps these to the system window color (the sidebar tint is
 transparent in high contrast), and the OSD panel keeps its opaque system
@@ -141,7 +151,7 @@ Every path degrades to the solid chrome rather than crashing:
   chrome shows a slightly softer version of the frame than the video itself.
 - Nothing is captured when the player is idle, so the last frame's blur
   remains, matching the still video frame behind it.
-- OSD message text is opaque in all modes; in the Docked layout the titlebar is
-  opaque as well.
+- The OSD card follows the global mode (glass in Fixed/Dynamic/Always, opaque in
+  Solid) and never takes input; in the Docked layout the titlebar is opaque.
 - Solid mode is intentionally see-through-free: it is a flat panel, not a
   cheap blur.

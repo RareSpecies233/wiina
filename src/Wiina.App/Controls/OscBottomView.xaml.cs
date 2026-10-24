@@ -66,18 +66,12 @@ public sealed partial class OscBottomView : UserControl
             _blur.Visibility = live ? Visibility.Visible : Visibility.Collapsed;
         }
 
-        if (live && _blur is { HasFrame: true })
-        {
-            // Let the blurred frame through: the panel's opaque paint would
-            // otherwise cover it, since the blur sits inside the panel.
-            OscAcrylicPanel.Background = null;
-            OscBlurTintLayer.Visibility = Visibility.Visible;
-            return;
-        }
-
-        OscAcrylicPanel.Background =
-            ChromeBlur.ResolveSolidBrush(this) ?? OscAcrylicPanel.Background;
-        OscBlurTintLayer.Visibility = Visibility.Collapsed;
+        // The blurred frame and its tint are children of the panel, so they
+        // paint over its opaque ChromeSolidBrush; the Background itself is
+        // never touched. Solid therefore cannot lose its paint, and the XAML
+        // ThemeResource binding keeps following theme/accent changes.
+        bool blurred = live && _blur is { HasFrame: true };
+        OscBlurTintLayer.Visibility = blurred ? Visibility.Visible : Visibility.Collapsed;
     }
 
     private void OnUnloaded(object sender, RoutedEventArgs e)

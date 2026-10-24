@@ -6,11 +6,11 @@
         <ResourceDictionary x:Key="Dark">
             <SolidColorBrush x:Key="AppBackgroundBrush" Color="#FF08090A" />
             <SolidColorBrush x:Key="TitleBarBrush" Color="#B3000000" />
-            <SolidColorBrush x:Key="TitleBarOpaqueBrush" Color="#FF101114" />
+            <SolidColorBrush x:Key="TitleBarOpaqueBrush" Color="#FF202227" />
             <SolidColorBrush x:Key="TitleBarBorderBrush" Color="#22FFFFFF" />
             <SolidColorBrush x:Key="PanelBrush" Color="#FF15171B" />
             <SolidColorBrush x:Key="PanelBorderBrush" Color="#26FFFFFF" />
-            <SolidColorBrush x:Key="OsdBackgroundBrush" Color="#D9101114" />
+            <SolidColorBrush x:Key="OsdBackgroundBrush" Color="#D9202227" />
             <SolidColorBrush x:Key="OsdProgressTrackBrush" Color="#33FFFFFF" />
             <SolidColorBrush x:Key="ThumbnailBorderBrush" Color="#99FFFFFF" />
             <SolidColorBrush x:Key="StatusBackgroundBrush" Color="#B3000000" />
@@ -18,28 +18,29 @@
                  painted behind the floating surfaces (ChromeBlur.cs); these
                  tints ride on those blurred pixels. The opaque
                  ChromeSolidBrush is the "no blur" option and the fallback
-                 until the first blurred frame arrives. Its colour is the base
-                 below mixed with the system accent at runtime by
-                 Services/ChromeTint.cs. -->
-            <SolidColorBrush x:Key="TitleBarBlurTintBrush" Color="#99101114" />
-            <SolidColorBrush x:Key="OscBlurTintBrush" Color="#B3101114" />
+                 until the first blurred frame arrives. Its colour is a neutral
+                 black-gray (not pure black) mixed with the system accent at
+                 runtime by Services/ChromeTint.cs; the blur tints stay in the
+                 same neutral family so Solid and glass read as one surface. -->
+            <SolidColorBrush x:Key="TitleBarBlurTintBrush" Color="#99202227" />
+            <SolidColorBrush x:Key="OscBlurTintBrush" Color="#B3202227" />
             <AcrylicBrush x:Key="SidebarAcrylicBrush"
-                          TintColor="#FF101114"
+                          TintColor="#FF202227"
                           TintOpacity="0.28"
                           TintLuminosityOpacity="0.45"
-                          FallbackColor="#CC15171B" />
-            <SolidColorBrush x:Key="SidebarBlurTintBrush" Color="#A6101114" />
+                          FallbackColor="#CC202227" />
+            <SolidColorBrush x:Key="SidebarBlurTintBrush" Color="#A6202227" />
             <AcrylicBrush x:Key="TitleBarAcrylicBrush"
-                          TintColor="#FF101114"
+                          TintColor="#FF202227"
                           TintOpacity="0.32"
                           TintLuminosityOpacity="0.3"
-                          FallbackColor="#CC101114" />
+                          FallbackColor="#CC202227" />
             <AcrylicBrush x:Key="OscAcrylicBrush"
-                          TintColor="#FF101114"
+                          TintColor="#FF202227"
                           TintOpacity="0.46"
                           TintLuminosityOpacity="0.4"
-                          FallbackColor="#E6101114" />
-            <SolidColorBrush x:Key="ChromeSolidBrush" Color="#FF15171B" />
+                          FallbackColor="#E6202227" />
+            <SolidColorBrush x:Key="ChromeSolidBrush" Color="#FF202227" />
             <SolidColorBrush x:Key="SettingsRailBrush" Color="#0AFFFFFF" />
             <SolidColorBrush x:Key="SettingsPageWashBrush" Color="#4015171B" />
             <SolidColorBrush x:Key="SettingsCardWashBrush" Color="#14FFFFFF" />

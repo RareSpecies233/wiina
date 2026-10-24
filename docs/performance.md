@@ -1,8 +1,9 @@
-# Performance measurements (v1.2.4)
+# Performance measurements (v1.2.5)
 
 Measured on the development machine on 2026-10-19 (Asia/Hong_Kong), at v1.0.0.
 The numbers below are the historical baseline; they were **not** re-measured
-for 1.2.4 (see “What changed in 1.2.4” for the known deltas). Numbers are what
+for 1.2.4 or 1.2.5 (see “What changed in 1.2.4” and “What changed in 1.2.5” for
+the known deltas). Numbers are what
 this machine produced; they are not universal guarantees.
 
 ## Environment
@@ -69,6 +70,28 @@ scenarios (peak 265.7 MB at 4K). Private bytes exceed 300 MB at 4K because the
 GPU/driver surfaces and the video swapchain are charged to the process; this is
 reported honestly rather than trimmed by a smaller measurement window.
 
+## What changed in 1.2.5
+
+- **Live theme switching costs one recolor, not a re-render.** `App.ResolveTheme`
+  pushes the new `ElementTheme` to every open window and `ChromeTint.Recolor`
+  re-mixes the opaque `ChromeSolidBrush` (16 % accent). That is a handful of
+  `SolidColorBrush` writes plus one layout/repaint per window per switch; there
+  is no per-frame work, and a `ThemeMode.System` change follows the Windows app
+  theme through `UISettings.ColorValuesChanged` instead of polling.
+- **The OSD card joins the blur pipeline.** In the three glass modes the OSD is
+  one more `ChromeBlurLayer` crop (320 px blurred frame, shared with the other
+  surfaces), so it adds no extra capture; in Solid it adds no work at all.
+- **Solid is now opaque by construction.** Chrome panels no longer write
+  `Background` from code; the brush stays declared in XAML and the blur/tint
+  layers toggle `Visibility`. Cost is unchanged (one fill per surface).
+- **Settings rows: 12 pages / 119 rows.** An earlier 1.2.4 draft of this page
+  said 121; that was wrong (1.2.4 had already removed the two persistent-OSD
+  rows). The quality editor adds no settings rows — its 23 options live in the
+  profile window.
+- **Tests: 659 passed / 0 failed** (maintainer release verification for 1.2.5;
+  the docs pass did not re-run them).
+- Startup/memory were not re-measured for 1.2.5.
+
 ## What changed in 1.2.4
 
 ### Chrome blur cost depends on the mode
@@ -116,7 +139,7 @@ work is one brush fill.
 
 ### Settings and packaging
 
-- Settings grew to **12 pages / 121 rows** (1.2.3 had 119): the blur-mode row is
+- Settings moved to **12 pages / 119 rows** (1.2.3 had 121 with the two persistent-OSD rows): the blur-mode row is
   back and the deband row moved to 视频 → 画面. Row construction is still
   code-generated and showed no visible stall.
 - The settings rail no longer animates a hover brush on unselected items, so it
@@ -133,7 +156,7 @@ work is one brush fill.
 - Thumbnails (scrub peek) and the inspector run off the UI thread; the UI shows
   placeholder/loading state while data arrives. No synchronous file or IPC work
   was observed blocking the window during the measurements.
-- Settings/page navigation builds rows in code; 12 pages with 121 rows total
+- Settings/page navigation builds rows in code; 12 pages with 119 rows total
   render without a visible stall on this machine.
 - Library scanning is not a feature of this stage; playlist import is bounded
   by the files the user opens.

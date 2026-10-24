@@ -7,7 +7,7 @@ Wiina 把 [IINA](https://iina.io/) 在 macOS 上的**界面逻辑**（窗口层�
 [mpv](https://mpv.io/) 作为播放内核。视觉上不照搬 AppKit，而是按 Windows 11 Fluent 规范重新设计：Segoe UI Variable、
 Segoe Fluent Icons、播放器外框的可选视频毛玻璃（纯色档为不透明 accent 染色）、辅助窗口的 Mica/Acrylic、圆角与系统主题。
 
-## 状态（v1.2.4）
+## 状态（v1.2.5）
 
 - **Stage 0–8 已验收。** 播放管线、WinUI 标题栏、OSC、播放/轨道/字幕/章节/播放列表/历史、侧边栏与快速设置、
   OSD/缩略图、全屏/PiP/迷你模式/多窗口、12 页设置（含文件关联）/搜索/快捷键/菜单/欢迎与辅助窗口、
@@ -23,12 +23,33 @@ Segoe Fluent Icons、播放器外框的可选视频毛玻璃（纯色档为不�
   [5](docs/acceptance/stage-5.md) · [6](docs/acceptance/stage-6.md) · [7](docs/acceptance/stage-7.md) ·
   [8](docs/acceptance/stage-8.md)。
 
+### v1.2.5：主题同步、纯色档修复与画质管理
+
+- **主题即时同步到所有窗口**：在设置、快速菜单或任一窗口切换深/浅色，播放窗口（标题栏 + 浮动 OSC）、
+  侧栏、设置、快速设置、PiP、关于、日志、检查器、滤镜、键位、欢迎与画质窗口都会立即重绘。
+  `ThemeMode.System` 现在实时跟随 Windows 应用主题（WinUI 的 `ElementTheme.Default` 不会），
+  两个方向都生效；主题行在两处都会显示新值。限制：窗口材质（Mica/亚克力）可能晚一帧，
+  高对比度下的深浅切换未做视觉验证。
+- **纯色档真正不透明**：从毛玻璃切到「关闭毛玻璃（纯色）」不再透出视频。外框面板不再由代码写
+  `Background`，模糊层/tint 层是子元素、只切换可见性；深色基色改为深灰 `#202227`（不再是近黑），
+  深色 tint 同步对齐。四档可热切换，来回切无需隐藏/显示。
+- **OSD 也接入毛玻璃**：OSD 卡片跟随全局四档（固定/动态/始终为玻璃，纯色为不透明），
+  仍不拦截鼠标输入。
+- **画质管理扩展到 23 项 mpv 选项**：按 缩放 / 色度 / 抖动 / 去色带 / 插帧 / 同步 / 其他 分组，
+  每项有中文标签、取舍说明与原始 mpv 键；默认档对齐 mpv 0.41（IINA 不覆盖）的默认值：
+  `scale=lanczos`、`dscale=hermite`、`cscale=bilinear`、`dither=fruit`、`dither-size-fruit=6`
+  等；「性能优先」= bilinear ×3、`dither=no`、质量开关全关、去色带关。去色带总开关移到
+  设置 → 视频 → 画面（默认关），profile 参数只在开启时下发给 mpv；未知导入键保留为
+  “未识别（保留原值）”。修复 9 个数字输入框丢失 `Grid.Column` 导致微调按钮压住标签的问题。
+- 测试 659 项通过；产物 `wiina-1.2.5-win-x64.zip` / `Wiina-Setup-1.2.5-x64.exe`。
+- 文档同步：[v1.2.5 验收](docs/acceptance/v1.2.5.md)、[ADR-0003](docs/architecture/0003-acrylic.md)
+  更新 OSD 表面，[ADR-0004](docs/architecture/0004-solid-chrome.md) 仅描述纯色档。
 ### v1.2.4：毛玻璃回归、贴边吸附与安装包
 
 - **毛玻璃回归为四个可选档位**：设置 → 界面 → 窗口与 OSC 的「毛玻璃模式」提供
   固定（静态帧）/ 动态（跟随视频，默认）/ 始终（持续计算）/ 关闭毛玻璃（纯色）。
   前三档由 `Interop/ChromeBlur.cs` 每 125 ms 从 libmpv 取一帧，320 px 降采样后用
-  Win2D 高斯模糊（半径 9）分发到标题栏、底部/浮动 OSC 与侧边栏；OSD 消息保持不透明。
+  Win2D 高斯模糊（半径 9）分发到标题栏、底部/浮动 OSC 与侧边栏；OSD 消息卡片自 1.2.5 起跟随同一档位（三档玻璃、纯色不透明）。
 - **纯色档零取帧开销**：不创建 Win2D 设备、不启动取帧线程，只画不透明
   `ChromeSolidBrush` 并混入 16% 系统 accent（`Services/ChromeTint.cs`），切换 accent
   立即生效；`WIINA_BLUR_DISABLE=1` 可强制纯色。
@@ -191,7 +212,7 @@ Segoe Fluent Icons、播放器外框的可选视频毛玻璃（纯色档为不�
 | UI | WinUI 3（Windows App SDK 2.x），非 MSIX（unpackaged） |
 | 播放内核 | libmpv（要求 mpv **0.41+**，固定构建见 `third_party/libmpv/VERSION.txt`） |
 | 视频呈现 | mpv `--d3d11-output-mode=composition` 的 swapchain 绑定到 XAML `SwapChainPanel`，XAML UI 覆盖其上 |
-| 窗口外框 | 可选实时毛玻璃（固定/动态/始终，`Interop/ChromeBlur.cs`）或不透明纯色（`ChromeSolidBrush` + `Services/ChromeTint.cs`，16% 系统 accent）；默认动态 |
+| 窗口外框 | 可选实时毛玻璃（固定/动态/始终，`Interop/ChromeBlur.cs`，含 OSD 卡片）或不透明纯色（`ChromeSolidBrush` + `Services/ChromeTint.cs`，16% 系统 accent，深色基色 `#202227`）；默认动态 |
 | 分发 | 便携 zip + 按用户 Inno Setup 安装包，两者都带卸载入口（可保留配置） |
 | 语言/运行时 | C# / .NET 10，self-contained win-x64 |
 | 界面语言 | 简体中文（默认）与 English，可在设置中即时切换 |
@@ -202,9 +223,9 @@ Segoe Fluent Icons、播放器外框的可选视频毛玻璃（纯色档为不�
 
 发布包有两种形式，都不需要单独安装 .NET 或 Windows App Runtime：
 
-1. **便携 zip**：获取 `artifacts/wiina-1.2.4-win-x64.zip`，解压到任意可写目录，运行 `Wiina.exe`；
+1. **便携 zip**：获取 `artifacts/wiina-1.2.5-win-x64.zip`，解压到任意可写目录，运行 `Wiina.exe`；
    卸载时运行同目录的 `Uninstall Wiina.exe`（可保留配置）。
-2. **安装包**：获取 `artifacts/Wiina-Setup-1.2.4-x64.exe`，按当前用户安装（默认
+2. **安装包**：获取 `artifacts/Wiina-Setup-1.2.5-x64.exe`，按当前用户安装（默认
    `%LOCALAPPDATA%\Programs\Wiina`，无需管理员），从“设置 → 应用”卸载；卸载时询问
    「是否保留配置文件？」，默认保留。
 
@@ -245,16 +266,16 @@ powershell -ExecutionPolicy Bypass -File tools/fetch-libmpv.ps1
 测试覆盖设置/搜索/菜单规则、快捷键、OSC/OSD、播放列表/历史、滤镜/EQ、窗口布局/几何、边缘吸附、
 文件关联注册计划，以及 Stage 11 的本地化目录完整性、语言解析/持久化取值、打包清单与无障碍元数据契约；
 1.2.4 起还包括 DWM 可见边框换算（`FrameMarginsTests`）、画质预设归一化（`QualitySettingsTests`）与
-小窗渲染尺寸（`RenderSizeTests`）。当前 644 项测试在 Release 下全部通过。
+小窗渲染尺寸（`RenderSizeTests`）；1.2.5 扩展了画质 profile 的序列化/默认值测试。当前 659 项测试在 Release 下全部通过。
 
 ## 打包（可复现）
 
 ```powershell
 # 便携 zip（先构建 src/Wiina.Uninstall，再打包并校验卸载器与 Wiina.dll 版本）
-pwsh -File scripts/package.ps1 -Version 1.2.4
+pwsh -File scripts/package.ps1 -Version 1.2.5
 
 # 安装包（在便携 zip 之后；需要 Inno Setup 6 的 ISCC.exe）
-pwsh -File scripts/release.ps1 -Version 1.2.4
+pwsh -File scripts/release.ps1 -Version 1.2.5
 ```
 
 `package.ps1` 会：用 `dotnet build -c Release -r win-x64 --self-contained -p:Platform=x64 -t:Rebuild`
@@ -262,11 +283,11 @@ pwsh -File scripts/release.ps1 -Version 1.2.4
 应用出现 XBF parse 失败）→ 单独发布 `src/Wiina.Uninstall` 并把 `Uninstall Wiina.exe` 放进载荷 →
 复制构建输出、`third_party/libmpv/libmpv-2.dll`、`LICENSE`、`NOTICE`、`README.md` 并生成
 `SOURCE.txt`（源码地址 + 提交 + 构建时间）→ 校验必需文件与**待打包 `Wiina.dll` 的版本** →
-生成 `artifacts/wiina-1.2.4-win-x64.zip`。
+生成 `artifacts/wiina-1.2.5-win-x64.zip`。
 
 `release.ps1` 在便携 zip 之后解压同一份载荷到 `artifacts/publish`，用
 `%LOCALAPPDATA%\Programs\Inno Setup 6\ISCC.exe`（或 PATH / Program Files 中的 ISCC）编译
-`installer/wiina.iss`，输出 `artifacts/Wiina-Setup-1.2.4-x64.exe`，并打印两个产物的
+`installer/wiina.iss`，输出 `artifacts/Wiina-Setup-1.2.5-x64.exe`，并打印两个产物的
 大小与 SHA-256。`artifacts/` 与 `third_party/libmpv/` 均被 gitignore，仓库不提交二进制。
 缺少任一必需文件、卸载器或版本不匹配时脚本直接失败。
 
@@ -291,6 +312,7 @@ pwsh -File scripts/release.ps1 -Version 1.2.4
 ## 文档
 
 - [实施计划（历史，v1 前）](docs/PLAN.md) — 阶段、范围、验收标准；当前行为以本 README 与验收页为准
+- [v1.2.5 验收](docs/acceptance/v1.2.5.md) — 第三轮 4 项修复 + 画质选项清单的验证记录
 - [v1.2.4 验收](docs/acceptance/v1.2.4.md) — 第二轮 10 项用户问题的验证清单
 - [v1.2.3 验收](docs/acceptance/v1.2.3.md) — 第一轮 12 项用户问题的验证清单
 - [Stage 11 验收](docs/acceptance/stage-11.md) — §19.2 清单与结果

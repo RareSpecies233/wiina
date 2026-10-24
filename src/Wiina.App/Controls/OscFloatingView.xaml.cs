@@ -1,7 +1,5 @@
-using Microsoft.UI;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
-using Microsoft.UI.Xaml.Media;
 using Wiina.App.Interop;
 using Wiina.Core.Settings;
 
@@ -10,7 +8,6 @@ namespace Wiina.App.Controls;
 public sealed partial class OscFloatingView : UserControl
 {
     private ChromeBlurLayer? _blur;
-    private readonly SolidColorBrush _transparent = new(Colors.Transparent);
 
     public OscFloatingView()
     {
@@ -77,18 +74,11 @@ public sealed partial class OscFloatingView : UserControl
             _blur.Visibility = live ? Visibility.Visible : Visibility.Collapsed;
         }
 
-        if (live && _blur is { HasFrame: true })
-        {
-            // Transparent, not null: an empty background would stop the
-            // floating shell from being draggable between its controls.
-            DragArea.Background = _transparent;
-            OscBlurTintLayer.Visibility = Visibility.Visible;
-            return;
-        }
-
-        DragArea.Background =
-            ChromeBlur.ResolveSolidBrush(this) ?? DragArea.Background;
-        OscBlurTintLayer.Visibility = Visibility.Collapsed;
+        // Blur and tint are children of the drag surface, so they paint above
+        // its opaque ChromeSolidBrush while it stays the pointer target for
+        // dragging. Never assigning Background keeps the ThemeResource bound.
+        bool blurred = live && _blur is { HasFrame: true };
+        OscBlurTintLayer.Visibility = blurred ? Visibility.Visible : Visibility.Collapsed;
     }
 
     private void OnUnloaded(object sender, RoutedEventArgs e)

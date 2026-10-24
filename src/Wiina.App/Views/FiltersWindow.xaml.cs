@@ -32,18 +32,13 @@ public sealed partial class FiltersWindow : Window
     {
         InitializeComponent();
         Title = Loc.T("filters.windowTitle");
-        RootGrid.RequestedTheme = _settings.Theme switch
-        {
-            ThemeMode.Dark => ElementTheme.Dark,
-            ThemeMode.Light => ElementTheme.Light,
-            _ => ElementTheme.Default,
-        };
+        RootGrid.RequestedTheme = App.ResolveTheme();
         WindowShell.Prepare(
             this,
             940,
             680,
             resizable: true,
-            dark: _settings.Theme != ThemeMode.Light,
+            dark: App.IsDarkTheme,
             minWidth: 720,
             minHeight: 480,
             extendTitleBar: true,

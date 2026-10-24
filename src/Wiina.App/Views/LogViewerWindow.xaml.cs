@@ -18,18 +18,13 @@ public sealed partial class LogViewerWindow : Window
     {
         InitializeComponent();
         Title = Loc.T("log.title");
-        RootGrid.RequestedTheme = App.Settings.Theme switch
-        {
-            ThemeMode.Dark => ElementTheme.Dark,
-            ThemeMode.Light => ElementTheme.Light,
-            _ => ElementTheme.Default,
-        };
+        RootGrid.RequestedTheme = App.ResolveTheme();
         WindowShell.Prepare(
             this,
             760,
             540,
             resizable: true,
-            dark: App.Settings.Theme != ThemeMode.Light,
+            dark: App.IsDarkTheme,
             minWidth: 520,
             minHeight: 360);
 

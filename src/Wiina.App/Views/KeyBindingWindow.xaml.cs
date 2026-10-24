@@ -19,13 +19,7 @@ public sealed partial class KeyBindingWindow : Window
         InitializeComponent();
         Title = Loc.T("keybindings.windowTitle");
 
-        bool dark = App.Settings.Theme != ThemeMode.Light;
-        RootGrid.RequestedTheme = App.Settings.Theme switch
-        {
-            ThemeMode.Dark => ElementTheme.Dark,
-            ThemeMode.Light => ElementTheme.Light,
-            _ => ElementTheme.Default,
-        };
+        RootGrid.RequestedTheme = App.ResolveTheme();
 
         WindowShell.Prepare(
             this,
@@ -34,7 +28,7 @@ public sealed partial class KeyBindingWindow : Window
             resizable: true,
             extendTitleBar: true,
             titleBar: DragRegion,
-            dark: dark,
+            dark: App.IsDarkTheme,
             minWidth: 760,
             minHeight: 500);
         RestoreWindowBounds();
