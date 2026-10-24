@@ -382,7 +382,7 @@ public static class SettingsCatalog
         rows.Add(ChoiceRow(
             "video.quality", SettingsPageId.Video, "画面",
             "视频画质预设",
-            "两个内置档位：默认保留 IINA/libmpv 的缩放组合，性能优先全部使用 Bilinear；自定义档位在“管理画质预设…”里。",
+            "两个内置档位：默认对齐 mpv/IINA 原生默认（Lanczos 放大、Hermite 缩小、Bilinear 色度）；性能优先为全 Bilinear 的省 GPU 档。23 项细调与导入/导出在“管理画质预设…”里。",
             new[] { "默认", "性能优先" },
             settings => settings.VideoQualityPreset == VideoQualityPreset.Performance ? 1 : 0,
             (settings, value) =>
@@ -398,7 +398,7 @@ public static class SettingsCatalog
             "quality profile scaler mpv IINA 画质 缩放 性能 默认 预设"));
         rows.Add(ActionRow(
             "video.quality-editor", SettingsPageId.Video, "画面",
-            "管理画质预设…", "创建、重命名、导入/导出缩放档位；去色带开关在下面单独控制。",
+            "管理画质预设…", "创建、重命名、导入/导出 23 项画质选项（缩放/色度/抖动/去色带参数/插帧/同步/其他）；去色带总开关在下面单独控制。",
             "open-video-quality",
             "quality profile scaler import export 画质 预设 管理"));
         rows.Add(BoolRow(

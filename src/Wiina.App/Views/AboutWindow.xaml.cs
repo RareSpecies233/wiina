@@ -18,18 +18,13 @@ public sealed partial class AboutWindow : Window
     {
         InitializeComponent();
         Title = Loc.T("about.title");
-        RootGrid.RequestedTheme = App.Settings.Theme switch
-        {
-            ThemeMode.Dark => ElementTheme.Dark,
-            ThemeMode.Light => ElementTheme.Light,
-            _ => ElementTheme.Default,
-        };
+        RootGrid.RequestedTheme = App.ResolveTheme();
         WindowShell.Prepare(
             this,
             440,
             430,
             resizable: false,
-            dark: App.Settings.Theme != ThemeMode.Light,
+            dark: App.IsDarkTheme,
             minWidth: 440,
             minHeight: 430);
 

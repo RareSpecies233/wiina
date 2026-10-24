@@ -1,11 +1,83 @@
-# Wiina v1.2.4 — release notes
+# Wiina release notes
 
-Release date: 2026-10-24
+
+Release date (1.2.5): 2026-10-24
 
 Windows-native, IINA-inspired mpv front end built with WinUI 3, Windows App
 SDK 2.5, and libmpv.
 
-## What's new in 1.2.4
+## What's new in 1.2.5
+
+### Theme changes apply everywhere, immediately
+
+- Changing the theme from **Settings → 通用 → 主题**, the quick-settings menu or
+  any other window now repaints **every open window**: the player titlebar and
+  floating OSC, the sidebar, Settings, quick settings, PiP, about, log viewer,
+  inspector, filters, key bindings, welcome and the quality editor.
+- **ThemeMode.System follows the Windows app theme live.** WinUI freezes
+  `Application.RequestedTheme` at launch and `ElementTheme.Default` does not
+  re-resolve, so the app resolves a concrete dark/light value from
+  `UISettings.GetColorValue(UIColorType.Background)` and listens to
+  `ColorValuesChanged`.
+- Both directions work: switching in Settings updates the playing window and
+  its floating OSC; switching in the sidebar quick menu updates an open Settings
+  window. Theme rows show the new value in both places.
+- Limitation: the window material (`DesktopAcrylicBackdrop`) can lag one paint
+  behind the content on some systems, and light/dark switching under High
+  contrast was not visually verified.
+
+### Opaque Solid mode is actually opaque
+
+- Fixed the regression where switching from a blur mode to
+  **关闭毛玻璃（纯色）** could still show video texture. Chrome panels no longer
+  assign `Background` from code: the opaque brush stays declared in XAML and the
+  blur/tint layers are child elements toggled by `Visibility`. Switching
+  Dynamic → Solid → Fixed → Dynamic restores glass without a hide/show cycle.
+- The dark Solid base is now a dark gray **`#202227`** (was near-black
+  `#15171B`), and the dark blur tints were aligned to the same gray.
+- The **OSD card joins the blur pipeline**: it follows the global four-mode
+  setting (glass in 固定/动态/始终, opaque in Solid) through the same
+  `ChromeBlur` service, and still never takes input.
+
+### Quality manager: 23 mpv options, IINA-aligned defaults
+
+- The quality editor now exposes **23 video-quality options** in seven groups —
+  缩放, 色度, 抖动, 去色带, 插帧, 同步, 其他 — each with a Chinese label, a
+  one-line trade-off hint and its raw mpv key. The window scrolls; the 9 numeric
+  fields are compact `NumberBox` spin controls (a 1.2.5 fix — the spinner column
+  was missing, so the buttons overlapped the label).
+- **Default preset = mpv 0.41 defaults, which IINA does not override**
+  (`MPVOptionDefaults.swift` in the local IINA checkout): `scale=lanczos`,
+  `dscale=hermite`, `cscale=bilinear`, `dither=fruit`, `dither-depth=auto`,
+  `dither-size-fruit=6`, all `*-antiring=0`, `correct-downscaling=yes`,
+  `linear-downscaling=yes`, `sigmoid-upscaling=yes`, `temporal-dither=no`,
+  `interpolation=no`, `tscale=oversample`, `video-sync=audio`,
+  `video-sync-max-video-change=1.0`, `scaler-resizes-only=yes`,
+  `gpu-dumb-mode=auto`, `deband-iterations=1`, `deband-threshold=48`,
+  `deband-range=16`, `deband-grain=32`.
+- **性能优先** = `bilinear` on scale/dscale/cscale, `dither=no`, all three
+  quality checkboxes off, deband off, interpolation off — the cheapest coherent
+  set.
+- **去色带** is now a master switch in **Settings → 视频 → 画面** (`video.deband`,
+  default off). The profile keeps its four deband parameters for JSON
+  round-trip, but they only reach mpv while the switch is on.
+- Only two built-ins remain: **默认** and **性能优先**. `自动（IINA 默认）`,
+  `均衡`, `高质量` and the `Balanced` / `HighQuality` enum values normalize to
+  默认 on JSON import; unknown imported keys are preserved and shown as
+  “未识别（保留原值）”.
+
+### Other fixes
+
+- The Statistics card follows the OSD placement and uses theme-correct text in
+  dark mode; it stays the only statistics surface (the persistent technical OSD
+  was removed in 1.2.4).
+- 659 Core tests pass (maintainer release run).
+- Portability: the portable zip is `wiina-1.2.5-win-x64.zip`; the per-user
+  installer is `Wiina-Setup-1.2.5-x64.exe`.
+
+## 1.2.4 — previous release
+
+### What's new in 1.2.4
 
 ### Chrome blur is back — as four modes
 
@@ -26,7 +98,7 @@ SDK 2.5, and libmpv.
   the system accent (`Services/ChromeTint.cs`), which follows
   `UISettings.ColorValuesChanged`. `WIINA_BLUR_DISABLE=1` forces Solid for
   support and A/B comparison.
-- OSD message text stays opaque in every mode, and in the Docked layout the
+- (1.2.4 behaviour; changed in 1.2.5 — the OSD card now follows the global mode) OSD message text stays opaque in every mode, and in the Docked layout the
   titlebar stays opaque because the video lives below the bar, not behind it.
 
 ### Statistics card: OSD placement, theme-correct text, only stats surface
@@ -128,7 +200,7 @@ SDK 2.5, and libmpv.
   The [1.2.4 acceptance record](../acceptance/v1.2.4.md) lists the ten issues
   of this round.
 
-## Changes since 1.2.3 worth knowing
+### Changes since 1.2.3 worth knowing
 
 - The 1.2.3 "solid chrome only" design is history: the blur pipeline, Win2D
   package and `ui.blur-mode` row are back. The setting is `ChromeBlurMode`
@@ -140,7 +212,7 @@ SDK 2.5, and libmpv.
 - 1.2.3 remains in git history (PR #2) and its acceptance record is kept as a
   historical document.
 
-## Intentionally not included
+### Intentionally not included
 
 - **Stage 9 (plugins) is still skipped.** No plugin host, plugin API,
   `Info.json` parser, or WebView2 dependency. See
@@ -154,7 +226,7 @@ SDK 2.5, and libmpv.
 - **No MSIX / Store package and no auto-update.** Both distribution forms are
   unsigned, so SmartScreen may warn on first launch.
 
-## Install
+### Install
 
 Two forms, neither needs a separate .NET or Windows App Runtime install:
 
@@ -166,7 +238,7 @@ Two forms, neither needs a separate .NET or Windows App Runtime install:
 Data is stored in `%LOCALAPPDATA%\Wiina`. Details, the uninstall prompt and
 the silent switches are in [../installer.md](../installer.md).
 
-## Package contents
+### Package contents
 
 ```
 Wiina.exe
@@ -185,7 +257,7 @@ Additional .NET/WinUI publish output is included by the packager; `SOURCE.txt`
 records the version, build date, commit, and source URL. Win2D is a dependency
 again because the three glass modes use its Gaussian blur.
 
-## Requirements
+### Requirements
 
 - Windows 11 22H2 or later (Windows 10 2004+ best effort; titlebar
   customization degrades to the system caption where unsupported)
@@ -196,14 +268,14 @@ again because the three glass modes use its Gaussian blur.
 The build is self-contained; .NET 10 and Windows App Runtime do not need to be
 installed separately.
 
-## Upgrade / settings
+### Upgrade / settings
 
 Settings are stored in `%LOCALAPPDATA%\Wiina\settings.json`. Existing keys are
 preserved; no destructive migration is performed. The `ChromeBlurMode` field
 accepts `Fixed`, `Dynamic`, `Always`, `Solid`; an unknown value falls back to
 Dynamic. The `Language` field accepts `system`, `zh-Hans`, and `en`.
 
-## Known issues
+### Known issues
 
 See [known-issues.md](known-issues.md). Accessibility/localization details are
 in [../accessibility.md](../accessibility.md); performance numbers in

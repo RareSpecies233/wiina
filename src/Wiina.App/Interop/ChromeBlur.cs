@@ -11,7 +11,6 @@ using Microsoft.UI.Xaml.Media.Imaging;
 using Microsoft.UI.Xaml.Shapes;
 using Windows.Foundation;
 using Windows.UI;
-using Windows.UI.ViewManagement;
 using Wiina.App.Controls;
 using Wiina.Core.Settings;
 using Wiina.Mpv;
@@ -61,7 +60,6 @@ internal sealed class ChromeBlur
     private volatile bool _active = true;
     private volatile bool _fixedCaptured;
     private volatile ChromeBlurMode _mode = ChromeBlurMode.Dynamic;
-    private static Windows.UI.ViewManagement.AccessibilitySettings? _accessibility;
 
     /// <summary>Current capture strategy.</summary>
     public ChromeBlurMode Mode => _mode;
@@ -459,25 +457,12 @@ internal sealed class ChromeBlur
     }
 
     /// <summary>
-    /// The current theme's opaque chrome brush, taken from the theme
-    /// dictionaries. Controls that clear their Background so a blurred frame
-    /// can show through restore it from here, so a theme/accent change made
-    /// while the panel was blurred is picked up as well.
+    /// The current theme's opaque chrome brush is never handed to the chrome
+    /// surfaces by this service: every surface keeps its XAML
+    /// <c>{ThemeResource ChromeSolidBrush}</c> binding and paints the blurred
+    /// frame in a child layer above it. That keeps Solid opaque and lets the
+    /// brush follow theme, accent and HighContrast changes on its own.
     /// </summary>
-    internal static Brush? ResolveSolidBrush(FrameworkElement element)
-    {
-        _accessibility ??= new Windows.UI.ViewManagement.AccessibilitySettings();
-        string key = _accessibility.HighContrast
-            ? "HighContrast"
-            : element.ActualTheme == ElementTheme.Light
-                ? "Light"
-                : "Dark";
-        return Application.Current.Resources.ThemeDictionaries.TryGetValue(key, out object? value) &&
-            value is ResourceDictionary dictionary &&
-            dictionary.TryGetValue("ChromeSolidBrush", out object? brush)
-            ? brush as Brush
-            : null;
-    }
 }
 
 /// <summary>

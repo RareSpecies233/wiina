@@ -118,18 +118,11 @@ public sealed partial class SidebarHost : UserControl
             _blur.Visibility = live ? Visibility.Visible : Visibility.Collapsed;
         }
 
-        if (live && _blur is { HasFrame: true })
-        {
-            // The blur host sits behind the panel, so the panel paint has to
-            // step aside for it; hit-testing lives on RootGrid, not the paint.
-            PanelBorder.Background = null;
-            SidebarBlurTintLayer.Visibility = Visibility.Visible;
-            return;
-        }
-
-        PanelBorder.Background =
-            ChromeBlur.ResolveSolidBrush(this) ?? PanelBorder.Background;
-        SidebarBlurTintLayer.Visibility = Visibility.Collapsed;
+        // The layer and tint live inside PanelBorder, above its opaque
+        // ChromeSolidBrush, so the Background is never cleared and the XAML
+        // ThemeResource keeps resolving on theme/accent changes.
+        bool blurred = live && _blur is { HasFrame: true };
+        SidebarBlurTintLayer.Visibility = blurred ? Visibility.Visible : Visibility.Collapsed;
     }
 
     private void OnUnloaded(object sender, RoutedEventArgs e)

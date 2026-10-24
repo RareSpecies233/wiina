@@ -3,7 +3,9 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Media.Animation;
+using Wiina.App.Interop;
 using Wiina.Core.Osd;
+using Wiina.Core.Settings;
 
 namespace Wiina.App.Controls;
 
@@ -16,6 +18,7 @@ public sealed partial class OsdText : UserControl
     private readonly DispatcherQueueTimer _timer;
     private readonly OsdQueue _queue = new();
     private Storyboard? _fade;
+    private ChromeBlurLayer? _blur;
     private bool? _systemAnimationsEnabled;
     private bool _appAnimationsEnabled = true;
     private bool _enabled = true;
@@ -31,6 +34,9 @@ public sealed partial class OsdText : UserControl
         _timer.Interval = _duration;
         _timer.IsRepeating = false;
         _timer.Tick += (_, _) => FadeOut();
+        Loaded += OnLoaded;
+        Unloaded += OnUnloaded;
+        ActualThemeChanged += (_, _) => ApplyBlurVisuals();
         ApplyScale();
     }
 
@@ -203,7 +209,7 @@ public sealed partial class OsdText : UserControl
         TitleRow.FlowDirection = direction;
 
         ApplyScale();
-        OsdRoot.Padding = new Thickness(16, 8, 16, 8);
+        OsdContent.Padding = new Thickness(16, 8, 16, 8);
     }
 
     private void OnProgressSizeChanged(object sender, SizeChangedEventArgs e) =>
@@ -223,6 +229,63 @@ public sealed partial class OsdText : UserControl
         OsdMessageText.FontSize = main;
         OsdSecondaryText.FontSize = OsdSettings.SecondaryFontSize(_scalePercent);
         OsdIcon.FontSize = OsdSettings.IconFontSize(_scalePercent);
+    }
+
+    private void OnLoaded(object sender, RoutedEventArgs e)
+    {
+        ChromeBlur.ModeChanged += OnBlurModeChanged;
+        EnsureAttached();
+        ApplyBlurVisuals();
+    }
+
+    private void EnsureAttached()
+    {
+        if (_blur is not null || XamlRoot is null)
+        {
+            return;
+        }
+
+        // Same 12 DIP radius as the rounded card so the blurred crop cannot
+        // bleed past its corners.
+        if (!ChromeBlur.TryAttach(BackdropBlurHost, 12, out ChromeBlurLayer layer))
+        {
+            return;
+        }
+
+        _blur = layer;
+        _blur.FirstFrame += OnFirstBlurFrame;
+        _blur.RaiseFirstFrameIfReady();
+    }
+
+    private void OnBlurModeChanged(object? sender, EventArgs e)
+    {
+        EnsureAttached();
+        ApplyBlurVisuals();
+    }
+
+    private void OnFirstBlurFrame(object? sender, EventArgs e) => ApplyBlurVisuals();
+
+    private void ApplyBlurVisuals()
+    {
+        bool live = ChromeBlur.Current.Mode != ChromeBlurMode.Solid;
+        if (_blur is not null)
+        {
+            _blur.Visibility = live ? Visibility.Visible : Visibility.Collapsed;
+        }
+
+        bool blurred = live && _blur is { HasFrame: true };
+        OsdBlurTintLayer.Visibility = blurred ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    private void OnUnloaded(object sender, RoutedEventArgs e)
+    {
+        ChromeBlur.ModeChanged -= OnBlurModeChanged;
+        if (_blur is not null)
+        {
+            _blur.FirstFrame -= OnFirstBlurFrame;
+        }
+
+        _blur = null;
     }
 
     private bool SystemAnimationsEnabled

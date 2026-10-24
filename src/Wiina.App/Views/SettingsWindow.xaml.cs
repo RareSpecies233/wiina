@@ -61,13 +61,8 @@ public sealed partial class SettingsWindow : Window
         Title = Loc.T("ui.wiinaSettings");
         _currentPage = page;
 
-        bool dark = App.Settings.Theme != ThemeMode.Light;
-        RootGrid.RequestedTheme = App.Settings.Theme switch
-        {
-            ThemeMode.Dark => ElementTheme.Dark,
-            ThemeMode.Light => ElementTheme.Light,
-            _ => ElementTheme.Default,
-        };
+        RootGrid.RequestedTheme = App.ResolveTheme();
+        bool dark = App.IsDarkTheme;
 
         WindowShell.Prepare(
             this,
@@ -788,15 +783,17 @@ public sealed partial class SettingsWindow : Window
         }
     }
 
+    /// <summary>
+    /// Applies the resolved theme while this window stays open: either from its
+    /// own theme row or from another window's settings save.
+    /// </summary>
     private void ApplyTheme()
     {
-        RootGrid.RequestedTheme = App.Settings.Theme switch
-        {
-            ThemeMode.Dark => ElementTheme.Dark,
-            ThemeMode.Light => ElementTheme.Light,
-            _ => ElementTheme.Default,
-        };
-        WindowShell.ConfigureCaptionButtons(this, App.Settings.Theme != ThemeMode.Light);
+        RootGrid.RequestedTheme = App.ResolveTheme();
+        WindowShell.ConfigureCaptionButtons(this, App.IsDarkTheme);
+        // The theme row is saved with a debounce; push the new theme to the
+        // player and every other open tool window right away.
+        App.SyncOpenWindowThemes();
     }
 
     private void RefreshRows()

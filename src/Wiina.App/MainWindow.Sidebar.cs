@@ -859,27 +859,25 @@ public sealed partial class MainWindow
 
     private void ApplyQualityPreset()
     {
-        // Debanding left the preset manager in 1.2.4; it is an independent
-        // toggle on the Video settings page, so profiles only keep the flag
-        // for JSON round-trip with older exports.
-        string deband = _settings.DebandEnabled ? "yes" : "no";
+        // Debanding is an independent toggle on the Video settings page, so
+        // profiles only keep the legacy flag for JSON round-trip with older
+        // exports; the deband parameters apply only while that master switch is on.
         VideoQualityProfile? custom = _settings.UserQualityProfiles.FirstOrDefault(profile =>
             string.Equals(profile.Name, _settings.ActiveQualityProfile, StringComparison.OrdinalIgnoreCase));
-        (string Scale, string Downscale, string Chroma) preset = custom is not null
-            ? (custom.Scale, custom.Dscale, custom.Cscale)
-            : _settings.VideoQualityPreset switch
-            {
-                // Legacy Balanced/HighQuality values are kept only so old
-                // settings.json files still deserialize; both behave like the
-                // default built-in profile.
-                VideoQualityPreset.Performance =>
-                    ("bilinear", "bilinear", "bilinear"),
-                _ => ("ewa_lanczos", "mitchell", "bilinear"),
-            };
-        ApplyMpvString("scale", preset.Scale);
-        ApplyMpvString("dscale", preset.Downscale);
-        ApplyMpvString("cscale", preset.Chroma);
-        ApplyMpvString("deband", deband);
+        VideoQualityProfile profile = custom ?? _settings.VideoQualityPreset switch
+        {
+            // Legacy Balanced/HighQuality values are kept only so old
+            // settings.json files still deserialize; both behave like the
+            // default built-in profile.
+            VideoQualityPreset.Performance => VideoQualityProfiles.CreatePerformance(),
+            _ => VideoQualityProfiles.CreateDefault(),
+        };
+
+        foreach ((string key, string value) in
+                 VideoQualityProfiles.ToMpvOptions(profile, _settings.DebandEnabled))
+        {
+            ApplyMpvString(key, value);
+        }
     }
 
     private void ApplyMpvString(string name, string value)

@@ -93,17 +93,20 @@
             <CompositeTransform x:Name="SlideTransform" />
         </Grid.RenderTransform>
 
-        <Border x:Name="BackdropBlurHost" IsHitTestVisible="False" />
-        <Border x:Name="SidebarBlurTintLayer"
-                Background="{ThemeResource SidebarBlurTintBrush}"
-                Visibility="Collapsed"
-                IsHitTestVisible="False" />
-
         <Border x:Name="PanelBorder"
                 Background="{ThemeResource ChromeSolidBrush}"
                 BorderBrush="{ThemeResource PanelBorderBrush}"
                 BorderThickness="1,0,0,0">
             <Grid>
+                <!-- Blur and tint are children of the panel so they paint over
+                     the opaque theme brush. Solid collapses the layer and the
+                     XAML-owned Background simply shows unchanged. -->
+                <Border x:Name="BackdropBlurHost" IsHitTestVisible="False" />
+                <Border x:Name="SidebarBlurTintLayer"
+                        Background="{ThemeResource SidebarBlurTintBrush}"
+                        Visibility="Collapsed"
+                        IsHitTestVisible="False" />
+                <Grid>
                 <Grid.RowDefinitions>
                     <RowDefinition Height="46" />
                     <RowDefinition Height="*" />
@@ -255,6 +258,7 @@
                     <local:PlaylistView x:Name="PlaylistContent" Visibility="Collapsed" />
                     <local:ChaptersView x:Name="ChaptersContent" Visibility="Collapsed" />
                     <local:PluginsView x:Name="PluginsContent" Visibility="Collapsed" />
+                </Grid>
                 </Grid>
             </Grid>
         </Border>

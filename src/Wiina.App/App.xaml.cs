@@ -5,6 +5,8 @@ using System.Text;
 using System.Text.Json;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
+using Windows.UI;
+using Windows.UI.ViewManagement;
 using Wiina.App.Localization;
 using Wiina.App.Services;
 using Wiina.App.Views;
@@ -35,6 +37,9 @@ public partial class App : Application
     private static InspectorWindow? _inspectorWindow;
     private static FiltersWindow? _filtersWindow;
     private static VideoQualityWindow? _qualityWindow;
+    private static UISettings? _themeUiSettings;
+    private static DispatcherQueue? _themeDispatcher;
+    private static (ThemeMode Mode, ElementTheme Theme)? _lastTheme;
     private readonly Dictionary<string, MainWindow> _windows = new();
 
     /// <summary>True when settings.json did not exist before this launch.</summary>
@@ -69,6 +74,12 @@ public partial class App : Application
         Settings = SettingsStore.Load();
         Loc.Initialize(Settings.Language);
         Loc.LanguageChanged += (_, _) => ApplyLanguageToOpenWindows();
+        // WinUI freezes Application.RequestedTheme at launch, so System mode
+        // has to follow the Windows app theme through our own listener.
+        _themeDispatcher = DispatcherQueue.GetForCurrentThread();
+        _themeUiSettings = new UISettings();
+        _themeUiSettings.ColorValuesChanged += OnSystemColorValuesChanged;
+        ApplyThemeIfChanged();
         UnhandledException += OnUnhandledException;
         AppDomain.CurrentDomain.UnhandledException += (_, e) =>
             LogCrash(e.ExceptionObject as Exception);
@@ -102,6 +113,108 @@ public partial class App : Application
             if (window is { Content: DependencyObject root } && seen.Add(window))
             {
                 Loc.ApplyToTree(root);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Resolves the effective element theme. System mode deliberately returns a
+    /// concrete dark/light value instead of <see cref="ElementTheme.Default"/>:
+    /// WinUI locks the application theme at launch, so only an explicit value
+    /// per window can follow a Windows theme switch at runtime.
+    /// </summary>
+    public static ElementTheme ResolveTheme()
+    {
+        return Settings.Theme switch
+        {
+            ThemeMode.Dark => ElementTheme.Dark,
+            ThemeMode.Light => ElementTheme.Light,
+            _ => DetectSystemTheme(),
+        };
+    }
+
+    /// <summary>True when <see cref="ResolveTheme"/> currently paints dark chrome.</summary>
+    public static bool IsDarkTheme => ResolveTheme() != ElementTheme.Light;
+
+    private static ElementTheme DetectSystemTheme()
+    {
+        try
+        {
+            UISettings uiSettings = _themeUiSettings ??= new UISettings();
+            Color background = uiSettings.GetColorValue(UIColorType.Background);
+            // The app background colour is near-white in light mode and
+            // near-black in dark mode; luminance is enough to tell them apart.
+            int luminance = (background.R * 299 + background.G * 587 + background.B * 114) / 1000;
+            return luminance < 128 ? ElementTheme.Dark : ElementTheme.Light;
+        }
+        catch (Exception)
+        {
+            // Hosts without UISettings support keep the launch-time theme.
+            return Application.Current?.RequestedTheme == ApplicationTheme.Light
+                ? ElementTheme.Light
+                : ElementTheme.Dark;
+        }
+    }
+
+    private static void OnSystemColorValuesChanged(UISettings sender, object args)
+    {
+        if (Settings.Theme != ThemeMode.System)
+        {
+            return;
+        }
+
+        // UISettings raises this on a worker thread; element themes are
+        // thread-affine, so hop back to the dispatcher that owns the windows.
+        _themeDispatcher?.TryEnqueue(ApplyThemeIfChanged);
+    }
+
+    /// <summary>
+    /// Pushes the resolved theme to every open window when the effective
+    /// (mode, theme) pair changed. Cheap enough to call after each save.
+    /// </summary>
+    private static void ApplyThemeIfChanged()
+    {
+        ElementTheme theme = ResolveTheme();
+        if (_lastTheme == (Settings.Theme, theme))
+        {
+            return;
+        }
+
+        _lastTheme = (Settings.Theme, theme);
+        ApplyThemeToOpenWindows();
+    }
+
+    /// <summary>
+    /// Re-applies the resolved theme to every open window immediately. Windows
+    /// call this when they change the theme in memory, before the debounced
+    /// settings save lands, so the other windows never keep the old theme.
+    /// </summary>
+    public static void SyncOpenWindowThemes() => ApplyThemeIfChanged();
+
+    /// <summary>Re-applies the current theme to every open player and tool window.</summary>
+    private static void ApplyThemeToOpenWindows()
+    {
+        ElementTheme theme = ResolveTheme();
+
+        foreach (MainWindow window in CurrentApp._windows.Values)
+        {
+            window.ApplyTheme();
+        }
+
+        ApplyWindow(_settingsWindow);
+        ApplyWindow(_keyBindingWindow);
+        ApplyWindow(_welcomeWindow);
+        ApplyWindow(_aboutWindow);
+        ApplyWindow(_logWindow);
+        ApplyWindow(_inspectorWindow);
+        ApplyWindow(_filtersWindow);
+        ApplyWindow(_qualityWindow);
+
+        void ApplyWindow(Window? window)
+        {
+            if (window?.Content is FrameworkElement root)
+            {
+                WindowShell.ApplyTheme(window, root, theme);
             }
         }
     }
@@ -235,6 +348,9 @@ public partial class App : Application
             Loc.ApplyPreference(Settings.Language);
             SettingsStore.Save(Settings);
             SettingsChanged?.Invoke();
+            // Every window resolves its own theme; a save is the one place that
+            // sees a row or quick-menu toggle from any window.
+            ApplyThemeIfChanged();
         }
         catch (Exception ex)
         {

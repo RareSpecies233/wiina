@@ -43,12 +43,7 @@ public sealed partial class PipWindow : Window
     {
         InitializeComponent();
 
-        Root.RequestedTheme = App.Settings.Theme switch
-        {
-            Wiina.Core.Models.ThemeMode.Light => ElementTheme.Light,
-            Wiina.Core.Models.ThemeMode.System => ElementTheme.Default,
-            _ => ElementTheme.Dark,
-        };
+        Root.RequestedTheme = App.ResolveTheme();
 
         _rasterizationScale = rasterizationScale > 0.1 ? rasterizationScale : 1.0;
 
@@ -89,7 +84,7 @@ public sealed partial class PipWindow : Window
         }
 
         AppWindow.MoveAndResize(new RectInt32(x, y, width, height));
-        WindowInterop.SetImmersiveDarkMode(this, dark: true);
+        WindowInterop.SetImmersiveDarkMode(this, dark: App.IsDarkTheme);
         WindowInterop.Attach(
             this,
             (int)PipGeometry.MinWidth,
@@ -125,6 +120,16 @@ public sealed partial class PipWindow : Window
 
     /// <summary>"Return to main window" (button or double-click).</summary>
     public event EventHandler? RestoreRequested;
+
+    /// <summary>
+    /// Re-resolves the app theme for this HWND while PiP stays open. The player
+    /// calls this from <c>MainWindow.ApplyTheme</c> after a theme switch.
+    /// </summary>
+    public void ApplyTheme()
+    {
+        Root.RequestedTheme = App.ResolveTheme();
+        WindowInterop.SetImmersiveDarkMode(this, dark: App.IsDarkTheme);
+    }
 
     /// <summary>User closed the window (Alt+F4 / taskbar / close button).</summary>
     public event EventHandler? UserClosed;

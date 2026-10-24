@@ -1,4 +1,4 @@
-# Known issues — Wiina v1.2.4
+# Known issues — Wiina v1.2.5
 
 Nothing here is hidden; these are known limitations of the v1 build.
 
@@ -31,12 +31,44 @@ Nothing here is hidden; these are known limitations of the v1 build.
   visible; Always keeps capturing even when the chrome is hidden. In all three
   the blur trails the video by up to 125 ms and is a 320 px-scaled approximation.
 - **Solid has no see-through by design.** The opaque `ChromeSolidBrush` (16 %
-  system accent) is the point of that mode: it never shows the video behind it.
-- **OSD message text stays opaque in every mode**, and a Docked layout keeps
-  the titlebar opaque because its video is below the bar, not behind it.
+  system accent, dark base `#FF202227` since 1.2.5) is the point of that mode:
+  it never shows the video behind it. Since 1.2.5 the panels do not assign
+  `Background` from code at all - the blur/tint layers are children toggled by
+  `Visibility` - so Solid cannot become translucent.
+- **The OSD card follows the same mode**: glass in 固定 / 动态 / 始终, opaque in
+  Solid, and it never takes input. A Docked layout keeps the titlebar opaque
+  because its video is below the bar, not behind it.
 - `WIINA_BLUR_DISABLE=1` forces the Solid fallback; Win2D/capture failures also
   degrade to Solid instead of crashing. The last blurred frame can stay visible
   while playback is paused or the player is idle.
+
+## Live theme switching
+
+- Settings, the quick-settings menu and the player window now apply a theme
+  change immediately in every open window (player titlebar + floating OSC,
+  settings, sidebar, PiP, about, log viewer, inspector, filters, key bindings,
+  welcome, quality editor). `ThemeMode.System` follows the current Windows app
+  theme; the WinUI `ElementTheme.Default` value does not, so the app resolves a
+  concrete dark/light value itself.
+- Limitation: `DesktopAcrylicBackdrop` (Mica/acrylic) window material may lag one
+  paint behind the XAML content on some systems. Switching between light and dark
+  while **High contrast** is on was not visually verified in this cycle.
+- The change is a one-off recolour of the chrome brushes plus a theme push per
+  window; it does not affect measured playback cost.
+
+## Quality presets
+
+- The editor exposes **23 mpv video-quality options** in seven groups (缩放 /
+  色度 / 抖动 / 去色带 / 插帧 / 同步 / 其他). Values are stored as raw mpv
+  strings, so a profile can name an option this build does not know; unknown
+  imported keys are preserved in JSON and shown as “未识别（保留原值）”, but are
+  deliberately **not applied**.
+- Only two built-in presets exist: **默认** and **性能优先**. Legacy names
+  (`自动（IINA 默认）`, `均衡`, `高质量`, enum values `Balanced` /
+  `HighQuality`) normalize to 默认 on import.
+- The **去色带** master switch lives in 设置 → 视频 → 画面 (`video.deband`,
+  default off). The profile deband iterations/threshold/range/grain are always
+  saved but reach mpv only while that switch is on.
 
 ## Statistics panel
 
@@ -145,6 +177,9 @@ Nothing here is hidden; these are known limitations of the v1 build.
 - Win2D ships again for the glass modes (`Microsoft.Graphics.Canvas.dll` and
   `Microsoft.Graphics.Canvas.Interop.dll`); Solid mode does not need it.
 - Both executables are unsigned; Windows SmartScreen may warn.
+- The quality editor window grew to 23 options; its 9 numeric fields are compact
+  `NumberBox` controls with spin buttons (1.2.5 fixed a layout bug where the
+  spinner column was missing and the buttons overlapped the label).
 
 ## Network
 

@@ -29,13 +29,7 @@ public sealed partial class WelcomeWindow : Window
     {
         InitializeComponent();
         Title = Loc.T("welcome.title");
-        bool dark = App.Settings.Theme != ThemeMode.Light;
-        RootGrid.RequestedTheme = App.Settings.Theme switch
-        {
-            ThemeMode.Dark => ElementTheme.Dark,
-            ThemeMode.Light => ElementTheme.Light,
-            _ => ElementTheme.Default,
-        };
+        RootGrid.RequestedTheme = App.ResolveTheme();
 
         WindowShell.Prepare(
             this,
@@ -44,7 +38,7 @@ public sealed partial class WelcomeWindow : Window
             resizable: true,
             extendTitleBar: true,
             titleBar: DragRegion,
-            dark: dark,
+            dark: App.IsDarkTheme,
             minWidth: 480,
             minHeight: 360);
         RestoreWindowBounds();
