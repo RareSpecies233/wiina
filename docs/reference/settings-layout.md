@@ -1,33 +1,33 @@
-# Wiina 设置布局快照（1.3.2）
+# Wiina 设置布局快照（1.3.3）
 
-> **快照版本（1.3.2）**：本文是 v1.3.2 工作树的设置界面完整快照：**11 页 / 128 行 / 39 个页面-分节对（34 个不同分节名）/ 568 个本地化键**。
+> **快照版本（1.3.3）**：本文是 v1.3.3 工作树的设置界面完整快照：**11 页 / 130 行 / 40 个页面-分节对（35 个不同分节名）/ 569 个本地化键**。
 > 与 1.2.7（12 页 / 125 行）相比：缩略图 8 项从「界面」迁到「视频 → 缩略图」，「工具」页并入「高级 → 工具」，
 > 字体设置页与 `utilities.font` 移除，`utilities.open-url` 移到「通用 → 播放与历史」，
 > `general.screenshot-folder` 移到「视频 → 截图」，新增 `control.media-keys`。完整增删移清单见 §6.4。
 
 > **用途**：设置菜单重排的对照基线。这是一份**静态快照**（非运行时截图）；所有数字与行内容都从源码统计，
-> 日期 **2026-10-25**（Asia/Hong_Kong），分支 **`feat/v1.3.2`**。
+> 日期 **2026-10-25**（Asia/Hong_Kong），分支 **`feat/v1.3.3`**。
 >
-> **覆盖范围**：设置窗口的 11 个页面 / 128 行 / 控件与保存管线、设置能打开的全部窗口与对话框、
+> **覆盖范围**：设置窗口的 11 个页面 / 130 行 / 控件与保存管线、设置能打开的全部窗口与对话框、
 > 主窗口快速设置侧栏（含重复入口）、以及仍未解决的布局问题与重构契约。
 >
 > **不包含**：主窗口菜单、OSC 菜单、欢迎窗口（不由设置打开）、插件系统（未实现）。
 >
-> **如何重新生成**：以 `src/Wiina.Core/Settings/SettingsCatalog.cs` 的 `BuildRows()` 为准（`rows.Add(` 共 128 处），
+> **如何重新生成**：以 `src/Wiina.Core/Settings/SettingsCatalog.cs` 的 `BuildRows()` 为准（`rows.Add(` 共 130 处），
 > 配合 `SettingsLocalization.cs` 的英文覆盖、`AppSettings*.cs` 的默认值、`SettingsWindow.xaml.cs` 的
-> `RunActionAsync` 分支、`MainWindow.Sidebar.cs` 的 `OnQuickSettingChanged` 分支统计。行号均指 1.3.2 工作树（以 id 为准；新增行会使后续行号顺延）。
+> `RunActionAsync` 分支、`MainWindow.Sidebar.cs` 的 `OnQuickSettingChanged` 分支统计。行号均指 1.3.3 工作树（以 id 为准；新增行会使后续行号顺延）。
 
 ## 0. 关键数字
 
 | 项目 | 数值 | 来源 |
 |---|---|---|
 | 设置页面 | **11**（目录 11 项；`KeyBindings` 在页枚举里但左栏跳过，可点击 10 项 + 1 个隐藏页） | `SettingsCatalog.cs:19-29`；`SettingsWindow.xaml.cs` `BuildNavigation` |
-| 设置行 | **128** | `SettingsCatalog.cs` `BuildRows()` 内 `rows.Add(` 计数 |
-| 页面-分节对 / 分节名 | **39** / **34**（音频「音量与输出」、字幕「外观」各出现两次；`重置` ×4） | 各页 `Section` 序列 |
-| 动作行（Button） | **30** | 第 3 节控件列 = Button |
+| 设置行 | **130** | `SettingsCatalog.cs` `BuildRows()` 内 `rows.Add(` 计数 |
+| 页面-分节对 / 分节名 | **40** / **35**（音频「音量与输出」、字幕「外观」各出现两次；`重置` ×4） | 各页 `Section` 序列 |
+| 动作行（Button） | **32** | 第 3 节控件列 = Button |
 | 行控件种类 | 8 种目录行（Toggle/Choice/Number/Text/AudioDevice/Action/Info/Font）+ 2 种运行时面板（KeyBindings / PluginList） | `SettingsModels.cs` |
-| 英文覆盖 | **128 / 128** 行（1.3.1 补齐，1.3.2 无缺口） | `SettingsLocalization.cs` |
-| 快速设置分支 | **51** 个 `QuickSettingKey`，向 **42** 个不同的 `_settings.*` 属性写入（40 个设置项 + 2 个侧栏状态：`SidebarSide`/`SidebarWidth`） | `MainWindow.Sidebar.cs` `OnQuickSettingChanged` |
+| 英文覆盖 | **130 / 130** 行（1.3.1 补齐缺口，1.3.3 仍无缺口） | `SettingsLocalization.cs` |
+| 快速设置分支 | **51** 个 `QuickSettingKey`，向 **47** 个不同的 `_settings.*` 属性写入（含 2 个侧栏状态：`SidebarSide`/`SidebarWidth`） | `MainWindow.Sidebar.cs` `OnQuickSettingChanged` |
 | 设置窗口默认尺寸 | 760×600 DIP（最小 600×440） | `AppSettings.Shell.cs`；`SettingsWindow.xaml:9-11` |
 | 左栏宽度 / 搜索框 | 200 DIP（内容区最小 400）；搜索框 280×32 | `SettingsWindow.xaml:160-186` |
 
@@ -153,7 +153,7 @@ English：Interface — Window layout, OSC, and OSD
 | `ui.fullscreen-battery` | ToggleSwitch | 全屏电量 | 全屏时在左下角显示电池与充电状态。 | 默认 true | Fullscreen battery — Show battery and charging state in the bottom-left corner in fullscreen. | SettingsCatalog.cs:221 → `AppSettings.FullscreenBatteryEnabled` |
 | `ui.fullscreen-title` | ToggleSwitch | 全屏显示标题 | 在左下角状态行中包含当前媒体标题。 | 默认 false（C# 默认） | Show title in fullscreen — Include the current media title in the bottom-left status line. | SettingsCatalog.cs:227 → `AppSettings.FullscreenTitleEnabled` |
 
-### 页面：视频（`Video`，38 行，图标 U+E714）
+### 页面：视频（`Video`，37 行，图标 U+E714）
 
 页面说明：解码、缩略图、画质与画面变换
 
@@ -377,7 +377,7 @@ English：Key Bindings — Recording, conflict detection, import/export
 |---|---|---|---|---|---|---|
 | `keybindings.editor` | 快捷键编辑器 | 按键绑定 | 录制新的组合键、处理冲突、导入/导出 JSON；更改立即生效并持久化。 | 默认 "info" | Key bindings — Record new chords, resolve conflicts, and import/export JSON; changes apply immediately and persist. | SettingsCatalog.cs:812 → `AppSettings.MpvLogLevel` |
 
-### 页面：高级（`Advanced`，13 行，图标 U+E7EF）
+### 页面：高级（`Advanced`，15 行，图标 U+E7EF）
 
 页面说明：诊断、工具、文件夹与维护
 
@@ -412,6 +412,8 @@ English：Advanced — Diagnostics, tools, folders, and maintenance
 | `advanced.clear-history` | Button | 清空播放历史 | 删除最近文件与断点续播记录。 | 动作 `clear-history`（SettingsWindow.xaml.cs:1129） | Clear playback history — Delete recent files and resume positions. | SettingsCatalog.cs:888 |
 | `advanced.clear-thumbnails` | Button | 清空缩略图缓存 | 释放内存中的时间轴缩略图。 | 动作 `clear-thumbnails`（SettingsWindow.xaml.cs:1141） | Clear thumbnail cache — Free timeline thumbnails held in memory. | SettingsCatalog.cs:893 |
 | `advanced.reset-all` | Button | 重置所有设置 | 恢复全部默认值（按键绑定、窗口位置与历史不受影响）。 | 动作 `reset-all-settings`（SettingsWindow.xaml.cs:1145） | Reset all settings — Restore every default (key bindings, window position, and history are unaffected). | SettingsCatalog.cs:898 |
+| `advanced.music-mode` | Button | 进入音乐模式 | 切换为迷你播放器，只保留封面与播放控制；设置窗口会先关闭。 | 动作 `enter-music-mode`（`SettingsWindow.xaml.cs:1159` 关闭设置窗后调用 `MainWindow.EnterMusicMode`） | Enter music mode — Switch to the mini player with cover art and playback controls only; the settings window closes first. |
+| `advanced.mini-player` | Button | 进入迷你播放器 | 把主窗口收成小尺寸播放器；设置窗口会先关闭再切换。 | 动作 `enter-mini-player`（`:1160`，调用 `MainWindow.EnterMiniPlayerMode`；两者均无默认快捷键） | Enter mini player — Shrink the main window into the small player; the settings window closes before switching. |
 
 ### 页面：文件关联（`Integration`，7 行，图标 U+E71B）
 
@@ -644,9 +646,17 @@ English：Plugins — Not implemented yet (Stage 9): placeholder and folder entr
 | 删除 | `video.thumbnail-cache` | 内存缓存改为覆盖当前视频全部时间点，不再需要「缓存数量」下限；128 行 |
 | 行为 | 缩略图预览总开关 | 关闭时完全不生成：不建 headless mpv、不写磁盘、不做缓存定容；磁盘缓存由「缩略图磁盘缓存」单独控制 |
 | 行为 | 截图文件命名 | 由 `wiina-时间戳.png` 改为 `视频名-时-分-秒-毫秒.png`，同名递增、非法字符清洗 |
+### 6.7 1.3.2 → 1.3.3 增删移清单
+
+| 变化 | 行 id | 说明 |
+|---|---|---|
+| 新增 | `advanced.music-mode` | 进入音乐模式；高级 → 模式，动作 `enter-music-mode`，关闭设置窗后切换 |
+| 新增 | `advanced.mini-player` | 进入迷你播放器；高级 → 模式，动作 `enter-mini-player` |
+| 不变 | 其余行 | 行 id 与顺序未变；菜单不再提供迷你/音乐入口，音频文件也不再自动进入迷你播放器 |
+
 ## 7. 附录 A：全部行 id（按字母序）
 
-> 1.3.2 删除 ideo.thumbnail-cache 后已整体重新编号（共 128 行）；1.3.1 新增的 3 行仍在表内。
+> 1.3.3 新增 `advanced.music-mode`、`advanced.mini-player` 后已整体重新编号（共 130 行）；1.3.2 删除了 `video.thumbnail-cache`，1.3.1 新增的 3 行仍在表内。
 
 | # | 行 id | 页面 / 分节 | 控件 |
 |---|---|---|---|
@@ -656,128 +666,130 @@ English：Plugins — Not implemented yet (Stage 9): placeholder and folder entr
 | 4 | `advanced.export-diagnostics` | Advanced / 诊断 | Button |
 | 5 | `advanced.libmpv` | Advanced / 诊断 | 只读文本 |
 | 6 | `advanced.log-folder` | Advanced / 文件夹 | Button |
-| 7 | `advanced.mpv-log` | Advanced / 诊断 | ComboBox |
-| 8 | `advanced.renderer` | Advanced / 诊断 | 只读文本 |
-| 9 | `advanced.reset-all` | Advanced / 维护 | Button |
-| 10 | `audio.auto-external` | Audio / 音量与输出 | ToggleSwitch |
-| 11 | `audio.delay` | Audio / 延迟 | NumberBox |
-| 12 | `audio.device` | Audio / 音量与输出 | ComboBox（音频设备） |
-| 13 | `audio.equalizer` | Audio / 均衡器 | ToggleSwitch |
-| 14 | `audio.equalizer-preset` | Audio / 均衡器 | ComboBox |
-| 15 | `audio.equalizer-reset` | Audio / 均衡器 | Button |
-| 16 | `audio.filters` | Audio / 滤镜 | Button |
-| 17 | `audio.max-volume` | Audio / 音量与输出 | NumberBox |
-| 18 | `audio.mute` | Audio / 音量与输出 | ToggleSwitch |
-| 19 | `audio.reset` | Audio / 重置 | Button |
-| 20 | `audio.volume` | Audio / 音量与输出 | NumberBox |
-| 21 | `control.invert-wheel` | Control / 鼠标与滚轮 | ToggleSwitch |
-| 22 | `control.key-profile` | Control / 键盘 | ComboBox |
-| 23 | `control.keybindings` | Control / 键盘 | Button |
-| 24 | `control.media-keys` | Control / 键盘 | ToggleSwitch |
-| 25 | `control.reset` | Control / 重置 | Button |
-| 26 | `control.single-click` | Control / 鼠标与滚轮 | ComboBox |
-| 27 | `control.wheel-seek` | Control / 鼠标与滚轮 | NumberBox |
-| 28 | `control.wheel-volume` | Control / 鼠标与滚轮 | NumberBox |
-| 29 | `general.animations` | General / 外观与启动 | ToggleSwitch |
-| 30 | `general.auto-playlist` | General / 播放列表 | ComboBox |
-| 31 | `general.data-folder` | Advanced / 文件夹 | Button |
-| 32 | `general.edge-snap` | Ui / 窗口与 OSC | ToggleSwitch |
-| 33 | `general.language` | General / 外观与启动 | ComboBox |
-| 34 | `general.restore-window` | General / 播放与历史 | ToggleSwitch |
-| 35 | `general.resume` | General / 播放与历史 | ToggleSwitch |
-| 36 | `general.screenshot-folder` | Video / 截图 | Button |
-| 37 | `general.theme` | General / 外观与启动 | ComboBox |
-| 38 | `general.welcome` | General / 外观与启动 | ToggleSwitch |
-| 39 | `integration.associate-admin` | Integration / 关联格式 | Button |
-| 40 | `integration.associate-all` | Integration / 关联格式 | Button |
-| 41 | `integration.associate-audio` | Integration / 关联格式 | Button |
-| 42 | `integration.associate-video` | Integration / 关联格式 | Button |
-| 43 | `integration.default-apps` | Integration / 维护 | Button |
-| 44 | `integration.status` | Integration / 文件关联 | 只读文本 |
-| 45 | `integration.unregister` | Integration / 维护 | Button |
-| 46 | `keybindings.editor` | KeyBindings / 快捷键 |  |
-| 47 | `network.cache` | Network / 缓存 | NumberBox |
-| 48 | `network.cache-back` | Network / 缓存 | NumberBox |
-| 49 | `network.proxy` | Network / 网络 | TextBox |
-| 50 | `network.timeout` | Network / 网络 | NumberBox |
-| 51 | `network.user-agent` | Network / 网络 | TextBox |
-| 52 | `network.ytdlp` | Network / 网络 | TextBox |
-| 53 | `plugin.folder` | Plugin / 插件 | Button |
-| 54 | `plugin.install` | Plugin / 插件 | Button |
-| 55 | `plugin.list` | Plugin / 已安装插件 |  |
-| 56 | `plugin.status` | Plugin / 插件 | 只读文本 |
-| 57 | `subtitles.ass-override` | Subtitles / ASS 字幕 | ComboBox |
-| 58 | `subtitles.bold` | Subtitles / ASS 字幕 | ToggleSwitch |
-| 59 | `subtitles.border` | Subtitles / 外观 | NumberBox |
-| 60 | `subtitles.color` | Subtitles / 外观 | ComboBox |
-| 61 | `subtitles.delay` | Subtitles / 时间与位置 | NumberBox |
-| 62 | `subtitles.font` | Subtitles / 外观 | 字体按钮 |
-| 63 | `subtitles.font-size` | Subtitles / 外观 | NumberBox |
-| 64 | `subtitles.image-warning` | Subtitles / ASS 字幕 | 只读文本 |
-| 65 | `subtitles.italic` | Subtitles / ASS 字幕 | ToggleSwitch |
-| 66 | `subtitles.position` | Subtitles / 时间与位置 | NumberBox |
-| 67 | `subtitles.preferred-language` | Subtitles / 智能加载 | ComboBox |
-| 68 | `subtitles.reset` | Subtitles / 重置 | Button |
-| 69 | `subtitles.scale` | Subtitles / 外观 | NumberBox |
-| 70 | `subtitles.smart-autoload` | Subtitles / 智能加载 | ToggleSwitch |
-| 71 | `subtitles.visible` | Subtitles / 外观 | ToggleSwitch |
-| 72 | `ui.always-on-top` | Ui / 窗口与 OSC | ToggleSwitch |
-| 73 | `ui.blur-mode` | Ui / 窗口与 OSC | ComboBox |
-| 74 | `ui.fullscreen-battery` | Ui / 全屏状态栏 | ToggleSwitch |
-| 75 | `ui.fullscreen-clock` | Ui / 全屏状态栏 | ToggleSwitch |
-| 76 | `ui.fullscreen-title` | Ui / 全屏状态栏 | ToggleSwitch |
-| 77 | `ui.layout` | Ui / 窗口与 OSC | ComboBox |
-| 78 | `ui.lock-aspect` | Ui / 窗口与 OSC | ToggleSwitch |
-| 79 | `ui.osc-autohide` | Ui / 窗口与 OSC | ToggleSwitch |
-| 80 | `ui.osc-autohide-seconds` | Ui / 窗口与 OSC | NumberBox |
-| 81 | `ui.osc-position` | Ui / 窗口与 OSC | ComboBox |
-| 82 | `ui.osc-prev-next` | Ui / 窗口与 OSC | ComboBox |
-| 83 | `ui.osd-duration` | Ui / OSD | NumberBox |
-| 84 | `ui.osd-enabled` | Ui / OSD | ToggleSwitch |
-| 85 | `ui.osd-position` | Ui / OSD | ComboBox |
-| 86 | `ui.osd-size` | Ui / OSD | NumberBox |
-| 87 | `ui.sidebar-side` | Ui / 窗口与 OSC | ComboBox |
-| 88 | `ui.sidebar-width` | Ui / 窗口与 OSC | NumberBox |
-| 89 | `utilities.about` | Advanced / 工具 | Button |
-| 90 | `utilities.inspector` | Advanced / 工具 | Button |
-| 91 | `utilities.log-viewer` | Advanced / 工具 | Button |
-| 92 | `utilities.open-url` | General / 播放与历史 | Button |
-| 93 | `video.aspect` | Video / 画面 | ComboBox |
-| 94 | `video.crop` | Video / 画面 | ComboBox |
-| 95 | `video.deband` | Video / 画面 | ToggleSwitch |
-| 96 | `video.deinterlace` | Video / 解码 | ToggleSwitch |
-| 97 | `video.delogo-enabled` | Video / 去 Logo | ToggleSwitch |
-| 98 | `video.delogo-height` | Video / 去 Logo | NumberBox |
-| 99 | `video.delogo-width` | Video / 去 Logo | NumberBox |
-| 100 | `video.delogo-x` | Video / 去 Logo | NumberBox |
-| 101 | `video.delogo-y` | Video / 去 Logo | NumberBox |
-| 102 | `video.filters` | Video / 滤镜 | Button |
-| 103 | `video.flip-h` | Video / 画面 | ToggleSwitch |
-| 104 | `video.flip-v` | Video / 画面 | ToggleSwitch |
-| 105 | `video.frame-drop-osd` | Video / 解码 | ToggleSwitch |
-| 106 | `video.hdr-compute-peak` | Video / HDR 与色彩 | ComboBox |
-| 107 | `video.hwdec` | Video / 解码 | ToggleSwitch |
-| 108 | `video.hwdec-mode` | Video / 解码 | ComboBox |
-| 109 | `video.mpv-stats` | Video / 解码 | ToggleSwitch |
-| 110 | `video.output-levels` | Video / HDR 与色彩 | ComboBox |
-| 111 | `video.pan-x` | Video / 画面 | NumberBox |
-| 112 | `video.pan-y` | Video / 画面 | NumberBox |
-| 113 | `video.quality` | Video / 画面 | ComboBox |
-| 114 | `video.quality-editor` | Video / 画面 | Button |
-| 115 | `video.reset` | Video / 重置 | Button |
-| 116 | `video.rotation` | Video / 画面 | ComboBox |
-| 117 | `video.screenshot-subtitles` | Video / 截图 | ToggleSwitch |
-| 118 | `video.target-peak` | Video / HDR 与色彩 | NumberBox |
-| 119 | `video.thumbnail-acceleration` | Video / 缩略图 | ComboBox |
-| 120 | `video.thumbnail-bucket` | Video / 缩略图 | NumberBox |
-| 121 | `video.thumbnail-cache-clear` | Video / 缩略图 | Button |
-| 122 | `video.thumbnail-cache-mb` | Video / 缩略图 | NumberBox |
-| 123 | `video.thumbnail-hint` | Video / 缩略图 | 只读文本 |
-| 124 | `video.thumbnail-preview` | Video / 缩略图 | ToggleSwitch |
-| 125 | `video.thumbnail-slow` | Video / 缩略图 | ToggleSwitch |
-| 126 | `video.thumbnail-width` | Video / 缩略图 | NumberBox |
-| 127 | `video.tone-mapping` | Video / HDR 与色彩 | ComboBox |
-| 128 | `video.zoom` | Video / 画面 | NumberBox |
+| 7 | `advanced.mini-player` | Advanced / 模式 | Button |
+| 8 | `advanced.music-mode` | Advanced / 模式 | Button |
+| 9 | `advanced.mpv-log` | Advanced / 诊断 | ComboBox |
+| 10 | `advanced.renderer` | Advanced / 诊断 | 只读文本 |
+| 11 | `advanced.reset-all` | Advanced / 维护 | Button |
+| 12 | `audio.auto-external` | Audio / 音量与输出 | ToggleSwitch |
+| 13 | `audio.delay` | Audio / 延迟 | NumberBox |
+| 14 | `audio.device` | Audio / 音量与输出 | ComboBox（音频设备） |
+| 15 | `audio.equalizer` | Audio / 均衡器 | ToggleSwitch |
+| 16 | `audio.equalizer-preset` | Audio / 均衡器 | ComboBox |
+| 17 | `audio.equalizer-reset` | Audio / 均衡器 | Button |
+| 18 | `audio.filters` | Audio / 滤镜 | Button |
+| 19 | `audio.max-volume` | Audio / 音量与输出 | NumberBox |
+| 20 | `audio.mute` | Audio / 音量与输出 | ToggleSwitch |
+| 21 | `audio.reset` | Audio / 重置 | Button |
+| 22 | `audio.volume` | Audio / 音量与输出 | NumberBox |
+| 23 | `control.invert-wheel` | Control / 鼠标与滚轮 | ToggleSwitch |
+| 24 | `control.key-profile` | Control / 键盘 | ComboBox |
+| 25 | `control.keybindings` | Control / 键盘 | Button |
+| 26 | `control.media-keys` | Control / 键盘 | ToggleSwitch |
+| 27 | `control.reset` | Control / 重置 | Button |
+| 28 | `control.single-click` | Control / 鼠标与滚轮 | ComboBox |
+| 29 | `control.wheel-seek` | Control / 鼠标与滚轮 | NumberBox |
+| 30 | `control.wheel-volume` | Control / 鼠标与滚轮 | NumberBox |
+| 31 | `general.animations` | General / 外观与启动 | ToggleSwitch |
+| 32 | `general.auto-playlist` | General / 播放列表 | ComboBox |
+| 33 | `general.data-folder` | Advanced / 文件夹 | Button |
+| 34 | `general.edge-snap` | Ui / 窗口与 OSC | ToggleSwitch |
+| 35 | `general.language` | General / 外观与启动 | ComboBox |
+| 36 | `general.restore-window` | General / 播放与历史 | ToggleSwitch |
+| 37 | `general.resume` | General / 播放与历史 | ToggleSwitch |
+| 38 | `general.screenshot-folder` | Video / 截图 | Button |
+| 39 | `general.theme` | General / 外观与启动 | ComboBox |
+| 40 | `general.welcome` | General / 外观与启动 | ToggleSwitch |
+| 41 | `integration.associate-admin` | Integration / 关联格式 | Button |
+| 42 | `integration.associate-all` | Integration / 关联格式 | Button |
+| 43 | `integration.associate-audio` | Integration / 关联格式 | Button |
+| 44 | `integration.associate-video` | Integration / 关联格式 | Button |
+| 45 | `integration.default-apps` | Integration / 维护 | Button |
+| 46 | `integration.status` | Integration / 文件关联 | 只读文本 |
+| 47 | `integration.unregister` | Integration / 维护 | Button |
+| 48 | `keybindings.editor` | KeyBindings / 快捷键 |  |
+| 49 | `network.cache` | Network / 缓存 | NumberBox |
+| 50 | `network.cache-back` | Network / 缓存 | NumberBox |
+| 51 | `network.proxy` | Network / 网络 | TextBox |
+| 52 | `network.timeout` | Network / 网络 | NumberBox |
+| 53 | `network.user-agent` | Network / 网络 | TextBox |
+| 54 | `network.ytdlp` | Network / 网络 | TextBox |
+| 55 | `plugin.folder` | Plugin / 插件 | Button |
+| 56 | `plugin.install` | Plugin / 插件 | Button |
+| 57 | `plugin.list` | Plugin / 已安装插件 |  |
+| 58 | `plugin.status` | Plugin / 插件 | 只读文本 |
+| 59 | `subtitles.ass-override` | Subtitles / ASS 字幕 | ComboBox |
+| 60 | `subtitles.bold` | Subtitles / ASS 字幕 | ToggleSwitch |
+| 61 | `subtitles.border` | Subtitles / 外观 | NumberBox |
+| 62 | `subtitles.color` | Subtitles / 外观 | ComboBox |
+| 63 | `subtitles.delay` | Subtitles / 时间与位置 | NumberBox |
+| 64 | `subtitles.font` | Subtitles / 外观 | 字体按钮 |
+| 65 | `subtitles.font-size` | Subtitles / 外观 | NumberBox |
+| 66 | `subtitles.image-warning` | Subtitles / ASS 字幕 | 只读文本 |
+| 67 | `subtitles.italic` | Subtitles / ASS 字幕 | ToggleSwitch |
+| 68 | `subtitles.position` | Subtitles / 时间与位置 | NumberBox |
+| 69 | `subtitles.preferred-language` | Subtitles / 智能加载 | ComboBox |
+| 70 | `subtitles.reset` | Subtitles / 重置 | Button |
+| 71 | `subtitles.scale` | Subtitles / 外观 | NumberBox |
+| 72 | `subtitles.smart-autoload` | Subtitles / 智能加载 | ToggleSwitch |
+| 73 | `subtitles.visible` | Subtitles / 外观 | ToggleSwitch |
+| 74 | `ui.always-on-top` | Ui / 窗口与 OSC | ToggleSwitch |
+| 75 | `ui.blur-mode` | Ui / 窗口与 OSC | ComboBox |
+| 76 | `ui.fullscreen-battery` | Ui / 全屏状态栏 | ToggleSwitch |
+| 77 | `ui.fullscreen-clock` | Ui / 全屏状态栏 | ToggleSwitch |
+| 78 | `ui.fullscreen-title` | Ui / 全屏状态栏 | ToggleSwitch |
+| 79 | `ui.layout` | Ui / 窗口与 OSC | ComboBox |
+| 80 | `ui.lock-aspect` | Ui / 窗口与 OSC | ToggleSwitch |
+| 81 | `ui.osc-autohide` | Ui / 窗口与 OSC | ToggleSwitch |
+| 82 | `ui.osc-autohide-seconds` | Ui / 窗口与 OSC | NumberBox |
+| 83 | `ui.osc-position` | Ui / 窗口与 OSC | ComboBox |
+| 84 | `ui.osc-prev-next` | Ui / 窗口与 OSC | ComboBox |
+| 85 | `ui.osd-duration` | Ui / OSD | NumberBox |
+| 86 | `ui.osd-enabled` | Ui / OSD | ToggleSwitch |
+| 87 | `ui.osd-position` | Ui / OSD | ComboBox |
+| 88 | `ui.osd-size` | Ui / OSD | NumberBox |
+| 89 | `ui.sidebar-side` | Ui / 窗口与 OSC | ComboBox |
+| 90 | `ui.sidebar-width` | Ui / 窗口与 OSC | NumberBox |
+| 91 | `utilities.about` | Advanced / 工具 | Button |
+| 92 | `utilities.inspector` | Advanced / 工具 | Button |
+| 93 | `utilities.log-viewer` | Advanced / 工具 | Button |
+| 94 | `utilities.open-url` | General / 播放与历史 | Button |
+| 95 | `video.aspect` | Video / 画面 | ComboBox |
+| 96 | `video.crop` | Video / 画面 | ComboBox |
+| 97 | `video.deband` | Video / 画面 | ToggleSwitch |
+| 98 | `video.deinterlace` | Video / 解码 | ToggleSwitch |
+| 99 | `video.delogo-enabled` | Video / 去 Logo | ToggleSwitch |
+| 100 | `video.delogo-height` | Video / 去 Logo | NumberBox |
+| 101 | `video.delogo-width` | Video / 去 Logo | NumberBox |
+| 102 | `video.delogo-x` | Video / 去 Logo | NumberBox |
+| 103 | `video.delogo-y` | Video / 去 Logo | NumberBox |
+| 104 | `video.filters` | Video / 滤镜 | Button |
+| 105 | `video.flip-h` | Video / 画面 | ToggleSwitch |
+| 106 | `video.flip-v` | Video / 画面 | ToggleSwitch |
+| 107 | `video.frame-drop-osd` | Video / 解码 | ToggleSwitch |
+| 108 | `video.hdr-compute-peak` | Video / HDR 与色彩 | ComboBox |
+| 109 | `video.hwdec` | Video / 解码 | ToggleSwitch |
+| 110 | `video.hwdec-mode` | Video / 解码 | ComboBox |
+| 111 | `video.mpv-stats` | Video / 解码 | ToggleSwitch |
+| 112 | `video.output-levels` | Video / HDR 与色彩 | ComboBox |
+| 113 | `video.pan-x` | Video / 画面 | NumberBox |
+| 114 | `video.pan-y` | Video / 画面 | NumberBox |
+| 115 | `video.quality` | Video / 画面 | ComboBox |
+| 116 | `video.quality-editor` | Video / 画面 | Button |
+| 117 | `video.reset` | Video / 重置 | Button |
+| 118 | `video.rotation` | Video / 画面 | ComboBox |
+| 119 | `video.screenshot-subtitles` | Video / 截图 | ToggleSwitch |
+| 120 | `video.target-peak` | Video / HDR 与色彩 | NumberBox |
+| 121 | `video.thumbnail-acceleration` | Video / 缩略图 | ComboBox |
+| 122 | `video.thumbnail-bucket` | Video / 缩略图 | NumberBox |
+| 123 | `video.thumbnail-cache-clear` | Video / 缩略图 | Button |
+| 124 | `video.thumbnail-cache-mb` | Video / 缩略图 | NumberBox |
+| 125 | `video.thumbnail-hint` | Video / 缩略图 | 只读文本 |
+| 126 | `video.thumbnail-preview` | Video / 缩略图 | ToggleSwitch |
+| 127 | `video.thumbnail-slow` | Video / 缩略图 | ToggleSwitch |
+| 128 | `video.thumbnail-width` | Video / 缩略图 | NumberBox |
+| 129 | `video.tone-mapping` | Video / HDR 与色彩 | ComboBox |
+| 130 | `video.zoom` | Video / 画面 | NumberBox |
 
 ## 8. 附录 B：本地化键与覆盖
 
@@ -797,7 +809,7 @@ SettingsLocalization.cs：页面英文 11 条、分节英文 34 条、行英文 
 | `Integration` | 文件关联 | File Associations | 7 | 7 |
 | `Plugin` | 插件 | Plugins | 4 | 3 |
 
-未覆盖英文的行：**无**（1.3.2 为 128 / 128 全部有英文）。1.3.0 缺失的 4 行（`general.screenshot-folder`、`advanced.config-folder`、`advanced.log-folder`、`plugin.folder`）已补齐。
+未覆盖英文的行：**无**（1.3.3 为 130 / 130 全部有英文）。1.3.0 缺失的 4 行（`general.screenshot-folder`、`advanced.config-folder`、`advanced.log-folder`、`plugin.folder`）已补齐。
 
 设置窗口与子窗口的 loc:Loc 键（共 54 个）：
 

@@ -114,12 +114,6 @@ public sealed partial class MainWindow : Window
     private bool _windowActive = true;
     private int _openFlyoutCount;
 
-    /// <summary>
-    /// Set when the pointer leaves the window while a chrome flyout still owns
-    /// it; the hide is deferred until the popup closes so the menu is not
-    /// yanked away, then applied immediately instead of after the idle delay.
-    /// </summary>
-    private bool _pointerLeftDuringFlyout;
     private MenuFlyout? _applicationMenu;
     private Storyboard? _chromeStoryboard;
     private bool? _animationsEnabled;
@@ -512,7 +506,6 @@ public sealed partial class MainWindow : Window
         }
 
         Point point = e.GetCurrentPoint(RootGrid).Position;
-        _pointerLeftDuringFlyout = false;
         _oscState.EnterWindow(point.X, point.Y, _idleClock.Elapsed);
         ShowChrome();
     }
@@ -565,15 +558,10 @@ public sealed partial class MainWindow : Window
 
         // A flyout or an active drag temporarily owns the pointer outside the
         // window; hiding the chrome underneath it made menus and sliders appear
-        // to "go crazy" mid-interaction. Remember the leave so the popup's
-        // close handler can hide immediately instead of waiting out the timer.
+        // to "go crazy" mid-interaction. The flyout close handler resumes the
+        // countdown once the popup is gone.
         if (_openFlyoutCount > 0 || WindowInterop.IsLeftButtonDown())
         {
-            if (!WindowInterop.IsCursorInsideWindow(this))
-            {
-                _pointerLeftDuringFlyout = true;
-            }
-
             return;
         }
 
@@ -663,7 +651,6 @@ public sealed partial class MainWindow : Window
         flyout.Opened += (_, _) =>
         {
             _openFlyoutCount++;
-            _pointerLeftDuringFlyout = false;
             _autoHideTimer.Stop();
         };
         flyout.Closed += (_, _) =>
@@ -674,27 +661,11 @@ public sealed partial class MainWindow : Window
                 return;
             }
 
-            // A popup dismissed by clicking another window leaves the pointer
-            // outside but may not raise another root PointerExited, so finish
-            // the leave that was deferred while the flyout was open.
-            bool leftWhileOpen = _pointerLeftDuringFlyout;
-            _pointerLeftDuringFlyout = false;
-            if (leftWhileOpen &&
-                !WindowInterop.IsCursorInsideWindow(this) &&
-                !WindowInterop.IsLeftButtonDown() &&
-                ChromeInteractionEnabled)
-            {
-                _pointerOverChrome = false;
-                _oscState.ResetPointerAnchor();
-                CloseApplicationMenu();
-                if (!HasVisibleSidebar)
-                {
-                    HideChrome(force: true);
-                    return;
-                }
-            }
-
-            ResetAutoHideTimer();
+            // Resume the countdown one dispatcher tick later: the popup's own
+            // teardown still reports a pointer outside the player, and hiding
+            // here immediately made the OSC flicker out the moment a menu item
+            // was picked. The delayed pass sees the settled pointer position.
+            DispatcherQueue.TryEnqueue(ResetAutoHideTimer);
         };
     }
 
@@ -732,10 +703,11 @@ public sealed partial class MainWindow : Window
         {
             // Report a rate, not a raw delta: one hiccup becomes a visible burst
             // in a three-second window, which is exactly what the user cares about.
-            // The notice is pinned to the left edge, vertically centered: the
-            // default top-centre OSD slot is fully covered whenever the title bar
-            // is visible. The ASS tags only affect this one message, so every
-            // other OSD keeps its configured position.
+            // The notice is placed at the centre of the picture: the default
+            // top-centre OSD slot is fully covered whenever the title bar is
+            // visible, and the left edge reads as an accident. The ASS tags only
+            // affect this one message, so every other OSD keeps its configured
+            // position.
             long osdWidth = Int(player, "osd-width");
             long osdHeight = Int(player, "osd-height");
             if (osdWidth <= 0 || osdHeight <= 0)
@@ -750,11 +722,11 @@ public sealed partial class MainWindow : Window
                 osdHeight = 1080;
             }
 
-            long left = Math.Max(16, osdWidth / 40);
-            long center = osdHeight / 2;
+            long centerX = osdWidth / 2;
+            long centerY = osdHeight / 2;
             player.Command(
                 "show-text",
-                $"{{\\an4\\pos({left},{center})}}Wiina · 丢帧 {notice.PerMinute:0} 帧/分" +
+                $"{{\\an5\\pos({centerX},{centerY})}}Wiina · 丢帧 {notice.PerMinute:0} 帧/分" +
                 $"（{notice.Seconds:0.#} 秒内 {notice.Drops} 帧，累计 {notice.TotalDrops}）",
                 "2200");
             Trace(
@@ -2649,6 +2621,7 @@ public sealed partial class MainWindow : Window
     private void ShowWindowMenu()
     {
         var flyout = new MenuFlyout();
+        TrackChromeFlyout(flyout);
         AddItem(Loc.T("icons.newWindow"), NewWindow);
         AddItem(Loc.T("icons.openInNew"), () => _ = OpenInNewWindowAsync());
         AddItem(Loc.T("icons.closeWindow"), CloseCurrentWindow);
@@ -2658,11 +2631,8 @@ public sealed partial class MainWindow : Window
         AddItem("2×", () => ResizeToScale(2.0));
         flyout.Items.Add(new MenuFlyoutSeparator());
         AddItem(Loc.T("icons.fit"), FitToScreen);
+        AddItem(Loc.T("icons.pip"), TogglePictureInPicture);
         AddItem(Loc.T("icons.fullscreen"), EnterFullscreenFromMenu);
-        AddItem(Loc.T("icons.pip"), () => RequestMode(
-            _mode.Current == PlayerMode.PiP ? PlayerMode.Normal : PlayerMode.PiP));
-        AddItem(Loc.T("icons.mini"), () => RequestMode(
-            _mode.Current == PlayerMode.Mini ? PlayerMode.Normal : PlayerMode.Mini));
         flyout.Items.Add(new MenuFlyoutSeparator());
         AddItem(_settings.AlwaysOnTop ? Loc.T("icons.unpin") : Loc.T("icons.pin"), TogglePin);
         flyout.ShowAt(TitleBar);
@@ -2674,6 +2644,10 @@ public sealed partial class MainWindow : Window
             flyout.Items.Add(item);
         }
     }
+
+    /// <summary>PiP has no default chord; the title-bar menu is one of its entry points.</summary>
+    private void TogglePictureInPicture() =>
+        RequestMode(_mode.Current == PlayerMode.PiP ? PlayerMode.Normal : PlayerMode.PiP);
 
     /// <summary>
     /// 0.5× / 1× / 2×: the window is sized from the actual video resolution

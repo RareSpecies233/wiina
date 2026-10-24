@@ -572,7 +572,6 @@ public sealed partial class MainWindow
         }
 
         _resumeApplied = false;
-        _autoMiniPath = null;
         _abLoopStage = 0;
         _abLoopA = 0;
         _abLoopB = 0;
@@ -1572,7 +1571,6 @@ public sealed partial class MainWindow
 
             RefreshSidebarTracks();
             UpdateAlbumArtState();
-            MaybeAutoEnterMini();
             UpdateMiniPlayerState();
         });
     }
@@ -1865,7 +1863,6 @@ public sealed partial class MainWindow
             UpdateAlbumArtState();
             UpdateMiniPlayerState();
             UpdateMiniPlaylist();
-            MaybeAutoEnterMini();
             UpdateSmtc();
             StartThumbnailPreGeneration();
         }

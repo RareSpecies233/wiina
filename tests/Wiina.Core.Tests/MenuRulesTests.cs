@@ -32,8 +32,10 @@ public sealed class MenuRulesTests
         Assert.Contains("video.fullscreen", windowIds);
         Assert.Contains("video.topmost", windowIds);
         Assert.Contains("video.lock-aspect", windowIds);
-        Assert.Contains("video.music-mode", windowIds);
+        // PiP stays in 窗口 (it swaps the window for the floating player);
+        // mini/music mode is no longer reachable from any menu.
         Assert.Contains("video.pip", windowIds);
+        Assert.DoesNotContain("video.music-mode", windowIds);
 
         // ... while the pure picture family never appears there.
         Assert.DoesNotContain("video.aspect", windowIds);
@@ -72,7 +74,7 @@ public sealed class MenuRulesTests
         Assert.True(Find(state, "file.close").Enabled);
         Assert.True(Find(state, "window.settings").Enabled);
         Assert.True(Find(state, "video.fullscreen").Enabled);
-        Assert.True(Find(state, "video.pip").Enabled);
+        Assert.True(Find(state, "window.maximize").Enabled);
     }
 
     [Fact]
@@ -168,19 +170,20 @@ public sealed class MenuRulesTests
     }
 
     [Fact]
-    public void ModeItemsAreCheckedAndTitledByState()
+    public void FullscreenItemLabelFollowsState()
     {
         var fullscreen = new MenuState { HasMedia = true, IsFullscreen = true };
         Assert.True(Find(fullscreen, "video.fullscreen").IsChecked);
         Assert.Equal("退出全屏", Find(fullscreen, "video.fullscreen").Label);
 
-        var pip = new MenuState { IsPip = true };
-        Assert.True(Find(pip, "video.pip").IsChecked);
-        Assert.Equal("退出画中画", Find(pip, "video.pip").Label);
-
-        var mini = new MenuState { IsMini = true };
-        Assert.True(Find(mini, "video.music-mode").IsChecked);
-        Assert.Equal("退出音乐模式", Find(mini, "video.music-mode").Label);
+        // The mini/music menu entry was removed (mini mode now lives only under
+        // Settings → 高级 → 模式); PiP keeps its 窗口 entry.
+        string[] ids = MenuCatalog
+            .Flatten(MenuCatalog.Build(new MenuState()))
+            .Select(item => item.Id)
+            .ToArray();
+        Assert.DoesNotContain("video.music-mode", ids);
+        Assert.Contains("video.pip", ids);
     }
 
     [Fact]

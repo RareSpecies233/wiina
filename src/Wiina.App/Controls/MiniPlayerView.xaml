@@ -24,52 +24,38 @@
         <!-- Generated cover tile: only visible when the file has no embedded
              album art (mpv draws real cover art as a video track behind us). -->
         <Grid x:Name="FallbackCover" Grid.Row="0">
-            <Border>
-                <Border.Background>
-                    <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
-                        <GradientStop Offset="0" Color="#FF1F3A5F" />
-                        <GradientStop Offset="0.55" Color="#FF2B1E45" />
-                        <GradientStop Offset="1" Color="#FF101114" />
-                    </LinearGradientBrush>
-                </Border.Background>
-            </Border>
+            <Border Background="{ThemeResource MiniCoverFallbackBrush}" />
             <TextBlock x:Name="FallbackInitial"
                        Text="♪"
                        FontFamily="Segoe UI Symbol"
                        FontSize="72"
                        FontWeight="SemiBold"
-                       Foreground="#B3FFFFFF"
+                       Foreground="{ThemeResource SecondaryTextBrush}"
                        HorizontalAlignment="Center"
                        VerticalAlignment="Center" />
         </Grid>
 
-        <Border Grid.Row="0" VerticalAlignment="Bottom" Height="180">
-            <Border.Background>
-                <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
-                    <GradientStop Offset="0" Color="#00000000" />
-                    <GradientStop Offset="1" Color="#E6000000" />
-                </LinearGradientBrush>
-            </Border.Background>
-        </Border>
+        <Border Grid.Row="0" VerticalAlignment="Bottom" Height="180"
+                Background="{ThemeResource MiniCoverScrimBrush}" />
 
         <!-- Info and controls occupy the same 72 DIP strip and cross-fade
              (0.2 s, spec §10.2). -->
         <Grid x:Name="InfoPanel"
               Grid.Row="1"
-              Background="#FF101114"
+              Background="{ThemeResource PanelBrush}"
               Padding="16,8">
             <StackPanel VerticalAlignment="Center" Spacing="2">
                 <TextBlock x:Name="TitleText"
                            Text="Wiina"
                            FontSize="15"
                            FontWeight="SemiBold"
-                           Foreground="#FFFFFFFF"
+                           Foreground="{ThemeResource PrimaryTextBrush}"
                            TextTrimming="CharacterEllipsis"
                            MaxLines="1" />
                 <TextBlock x:Name="ArtistText"
                            Text=""
                            FontSize="12"
-                           Foreground="#B3FFFFFF"
+                           Foreground="{ThemeResource SecondaryTextBrush}"
                            TextTrimming="CharacterEllipsis"
                            MaxLines="1" />
             </StackPanel>
@@ -77,7 +63,7 @@
 
         <Grid x:Name="ControlArea"
               Grid.Row="1"
-              Background="#FF101114"
+              Background="{ThemeResource PanelBrush}"
               Opacity="0"
               IsHitTestVisible="False">
             <Grid.RowDefinitions>
@@ -94,7 +80,7 @@
                 <TextBlock x:Name="PositionText"
                            Text="0:00"
                            FontSize="10"
-                           Foreground="#B3FFFFFF"
+                           Foreground="{ThemeResource SecondaryTextBrush}"
                            VerticalAlignment="Center" />
                 <Slider x:Name="ProgressSlider"
                         Grid.Column="1"
@@ -106,7 +92,7 @@
                            Grid.Column="2"
                            Text="0:00"
                            FontSize="10"
-                           Foreground="#B3FFFFFF"
+                           Foreground="{ThemeResource SecondaryTextBrush}"
                            VerticalAlignment="Center"
                            HorizontalAlignment="Right" />
             </Grid>
@@ -166,8 +152,8 @@
                 Margin="0,0,12,84"
                 Padding="12,10"
                 CornerRadius="18"
-                Background="#E615171B"
-                BorderBrush="#26FFFFFF"
+                Background="{ThemeResource PanelBrush}"
+                BorderBrush="{ThemeResource PanelBorderBrush}"
                 BorderThickness="1"
                 Visibility="Collapsed">
             <StackPanel Spacing="6">
@@ -181,7 +167,7 @@
                     <TextBlock x:Name="VolumeText"
                                Text="100%"
                                FontSize="11"
-                               Foreground="#B3FFFFFF"
+                               Foreground="{ThemeResource SecondaryTextBrush}"
                                VerticalAlignment="Center" />
                 </StackPanel>
                 <Slider x:Name="VolumeSlider"
@@ -196,8 +182,8 @@
                 Grid.RowSpan="2"
                 Width="300"
                 HorizontalAlignment="Right"
-                Background="#F215171B"
-                BorderBrush="#26FFFFFF"
+                Background="{ThemeResource PanelBrush}"
+                BorderBrush="{ThemeResource PanelBorderBrush}"
                 BorderThickness="1,0,0,0"
                 Visibility="Collapsed">
             <Grid RowSpacing="8" Padding="12">

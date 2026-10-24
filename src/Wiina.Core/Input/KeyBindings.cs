@@ -75,7 +75,8 @@ public static class PlayerActionCatalog
         new(PlayerActions.ToggleFullscreen, "全屏", "窗口"),
         new(PlayerActions.ExitFullscreen, "退出全屏", "窗口"),
         new(PlayerActions.PictureInPicture, "画中画", "窗口"),
-        new(PlayerActions.MusicMode, "音乐模式", "模式"),
+        // 音乐模式/迷你播放器 has no bindable action: the mode is reachable only
+        // from 设置 → 高级 → 模式, so it must not appear in the shortcut editor.
         new(PlayerActions.Sidebar, "侧边栏", "界面"),
         new(PlayerActions.SidebarSettings, "快速设置侧栏", "界面"),
         new(PlayerActions.Layout, "布局切换", "界面"),

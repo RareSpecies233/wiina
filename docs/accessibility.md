@@ -1,6 +1,6 @@
 # Accessibility, localization, DPI and motion
 
-This document records what Wiina v1.3.2 implements, how it was checked, and
+This document records what Wiina v1.3.3 implements, how it was checked, and
 what is intentionally limited. It is a summary, not a certification.
 
 ## 1. Keyboard and focus
@@ -39,6 +39,16 @@ what is intentionally limited. It is a summary, not a certification.
   The unavailable-device placeholder is part of the item text, so it is read
   out instead of being hidden.
 - Media chrome (OSC, title bar, mini player) is removed from the Tab order and from click focus since 1.3.2 (`IsTabStop=false` / `AllowFocusOnInteraction=false`), so Space/Enter always reach the player; Tab in mini/fullscreen is returned to the root grid. Every chrome action also has a keyboard shortcut.
+- The mini player is deliberately keyboard-inert. Since 1.3.3
+  `MiniPlayerView.SetKeyboardMouseOnly` clears `IsTabStop` and
+  `AllowFocusOnInteraction` on every focusable descendant (sliders and lazily
+  created playlist rows included) and restores the saved values on exit, so Tab
+  and Space no longer land on mini-player buttons. There is no keyboard path to
+  those controls; use the normal player window for keyboard operation.
+- The two mode actions added in 1.3.3 (Settings → Advanced → Modes) are ordinary
+  action rows: reachable with Tab/Enter, announced by their localized title and
+  description, and they close the settings window before switching mode. They
+  have no default shortcut, so they do not appear in the shortcut editor.
 - Since 1.3.1 the thumbnail-acceleration row is a two-item ComboBox
   (Auto/CPU only), the previous/next-behaviour row is a ComboBox
   (track skip / ±5 s), and screenshot-subtitles is a ToggleSwitch; all three use
@@ -134,9 +144,9 @@ generic text containers mirror.
 
 ## 7. Localization coverage
 
-- Runtime catalog: 568 keys in `UiStringCatalog.cs`, each with a non-empty
+- Runtime catalog: 569 keys in `UiStringCatalog.cs`, each with a non-empty
   zh-Hans and English string. Coverage includes the title bar, OSC, OSD, menus,
-  sidebars, quick settings, all settings pages (11 pages, 128 rows;
+  sidebars, quick settings, all settings pages (11 pages, 130 rows;
   page titles, summaries, section headers, row titles/descriptions/choices), welcome/about/log/inspector/open-URL
   dialogs, filter/equalizer windows, playlist/chapters, mini player, PiP badge,
   the 1.2.6 audio-device labels (auto/refresh/unavailable), the 1.2.7 thumbnail-cache and administrator-association labels, the 1.3.1

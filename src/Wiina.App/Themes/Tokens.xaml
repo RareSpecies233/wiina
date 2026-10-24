@@ -69,6 +69,18 @@
             <SolidColorBrush x:Key="SliderBufferBrush" Color="#33FFFFFF" />
             <SolidColorBrush x:Key="SliderPlayedBrush" Color="#4DFFFFFF" />
             <SolidColorBrush x:Key="SliderThumbBrush" Color="#CCFFFFFF" />
+            <!-- Mini mode: generated cover tile when the file has no album art,
+                 and the scrim that fades it into the info strip. Brushes (not
+                 raw colours) so HighContrast can swap in a flat system brush. -->
+            <LinearGradientBrush x:Key="MiniCoverFallbackBrush" StartPoint="0,0" EndPoint="1,1">
+                <GradientStop Offset="0" Color="#FF1F3A5F" />
+                <GradientStop Offset="0.55" Color="#FF2B1E45" />
+                <GradientStop Offset="1" Color="#FF101114" />
+            </LinearGradientBrush>
+            <LinearGradientBrush x:Key="MiniCoverScrimBrush" StartPoint="0,0" EndPoint="0,1">
+                <GradientStop Offset="0" Color="#00000000" />
+                <GradientStop Offset="1" Color="#E6000000" />
+            </LinearGradientBrush>
             <SolidColorBrush x:Key="SidebarTabSelectedBrush" Color="#26FFFFFF" />
             <SolidColorBrush x:Key="SidebarTabSelectedBorderBrush" Color="#4DFFFFFF" />
             <SolidColorBrush x:Key="SidebarTabHoverBrush" Color="#14FFFFFF" />
@@ -130,6 +142,17 @@
             <SolidColorBrush x:Key="SliderBufferBrush" Color="#4D000000" />
             <SolidColorBrush x:Key="SliderPlayedBrush" Color="#4D000000" />
             <SolidColorBrush x:Key="SliderThumbBrush" Color="#CC000000" />
+            <!-- Mini mode cover fallback follows the light theme (grey/white)
+                 instead of the dark music-tile gradient. -->
+            <LinearGradientBrush x:Key="MiniCoverFallbackBrush" StartPoint="0,0" EndPoint="1,1">
+                <GradientStop Offset="0" Color="#FFE7EDF6" />
+                <GradientStop Offset="0.55" Color="#FFEDE7F6" />
+                <GradientStop Offset="1" Color="#FFF7F7F7" />
+            </LinearGradientBrush>
+            <LinearGradientBrush x:Key="MiniCoverScrimBrush" StartPoint="0,0" EndPoint="0,1">
+                <GradientStop Offset="0" Color="#00000000" />
+                <GradientStop Offset="1" Color="#E6FFFFFF" />
+            </LinearGradientBrush>
             <SolidColorBrush x:Key="SidebarTabSelectedBrush" Color="#14000000" />
             <SolidColorBrush x:Key="SidebarTabSelectedBorderBrush" Color="#33000000" />
             <SolidColorBrush x:Key="SidebarTabHoverBrush" Color="#0A000000" />
@@ -181,6 +204,10 @@
             <SolidColorBrush x:Key="SliderBufferBrush" Color="{ThemeResource SystemColorGrayTextColor}" />
             <SolidColorBrush x:Key="SliderPlayedBrush" Color="{ThemeResource SystemColorHighlightColor}" />
             <SolidColorBrush x:Key="SliderThumbBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <!-- Flat system brushes in HighContrast: the mini cover must not
+                 paint a dark gradient over the contrast theme. -->
+            <SolidColorBrush x:Key="MiniCoverFallbackBrush" Color="{ThemeResource SystemColorWindowColor}" />
+            <SolidColorBrush x:Key="MiniCoverScrimBrush" Color="Transparent" />
             <SolidColorBrush x:Key="SidebarTabSelectedBrush" Color="{ThemeResource SystemColorHighlightColor}" />
             <SolidColorBrush x:Key="SidebarTabSelectedBorderBrush" Color="{ThemeResource SystemColorHighlightColor}" />
             <SolidColorBrush x:Key="SidebarTabHoverBrush" Color="{ThemeResource SystemColorHighlightColor}" />

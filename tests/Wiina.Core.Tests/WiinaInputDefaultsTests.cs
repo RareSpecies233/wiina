@@ -15,9 +15,9 @@ public sealed class WiinaInputDefaultsTests
     {
         IReadOnlyList<KeyBindingSetting> bindings = WiinaInputDefaults.Create();
 
-        // 83 binding lines; PLAY/PAUSE/PLAYPAUSE/PLAYONLY/PAUSEONLY collapse onto
-        // the single Windows media play/pause key, leaving 79 unique chords.
-        Assert.Equal(79, bindings.Count);
+        // 84 binding lines; PLAY/PAUSE/PLAYPAUSE/PLAYONLY/PAUSEONLY collapse onto
+        // the single Windows media play/pause key, leaving 80 unique chords.
+        Assert.Equal(80, bindings.Count);
         Assert.All(bindings, binding => Assert.True(
             PlayerActionCatalog.IsKnown(binding.Action),
             binding.Action));

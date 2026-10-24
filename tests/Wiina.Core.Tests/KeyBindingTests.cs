@@ -25,6 +25,43 @@ public sealed class KeyBindingTests
     }
 
     [Fact]
+    public void DefaultProfileBindsPictureInPictureButNotMusicMode()
+    {
+        // PiP advertises Ctrl+Shift+P in the 窗口 menu, so the shipped profile
+        // must actually bind it; the mini/music mode is reachable only from
+        // Settings → 高级 → 模式 and gets no chord.
+        IReadOnlyList<KeyBindingSetting> defaults = KeyBindings.CreateDefaults();
+        Assert.Contains(defaults, binding =>
+            binding.Action == PlayerActions.PictureInPicture &&
+            string.Equals(
+                KeyBindings.NormalizeChord(binding.Chord),
+                "Ctrl+Shift+P",
+                StringComparison.OrdinalIgnoreCase));
+        Assert.DoesNotContain(defaults, binding =>
+            binding.Action == PlayerActions.MusicMode);
+        Assert.DoesNotContain(defaults, binding =>
+            string.Equals(
+                KeyBindings.NormalizeChord(binding.Chord),
+                "Ctrl+Shift+M",
+                StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public void ShortcutEditorOmitsMusicMode()
+    {
+        // Removing the catalog row also removes the 模式 category from the
+        // editor, so no shortcut row can lead back into the mini player.
+        Assert.DoesNotContain(
+            PlayerActionCatalog.All,
+            action => action.Action == PlayerActions.MusicMode);
+        Assert.Contains(
+            PlayerActionCatalog.All,
+            action => action.Action == PlayerActions.PictureInPicture);
+        Assert.False(PlayerActionCatalog.IsKnown(PlayerActions.MusicMode));
+        Assert.DoesNotContain("模式", PlayerActionCatalog.Categories);
+    }
+
+    [Fact]
     public void EmptyStoredListMeansDefaults()
     {
         Assert.Equal(

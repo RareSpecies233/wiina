@@ -30,7 +30,6 @@ public sealed partial class MainWindow
     private string? _artist;
     private string? _album;
     private bool _hasAlbumArt;
-    private string? _autoMiniPath;
     private int _miniDragWindowX;
     private int _miniDragWindowY;
     private int _miniDragCursorX;
@@ -527,6 +526,9 @@ public sealed partial class MainWindow
         MiniPlayer.Visibility = Visibility.Visible;
         MiniPlayer.SetAnimationsEnabled(AnimationsEnabled);
         MiniPlayer.ResetControls();
+        // Mouse-only chrome: Tab must not park focus on a mini control, where
+        // Space would press it instead of pausing. Restored on exit below.
+        MiniPlayer.SetKeyboardMouseOnly(true);
         MiniPlayer.SetPlaylistExpanded(_settings.MusicModeShowPlaylist);
         UpdateMiniPlayerState();
         UpdateMiniPlaylist();
@@ -549,6 +551,7 @@ public sealed partial class MainWindow
         }
 
         MiniPlayer.Visibility = Visibility.Collapsed;
+        MiniPlayer.SetKeyboardMouseOnly(false);
         MiniPlayer.HideVolumeBubble();
         MiniPlayer.SetPlaylistExpanded(false);
         MiniPlayer.HideControls();
@@ -657,25 +660,6 @@ public sealed partial class MainWindow
         }
 
         AppWindow.Move(new PointInt32(x, y));
-    }
-
-    private void MaybeAutoEnterMini()
-    {
-        if (!_settings.AutoSwitchToMusicMode ||
-            _mode.Current != PlayerMode.Normal ||
-            string.IsNullOrWhiteSpace(_currentPath) ||
-            string.Equals(_autoMiniPath, _currentPath, StringComparison.Ordinal))
-        {
-            return;
-        }
-
-        if (!MediaModeAdvice.IsAudioOnly(_trackList))
-        {
-            return;
-        }
-
-        _autoMiniPath = _currentPath;
-        RequestMode(PlayerMode.Mini);
     }
 
     private void UpdateAlbumArtState()

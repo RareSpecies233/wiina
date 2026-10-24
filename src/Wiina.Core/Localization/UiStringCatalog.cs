@@ -243,6 +243,7 @@ public static class UiStrings
     public const string settings_install = "settings.install";
     public const string settings_toggle = "settings.toggle";
     public const string settings_run = "settings.run";
+    public const string settings_enter = "settings.enter";
     public const string settings_unavailable = "settings.unavailable";
     public const string settings_searchEmpty = "settings.searchEmpty";
     public const string settings_pressKeys = "settings.pressKeys";
@@ -887,6 +888,7 @@ public static class UiStrings
         Add("settings.install", "安装", "Install");
         Add("settings.toggle", "切换", "Toggle");
         Add("settings.run", "执行", "Run");
+        Add("settings.enter", "进入", "Enter");
         Add("settings.unavailable", "不可用：{0}", "Unavailable: {0}");
         Add("settings.searchEmpty", "没有匹配的设置。", "No matching settings.");
         Add("settings.pressKeys", "请按下快捷键…", "Press shortcut keys…");

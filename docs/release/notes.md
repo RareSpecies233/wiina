@@ -1,11 +1,66 @@
 # Wiina release notes
 
-Release date (1.3.2): 2026-10-25
+Release date (1.3.3): 2026-10-25
 
 Windows-native, IINA-inspired mpv front end built with WinUI 3, Windows App
 SDK 2.5, and libmpv.
 
-## What's new in 1.3.2
+## What's new in 1.3.3
+
+### Opening a chrome menu no longer hides the OSC
+
+Every menu that belongs to the player chrome is now registered with
+`TrackChromeFlyout` (`MainWindow.Menu.cs` for the OSC "more" menu,
+`MainWindow.xaml.cs` for the custom title-bar window menu). `Opened` stops the
+auto-hide timer and increments a popup counter; `Closed` decrements it and, only
+when the count reaches zero, restarts the countdown one dispatcher tick later.
+Nested submenus share the same popup and therefore keep the counter at 1. A
+pointer-exit raised by the menu's own popup window no longer hides the chrome
+immediately. The cursor follows the chrome as before.
+
+### The mini player ignores Tab and Space
+
+`MiniPlayerView.SetKeyboardMouseOnly` walks every focusable descendant (slider
+and lazily created playlist rows included), records its original
+`IsTabStop`/`AllowFocusOnInteraction`, and turns both off while the mini player
+is open; leaving the mini player restores them. Pressing Tab three times and
+then Space keeps playback paused, and mouse clicks on mini-player buttons still
+work. Mini-player controls being unreachable from the keyboard is a deliberate
+trade-off.
+
+### The light theme mini player is no longer black
+
+`Themes/Tokens.xaml` defines `MiniCoverFallbackBrush` and `MiniCoverScrimBrush`
+for all three theme dictionaries, and the fourteen hard-coded dark brushes in
+`MiniPlayerView.xaml` now use `ThemeResource`. Light renders light grey/white,
+Dark keeps the dark gradient, and High Contrast uses a flat system colour.
+
+### The frame-drop notice sits in the centre of the picture
+
+The transient notice now uses `\an5\pos(osdWidth/2, osdHeight/2)`, falling back
+to 1920×1080 when `osd-width`/`osd-height` are unavailable, and disappears after
+2.2 s. It is no longer covered by a visible title bar, and the statistics card
+keeps its own dropped-frame rows.
+
+### Mini and music mode now live in Settings only
+
+The 窗口 menu keeps picture-in-picture (`video.pip`, labelled `Ctrl+Shift+P`
+from the real profile) but the `video.music-mode` and mini-player entries are
+gone. Audio files no longer switch to the mini player automatically
+(`AutoSwitchToMusicMode` is kept only as a stored value). The single entry point
+is Settings → Advanced → Modes (`advanced.music-mode`,
+`advanced.mini-player`); both close the settings window before switching, have
+no default shortcut, and no longer appear in the shortcut editor. The PiP menu
+label is now derived from the shipped Wiina profile, and the profile test suite
+asserts that PiP has a chord while music mode has no action and no chord.
+
+### Counts
+
+Eleven settings pages, 130 rows, 569 UI strings, 830 tests. Artifacts:
+`artifacts/wiina-1.3.3-win-x64.zip` and
+`artifacts/Wiina-Setup-1.3.3-x64.exe` (sizes and SHA-256 recorded in
+`docs/acceptance/v1.3.3.md` after packaging).
+## 1.3.2 — previous release
 
 ### Cursor hiding actually works now
 

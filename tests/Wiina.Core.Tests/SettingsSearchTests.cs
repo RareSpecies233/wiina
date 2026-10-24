@@ -1,3 +1,4 @@
+using Wiina.Core.Menu;
 using Wiina.Core.Settings;
 using Xunit;
 
@@ -400,5 +401,31 @@ public sealed class SettingsSearchTests
         {
             Assert.Contains(id, actions);
         }
+    }
+
+    [Fact]
+    public void AdvancedModesSectionIsTheOnlyMiniPlayerEntry()
+    {
+        SettingsRowDefinition music = Assert.Single(
+            SettingsCatalog.Rows, row => row.Id == "advanced.music-mode");
+        SettingsRowDefinition mini = Assert.Single(
+            SettingsCatalog.Rows, row => row.Id == "advanced.mini-player");
+
+        foreach (SettingsRowDefinition row in new[] { music, mini })
+        {
+            Assert.Equal(SettingsPageId.Advanced, row.Page);
+            Assert.Equal("模式", row.Section);
+            Assert.Equal(SettingsRowKind.Action, row.Kind);
+            Assert.Null(row.UnavailableReason);
+        }
+
+        Assert.Equal("enter-music-mode", music.ActionId);
+        Assert.Equal("enter-mini-player", mini.ActionId);
+
+        // The menu catalogue must not expose these modes any more; only the
+        // settings entries above may route into them.
+        Assert.DoesNotContain(
+            MenuCatalog.Flatten(MenuCatalog.Build(new MenuState())),
+            item => item.Id is "video.music-mode" or "video.mini-player" or "window.music-mode");
     }
 }

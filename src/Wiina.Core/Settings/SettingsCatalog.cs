@@ -916,6 +916,16 @@ public static class SettingsCatalog
             "重置所有设置", "恢复全部默认值（按键绑定、窗口位置与历史不受影响）。",
             "reset-all-settings",
             "reset all settings 重置 全部"));
+        rows.Add(ActionRow(
+            "advanced.music-mode", SettingsPageId.Advanced, "模式",
+            "进入音乐模式", "切换为迷你播放器，只保留封面与播放控制；设置窗口会先关闭。",
+            "enter-music-mode",
+            "music mode mini player 音乐 模式 迷你 播放器"));
+        rows.Add(ActionRow(
+            "advanced.mini-player", SettingsPageId.Advanced, "模式",
+            "进入迷你播放器", "把主窗口收成小尺寸播放器；设置窗口会先关闭再切换。",
+            "enter-mini-player",
+            "mini player small window 迷你 播放器 小窗"));
 
         // --------------------------------------------------------- Integration
         rows.Add(InfoRow(

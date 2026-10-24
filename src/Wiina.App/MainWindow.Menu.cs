@@ -29,6 +29,11 @@ public sealed partial class MainWindow
         _applicationMenu?.Hide();
         var flyout = new MenuFlyout();
         _applicationMenu = flyout;
+        // Park the auto-hide countdown for as long as the overflow menu (or any
+        // submenu) is open: its popup is a separate window, so hovering items
+        // raises PointerExited on the player and would otherwise hide the OSC
+        // (and the cursor) underneath the menu.
+        TrackChromeFlyout(flyout);
         flyout.Closed += (_, _) =>
         {
             if (ReferenceEquals(_applicationMenu, flyout))
@@ -1090,6 +1095,22 @@ public sealed partial class MainWindow
             ShowOsd(Loc.T("menu.operationFailed"), ex.Message);
         }
     }
+
+    /// <summary>
+    /// Advanced-settings entry points for the mini player. The window menu used
+    /// to carry 音乐模式/迷你播放器, but those entries (and their chords) were
+    /// removed; Settings → 高级 → 模式 is the only remaining way in.
+    /// </summary>
+    public void EnterMiniPlayerMode()
+    {
+        if (_mode.Current != PlayerMode.Mini)
+        {
+            RequestMode(PlayerMode.Mini);
+        }
+    }
+
+    /// <summary>Music mode is the mini player surface; same destination, different label.</summary>
+    public void EnterMusicMode() => EnterMiniPlayerMode();
 
     private async Task AddFilesToPlaylistAsync()
     {

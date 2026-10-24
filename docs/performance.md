@@ -1,8 +1,8 @@
-# Performance measurements (v1.3.2)
+# Performance measurements (v1.3.3)
 
 Measured on the development machine on 2026-10-19 (Asia/Hong_Kong), at v1.0.0.
 The numbers below are the historical baseline; they were **not** re-measured
-for 1.2.4 through 1.3.2 (see the per-version notes below for
+for 1.2.4 through 1.3.3 (see the per-version notes below for
 the known deltas). Numbers are what
 this machine produced; they are not universal guarantees.
 
@@ -70,6 +70,22 @@ scenarios (peak 265.7 MB at 4K). Private bytes exceed 300 MB at 4K because the
 GPU/driver surfaces and the video swapchain are charged to the process; this is
 reported honestly rather than trimmed by a smaller measurement window.
 
+## What changed in 1.3.3
+
+- **Open chrome menus stop the auto-hide countdown** instead of letting a menu
+  popup look like pointer-leave. One integer counter and two timer calls; no
+  per-frame work.
+- **The mini player is keyboard-inert.** `SetKeyboardMouseOnly` walks the
+  focusable descendants once on entry and once on exit (a couple of dozen
+  elements, playlists included) and stores/restores two properties; there is no
+  per-frame cost.
+- **Light-theme mini player.** Fourteen hard-coded brushes became theme
+  resources; resolving `ThemeResource` happens at load/theme change only.
+- **Frame-drop notice** is still a single `show-text` call per notice (3 s
+  window, 12 s cooldown); only its ASS anchor moved to the centre of the
+  surface.
+- **Counts:** 11 settings pages / 130 rows / 569 UI strings; 830 unit tests.
+  Startup, memory, blur and thumbnail timings were not re-measured for 1.3.3.
 ## What changed in 1.3.2
 
 - **Previews off means zero thumbnail work.** With the preview master switch

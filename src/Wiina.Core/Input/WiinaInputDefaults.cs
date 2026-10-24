@@ -113,6 +113,8 @@ public static class WiinaInputDefaults
                 return PlayerActions.ChapterPanel;
             case "cycle ontop":
                 return PlayerActions.ToggleTopmost;
+            case "picture-in-picture":
+                return PlayerActions.PictureInPicture;
             case "cycle mute":
                 return PlayerActions.Mute;
             case "cycle video":

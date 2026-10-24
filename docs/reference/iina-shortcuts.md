@@ -247,7 +247,7 @@ Wiina 已有的动作目录：`src/Wiina.Core/Input/KeyBindings.cs:33-89`（`Pla
 | `SubtitleDelayDecrease/Increase` ← `J`/`K`（`:294-295`） | IINA 用 `Z`/`X` | 改为 `Z`/`X` |
 | `Screenshot` ← 裸 `S`（`:286`）；`SpeedReset` ← `Backspace`（`:293`）；`ToggleFullscreen` ← `F`（`:280`） | 与 IINA 的 `⌘+S` / `⌘+\` / `f` 不完全一致 | `Ctrl+S` / `Ctrl+\` / 保留 `F` 亦可（IINA 也有 `f`） |
 
-另外 `Default` 预设里 `Ctrl+Shift+P` 与 `Ctrl+P` 同时绑 `PictureInPicture`（`:237-238`），
+另外 `Default` 预设里 `Ctrl+Shift+P` 与 `Ctrl+P` 同时绑 `PictureInPicture`（`:237-238`）；Wiina 1.3.3 起 `Ctrl+Shift+P` 是随包 Wiina 配置里的真实画中画绑定，「窗口」菜单的提示文字也取自该配置，音乐/迷你模式则没有任何快捷键，
 `Q` 与 `Ctrl+Q` 同绑 `Quit`（`:253-254`）—— 这是"一键多绑定"，IINA 也这么做，保留即可。
 
 ### 4.3 编辑器功能对齐表

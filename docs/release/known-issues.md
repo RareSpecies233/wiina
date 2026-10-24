@@ -1,7 +1,20 @@
-# Known issues — Wiina v1.3.2
+# Known issues — Wiina v1.3.3
 
-Nothing here is hidden; these are known limitations of the v1.3.2 build. The full decision list (with fix cost and checkboxes) lives in [../reports/known-issues-1.3.1.md](../reports/known-issues-1.3.1.md).
+Nothing here is hidden; these are known limitations of the v1.3.3 build. The full decision list (with fix cost and checkboxes) lives in [../reports/known-issues-1.3.1.md](../reports/known-issues-1.3.1.md).
 
+## What changed in 1.3.3
+
+- Opening an OSC or title-bar menu no longer hides the chrome or the cursor:
+  every chrome flyout is registered with `TrackChromeFlyout`, the auto-hide
+  timer is parked while any popup is open, and the countdown resumes one
+  dispatcher tick after the last one closes.
+- The mini player is mouse-only: Tab and Space no longer reach its controls.
+  This is intentional; there is no keyboard path to mini-player buttons.
+- The light-theme mini player uses theme brushes instead of hard-coded dark
+  ones (`MiniCoverFallbackBrush`, `MiniCoverScrimBrush`).
+- The frame-drop notice moved to the centre of the picture; see below.
+- Music and mini mode are reachable only from Settings → Advanced → Modes, and
+  neither has a default shortcut.
 ## What changed in 1.3.2
 
 - Cursor hiding is fixed with an in-process IAT hook (`CursorHider`); see the
@@ -11,7 +24,7 @@ Nothing here is hidden; these are known limitations of the v1.3.2 build. The ful
 - OSC/menu polish: media chrome no longer takes keyboard focus, the screenshot
   subtitle switch moved into the Video submenu, auto-hide gained hover
   keep-alive / immediate hide / jitter handling, and the frame-drop notice moved
-  to the left edge, vertically centred (ASS `\an4`).
+  to the left edge, vertically centred (ASS `\an4`; moved to the centre in 1.3.3).
 - Screenshot names are `name-h-m-s-ms.png`; collisions are numbered.
 - Turning thumbnail previews off stops all thumbnail work (no headless mpv, no
   disk writes); the cache-count settings row was removed and the memory cache
@@ -69,9 +82,11 @@ no side panels. Nothing is installed or patched by Wiina.
 
 Dropped-frame numbers come from mpv counters and are estimates; the rate is
 measured over a 3-second window with a 12-second cooldown, so a single bad
-frame does not spam the OSD. Since 1.3.2 the notice is anchored to the
-left-middle of the picture (ASS `\an4`, derived from the OSD size) instead of the top-right corner. The
-statistics panel remains the detailed view.
+frame does not spam the OSD. In 1.3.2 the notice sat left-middle; since 1.3.3 it
+is anchored at the exact centre of the picture with ASS `\an5` and
+`\pos(osd-width/2, osd-height/2)`, falling back to 1920×1080 when mpv does not
+report a surface size, and lives for 2.2 s. The statistics panel remains the
+detailed view.
 
 ## Screenshot file names
 
@@ -156,6 +171,11 @@ instant). The default mode (pre-generation) is unchanged.
   clamp uses the rectangle of the visible leading/trailing panel and an 8 DIP
   gap; panels that do not vertically overlap the OSC leave it untouched. PiP
   and mini layouts never show an OSC.
+- **Open chrome menus keep the OSC alive.** Every OSC/title-bar menu is tracked
+  with `TrackChromeFlyout`: while a popup is open the countdown is parked, and it
+  restarts one dispatcher tick after the last popup closes. Nested submenus do
+  not multiply the count, and the pointer-outside event raised by the popup
+  itself is ignored, so picking a menu item no longer makes the chrome vanish.
 
 ## Timeline thumbnails
 
@@ -189,6 +209,28 @@ instant). The default mode (pre-generation) is unchanged.
   is only in the tooltip. Changing devices mid-playback re-initialises the audio
   output, which can produce a short glitch or a brief silence.
 
+## Mini player
+
+- The mini player is deliberately mouse-only. `MiniPlayerView.SetKeyboardMouseOnly`
+  clears `IsTabStop`/`AllowFocusOnInteraction` on every focusable descendant
+  (sliders and lazily created playlist rows included) and restores the saved
+  values on exit, so Tab cycles the main window instead of landing on mini
+  controls. This is a design trade-off, not a regression.
+- Light theme uses `MiniCoverFallbackBrush` / `MiniCoverScrimBrush` from
+  `Themes/Tokens.xaml` (all three theme dictionaries); High Contrast flattens
+  both to system colours.
+- Auto-entering the mini player for audio files is disabled. `AutoSwitchToMusicMode`
+  is still stored in `settings.json` for compatibility but no longer triggers a
+  mode change.
+
+## Mode entry points
+
+- The only entries for music/mini mode are the two action rows on Settings →
+  Advanced → Modes (`advanced.music-mode`, `advanced.mini-player`). Both close
+  the settings window first, because the mini player takes over the main window.
+- There is no default shortcut and the shortcut editor no longer lists these
+  actions. Picture-in-picture still has `Ctrl+Shift+P` (shipped Wiina profile),
+  and the 窗口 menu label is derived from that profile rather than hard-coded.
 ## Chrome blur over video
 
 - **The three glass modes cost a capture readback.** In 固定 / 动态 / 始终 the
