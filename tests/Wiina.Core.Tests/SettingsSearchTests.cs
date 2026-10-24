@@ -167,6 +167,39 @@ public sealed class SettingsSearchTests
     }
 
     [Fact]
+    public void ThumbnailCacheFloorRowIsNoLongerExposed()
+    {
+        // The memory cache always covers every bucket of the current file, so
+        // a "minimum frames" row would be misleading. The property stays for
+        // old settings.json files but no catalog row may reference it.
+        Assert.DoesNotContain(
+            SettingsCatalog.Rows,
+            row => row.Id == "video.thumbnail-cache");
+        Assert.DoesNotContain(
+            SettingsCatalog.Rows,
+            row => row.Title.Contains("缓存下限", StringComparison.Ordinal));
+
+        // The remaining thumbnail rows are still there.
+        Assert.Contains(SettingsCatalog.Rows, row => row.Id == "video.thumbnail-preview");
+        Assert.Contains(SettingsCatalog.Rows, row => row.Id == "video.thumbnail-bucket");
+        Assert.Contains(SettingsCatalog.Rows, row => row.Id == "video.thumbnail-cache-mb");
+    }
+
+    [Fact]
+    public void ScreenshotFolderRowMatchesTheFolderTheAppWritesTo()
+    {
+        SettingsRowDefinition row = Assert.Single(
+            SettingsCatalog.Rows,
+            row => row.Id == "general.screenshot-folder");
+        var settings = new AppSettings { ScreenshotFolder = string.Empty };
+
+        string expected = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.MyPictures),
+            "Wiina");
+        Assert.Equal(expected, row.Value(settings) as string);
+    }
+
+    [Fact]
     public void ThumbnailAccelerationRowDefaultsToAutoAndOnlyOffersCpuFallback()
     {
         SettingsRowDefinition row = Assert.Single(

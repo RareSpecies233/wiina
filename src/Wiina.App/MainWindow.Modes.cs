@@ -196,6 +196,24 @@ public sealed partial class MainWindow
                 _snapSession.Reset();
                 _snapFrameEngaged = false;
                 AppWindow.SetPresenter(AppWindowPresenterKind.FullScreen);
+                if (AppWindow.Presenter.Kind == AppWindowPresenterKind.FullScreen)
+                {
+                    // The extended titlebar keeps a caption hit region alive even
+                    // while its XAML is transparent, so dragging the top of the
+                    // content area starts the native move loop and drops
+                    // fullscreen. Handing the caption back to the system removes
+                    // the drag region (the system titlebar paints nothing in
+                    // fullscreen) and is restored by ExitFullscreenPresenter.
+                    SetTitleBar(null);
+                    // Belt and braces: also clear the native caption region so
+                    // no hit test can start the OS move loop in fullscreen.
+                    WindowInterop.SetCaptionDragEnabled(this, false);
+                    // Do not leave keyboard focus on a chrome button: Space and
+                    // Enter must act on the player, not on the last clicked OSC
+                    // button.
+                    RootGrid.Focus(FocusState.Programmatic);
+                }
+
                 return AppWindow.Presenter.Kind == AppWindowPresenterKind.FullScreen;
 
             case PlayerMode.PiP:
@@ -271,6 +289,9 @@ public sealed partial class MainWindow
         }
 
         AppWindow.SetPresenter(AppWindowPresenterKind.Overlapped);
+        // Restore the custom titlebar drag region that entering fullscreen
+        // deliberately removed (see ApplyMode).
+        SetTitleBar(TitleBar);
         SetTopmost(_settings.AlwaysOnTop);
         SetTitleBarVisible(_chromeShown);
     }
@@ -514,6 +535,9 @@ public sealed partial class MainWindow
             ResizeMiniForPlaylist(expanded: true);
         }
 
+        // Mini mode is keyboard-driven (Space pauses); never leave focus on a
+        // mini control after the mode switch or the player shortcuts stop.
+        RootGrid.Focus(FocusState.Programmatic);
         return true;
     }
 

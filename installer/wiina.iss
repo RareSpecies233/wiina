@@ -9,13 +9,15 @@
 ; entry point is excluded from [Files] below.
 ;
 ; The install is per-user (PrivilegesRequired=lowest): the app only writes to
-; %LOCALAPPDATA%\Wiina and HKCU, so no elevation is needed and no machine-wide
-; state is touched by the installer itself. Wiina's file associations are
-; opt-in from the app settings; the uninstaller ALWAYS removes every registry
-; entry Wiina created and only asks whether to delete %LOCALAPPDATA%\Wiina.
-; The "associate as administrator" action inside the app may also create HKLM
-; copies of those keys; the uninstaller removes them when it happens to run
-; with administrator rights and, when it cannot, says so at the end.
+; %LOCALAPPDATA%\Wiina and HKCU, so installing needs no elevation and no
+; machine-wide state is touched by the installer itself. Wiina's file
+; associations are opt-in from the app settings; the uninstaller ALWAYS removes
+; every registry entry Wiina created and only asks whether to delete
+; %LOCALAPPDATA%\Wiina. The "associate as administrator" action inside the app
+; may also have created HKLM copies of those keys, so the uninstaller raises a
+; single UAC prompt when it starts (InitializeUninstall re-launches itself
+; elevated) and then removes those copies directly: no PowerShell helper
+; window, and no "uninstall was incomplete" warning at the end.
 ;
 ; To build manually:
 ;   1. Unpack the portable zip into artifacts\publish (or run
@@ -29,9 +31,9 @@
 
 #define MyAppName "Wiina"
 ; Overridable so a test build can be produced without touching the release
-; version: ISCC.exe /DMyAppVersion=1.3.1 installer\wiina.iss
+; version: ISCC.exe /DMyAppVersion=1.3.2 installer\wiina.iss
 #ifndef MyAppVersion
-  #define MyAppVersion "1.3.1"
+  #define MyAppVersion "1.3.2"
 #endif
 #define MyAppPublisher "Wiina contributors"
 #define MyAppUrl "https://github.com/RareSpecies233/wiina"
@@ -210,9 +212,9 @@ begin
     Removed := Removed + 1;
 end;
 
-{ Machine-wide keys can only be deleted by an elevated uninstaller. Detecting a
-  leftover after the attempt lets the uninstaller explain the situation instead
-  of silently leaving a broken Wiina.Video/Wiina.Audio ProgID behind. }
+{ Machine-wide keys can only be deleted by an elevated uninstaller. A normal
+  (non-silent) uninstall re-launches itself elevated, so this only reports what
+  a silent unelevated run leaves behind; the log explains it, nothing pops up. }
 function MachineAssociationsRemain: Boolean;
 begin
   Result :=
@@ -220,58 +222,6 @@ begin
     RegKeyExists(HKLM, 'Software\Classes\' + AudioProgId) or
     RegKeyExists(HKLM, CapabilitiesPath) or
     RegValueExists(HKLM, RegisteredApplicationsKey, 'Wiina');
-end;
-
-{ A per-user install (PrivilegesRequired=lowest) also has an unelevated
-  uninstaller, but associations can exist in HKLM after the app's elevated
-  "associate as administrator" path. Remove those through a one-shot elevated
-  PowerShell script so the uninstaller itself keeps running unelevated. The
-  script mirrors RemoveAssociations(HKLM): both ProgID trees, the two
-  OpenWithProgids values on every extension, a class default that points at a
-  Wiina ProgID, the capabilities tree and the RegisteredApplications value. }
-procedure RemoveMachineAssociationsElevated;
-var
-  Script, ScriptPath: String;
-  ResultCode: Integer;
-  Started: Boolean;
-begin
-  Script :=
-    '$ErrorActionPreference = "SilentlyContinue"' + #13#10 +
-    'Remove-Item -LiteralPath "HKLM:\Software\Classes\Wiina.Video" -Recurse -Force' + #13#10 +
-    'Remove-Item -LiteralPath "HKLM:\Software\Classes\Wiina.Audio" -Recurse -Force' + #13#10 +
-    '$exts = "' + OpenWithExtensions + '".Split("|")' + #13#10 +
-    'foreach ($e in $exts) {' + #13#10 +
-    '  $ow = "HKLM:\Software\Classes\." + $e + "\OpenWithProgids"' + #13#10 +
-    '  Remove-ItemProperty -LiteralPath $ow -Name "Wiina.Video"' + #13#10 +
-    '  Remove-ItemProperty -LiteralPath $ow -Name "Wiina.Audio"' + #13#10 +
-    '  $cls = "HKLM:\Software\Classes\." + $e' + #13#10 +
-    '  $key = Get-Item -LiteralPath $cls' + #13#10 +
-    '  if ($null -ne $key) {' + #13#10 +
-    '    $d = $key.GetValue("")' + #13#10 +
-    '    if ($d -eq "Wiina.Video" -or $d -eq "Wiina.Audio") {' +
-        ' Remove-ItemProperty -LiteralPath $cls -Name "(default)" }' + #13#10 +
-    '  }' + #13#10 +
-    '}' + #13#10 +
-    'Remove-Item -LiteralPath "HKLM:\Software\Wiina" -Recurse -Force' + #13#10 +
-    'Remove-ItemProperty -LiteralPath "HKLM:\Software\RegisteredApplications" -Name "Wiina"' + #13#10 +
-    'exit 0';
-
-  ScriptPath := ExpandConstant('{tmp}\wiina-machine-cleanup.ps1');
-  Started := SaveStringToFile(ScriptPath, Script, False);
-  if Started then
-  begin
-    Started := ShellExec(
-      'runas',
-      ExpandConstant('{sys}\WindowsPowerShell\v1.0\powershell.exe'),
-      '-NoProfile -ExecutionPolicy Bypass -File "' + ScriptPath + '"',
-      '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
-    DeleteFile(ScriptPath);
-  end;
-
-  if Started then
-    Log('associations: machine-wide cleanup finished (exit code ' + IntToStr(ResultCode) + ')')
-  else
-    Log('associations: machine-wide cleanup could not be elevated (UAC declined)');
 end;
 
 { Path-filtered stop of the installed copy, shared by the installer and the
@@ -319,12 +269,33 @@ end;
 
 function InitializeUninstall: Boolean;
 var
-  Answer: Integer;
+  Answer, ErrorCode: Integer;
 begin
   Result := True;
+  KeepUserData := True;
+
+  { The uninstaller raises its own UAC prompt once, at launch, instead of
+    spawning an elevated PowerShell helper later. The elevated instance runs
+    the complete uninstall, so this instance only hands over and exits. If the
+    user declines UAC the uninstall still proceeds unelevated: HKCU and the app
+    folder are removed, and the log records any HKLM keys that need an
+    administrator later. Silent runs never prompt (a UAC dialog nobody can
+    answer would just hang), so they keep the unelevated behaviour. }
+  if (not IsAdmin) and (not UninstallSilent) then
+  begin
+    if ShellExec(
+         'runas', ExpandConstant('{uninstallexe}'), '',
+         ExpandConstant('{app}'), SW_SHOWNORMAL, ewNoWait, ErrorCode) then
+    begin
+      Result := False;
+      Exit;
+    end;
+
+    Log('uninstaller: elevation was declined; continuing without machine-wide cleanup');
+  end;
+
   { Silent uninstall and installs without a config folder always keep the
     settings, exactly like before. }
-  KeepUserData := True;
   if UninstallSilent or (not WiinaHasConfig) then
   begin
     Exit;
@@ -344,51 +315,36 @@ procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
 var
   RemovedUser, RemovedMachine: Integer;
 begin
-  if CurUninstallStep = usUninstall then
+  if CurUninstallStep <> usUninstall then
   begin
-    { The file list cannot be removed while the installed Wiina holds its
-      executable open; the path-filtered stop mirrors the installer so a
-      portable copy running elsewhere stays up. }
-    StopInstalledWiina;
+    Exit;
+  end;
 
-    { Associations are always removed, whether or not the config is kept. }
-    RemovedUser := 0;
-    RemovedMachine := 0;
-    RemoveAssociations(HKCU, RemovedUser);
-    if IsAdmin then
-    begin
-      RemoveAssociations(HKLM, RemovedMachine);
-      Log('associations: machine-wide keys removed directly (uninstaller is elevated)');
-    end
-    else if MachineAssociationsRemain then
-    begin
-      { The per-user uninstaller is unelevated, so HKLM needs a UAC prompt. }
-      RemoveMachineAssociationsElevated;
-      if MachineAssociationsRemain then
-        Log('associations: machine-wide keys remain after the elevated cleanup')
-      else
-        RemovedMachine := RemovedMachine + 1;
-    end;
-    Log('associations: ' + IntToStr(RemovedUser) + ' per-user item(s) removed, ' +
-      IntToStr(RemovedMachine) + ' machine-wide item(s) removed');
+  { The file list cannot be removed while the installed Wiina holds its
+    executable open; the path-filtered stop mirrors the installer so a
+    portable copy running elsewhere stays up. }
+  StopInstalledWiina;
 
-    if not KeepUserData then
-    begin
-      DelTree(WiinaConfigDir, True, True, True);
-    end;
+  { Associations are always removed, whether or not the config is kept. The
+    normal interactive path is elevated, so the machine-wide copies go too; a
+    silent unelevated run cleans HKCU and logs what is left for a later
+    administrator run - it never shows a leftover warning. }
+  RemovedUser := 0;
+  RemovedMachine := 0;
+  RemoveAssociations(HKCU, RemovedUser);
+  if IsAdmin then
+  begin
+    RemoveAssociations(HKLM, RemovedMachine);
   end
-  else if CurUninstallStep = usPostUninstall then
+  else if MachineAssociationsRemain then
   begin
-    if (not UninstallSilent) and MachineAssociationsRemain then
-    begin
-      MsgBox(
-        '部分文件关联写入了系统（HKLM）注册表，需要管理员权限才能删除。' + #13#10 +
-        '如确认要清理，请右键卸载程序 →“以管理员身份运行”。' + #13#10#13#10 +
-        'Some Wiina file associations were registered machine-wide (HKLM) and ' +
-        'need administrator rights to remove. Run the uninstaller again as ' +
-        'administrator to clean them up.',
-        mbInformation,
-        MB_OK);
-    end;
+    Log('associations: machine-wide keys remain; run the uninstaller as administrator to remove them');
+  end;
+  Log('associations: ' + IntToStr(RemovedUser) + ' per-user and ' +
+    IntToStr(RemovedMachine) + ' machine-wide item(s) removed');
+
+  if not KeepUserData then
+  begin
+    DelTree(WiinaConfigDir, True, True, True);
   end;
 end;

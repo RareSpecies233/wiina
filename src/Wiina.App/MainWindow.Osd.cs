@@ -494,15 +494,23 @@ public sealed partial class MainWindow
         }
     }
 
-    private ThumbnailService GetThumbnailService() =>
-        _thumbnailService ??= new ThumbnailService(
-            Math.Clamp(_settings.ThumbnailCacheCount, 1, 240),
-            Math.Clamp(_settings.ThumbnailBucketSeconds, 1, 30),
-            Trace,
-            Path.Combine(App.DataFolder, "thumbnails"),
-            Math.Clamp(_settings.ThumbnailCacheMegabytes, 0, 4096),
-            _settings.ThumbnailSlowMode,
-            _settings.ThumbnailAcceleration);
+    private ThumbnailService GetThumbnailService()
+    {
+        if (_thumbnailService is null)
+        {
+            _thumbnailService = new ThumbnailService(
+                Math.Clamp(_settings.ThumbnailCacheCount, 1, 240),
+                Math.Clamp(_settings.ThumbnailBucketSeconds, 1, 30),
+                Trace,
+                Path.Combine(App.DataFolder, "thumbnails"),
+                Math.Clamp(_settings.ThumbnailCacheMegabytes, 0, 4096),
+                _settings.ThumbnailSlowMode,
+                _settings.ThumbnailAcceleration);
+            _thumbnailService.SetPreviewEnabled(_settings.ThumbnailPreviewEnabled);
+        }
+
+        return _thumbnailService;
+    }
 
     /// <summary>
     /// Sizes the in-memory thumbnail cache for the file that just opened and,
@@ -512,6 +520,14 @@ public sealed partial class MainWindow
     /// </summary>
     private void StartThumbnailPreGeneration()
     {
+        if (!_settings.ThumbnailPreviewEnabled)
+        {
+            // Preview off means no thumbnail work at all: no cache sizing, no
+            // pre-generation task and no headless mpv instance (see also
+            // ThumbnailService.PreviewEnabled, which re-checks every request).
+            return;
+        }
+
         if (string.IsNullOrWhiteSpace(_currentPath) || IsUrlPath(_currentPath))
         {
             return;

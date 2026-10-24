@@ -1,8 +1,8 @@
-# Performance measurements (v1.3.1)
+# Performance measurements (v1.3.2)
 
 Measured on the development machine on 2026-10-19 (Asia/Hong_Kong), at v1.0.0.
 The numbers below are the historical baseline; they were **not** re-measured
-for 1.2.4 through 1.3.1 (see the per-version notes below for
+for 1.2.4 through 1.3.2 (see the per-version notes below for
 the known deltas). Numbers are what
 this machine produced; they are not universal guarantees.
 
@@ -70,6 +70,28 @@ scenarios (peak 265.7 MB at 4K). Private bytes exceed 300 MB at 4K because the
 GPU/driver surfaces and the video swapchain are charged to the process; this is
 reported honestly rather than trimmed by a smaller measurement window.
 
+## What changed in 1.3.2
+
+- **Previews off means zero thumbnail work.** With the preview master switch
+  off, `ThumbnailService` is not created at all: no headless mpv instance, no
+  cache sizing, no disk writes, no pre-generation task. This is the cheapest
+  setting for low-end devices and removes the residual `mpv` process cost that
+  used to remain after disabling previews.
+- **The thumbnail cache-count row was removed.** The memory cache always sizes
+  itself to every 5-second bucket of the current file (≈57.6 KB per bucket);
+  the disk budget row (`video.thumbnail-cache-mb`) is unchanged.
+- **Closing is fast and single-pass.** K01 measured 170-179 ms for the close
+  handler and 362-426 ms until the process exits, with one `SaveSettings()` and
+  no watchdog. No new per-frame work: the cursor IAT hook only runs while the
+  pointer is hidden, the fullscreen cover work happens once per presenter
+  change, and the menu/OSC changes are event-driven.
+- **The device-loss fallback is bounded.** `DeviceLoss` recovery (2-minute
+  window, 5-second cooldown, limited attempts) only runs on a classified
+  `0x887A0005/6/7/20`, so the steady-state cost is zero. The recovery was not
+  exercised by a real TDR.
+- Counts for this snapshot: **11 settings pages / 128 rows**, 568 localization
+  keys, **827** Core tests. Startup, memory, blur and 4K numbers were **not**
+  re-measured for 1.3.2.
 ## What changed in 1.3.1
 
 - **Thumbnail decode can use the GPU.** The new `video.thumbnail-acceleration`

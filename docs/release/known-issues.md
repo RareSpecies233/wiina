@@ -1,8 +1,28 @@
-# Known issues — Wiina v1.3.1
+# Known issues — Wiina v1.3.2
 
-Nothing here is hidden; these are known limitations of the v1.3.1 build. The full decision list (with fix cost and checkboxes) lives in [../reports/known-issues-1.3.1.md](../reports/known-issues-1.3.1.md).
+Nothing here is hidden; these are known limitations of the v1.3.2 build. The full decision list (with fix cost and checkboxes) lives in [../reports/known-issues-1.3.1.md](../reports/known-issues-1.3.1.md).
+
+## What changed in 1.3.2
+
+- Cursor hiding is fixed with an in-process IAT hook (`CursorHider`); see the
+  section below for evidence and residual risks.
+- Fullscreen no longer shows the 1-3 px top strip, and dragging in fullscreen
+  never exits fullscreen.
+- OSC/menu polish: media chrome no longer takes keyboard focus, the screenshot
+  subtitle switch moved into the Video submenu, auto-hide gained hover
+  keep-alive / immediate hide / jitter handling, and the frame-drop notice moved
+  to the left edge, vertically centred (ASS `\an4`).
+- Screenshot names are `name-h-m-s-ms.png`; collisions are numbered.
+- Turning thumbnail previews off stops all thumbnail work (no headless mpv, no
+  disk writes); the cache-count settings row was removed and the memory cache
+  always covers the whole file.
+- The uninstaller asks for UAC once at launch and no longer shows an
+  "incomplete uninstall" dialog; silent runs stay unelevated.
+- Close path measured at 170-179 ms; DXGI device-loss recovery is implemented
+  but has not been exercised by a real TDR.
 
 ## What changed in 1.3.1
+
 
 - Key-binding profiles: `Wiina` + `mpv`; the IINA preset was removed and old
   values migrate to Wiina.
@@ -10,11 +30,11 @@ Nothing here is hidden; these are known limitations of the v1.3.1 build. The ful
   menu, ±5 s previous/next option, immediate hide on pointer leave.
 - Thumbnails: optional GPU decode (`video.thumbnail-acceleration`), whole-file
   memory cache (≈41 MB/hour).
-- Screenshots: one subtitle switch shared by settings and the expanded OSC menu
-  (there is no quick-settings entry for it).
-- Uninstaller: both uninstallers always remove associations; the portable one
-  always elevates, while the installed per-user copy asks for one UAC prompt only
-  when machine-wide (HKLM) associations remain. Setup stays per-user.
+- Screenshots: one subtitle switch shared by settings, the quick-settings video
+  page and the OSC 更多 -> 视频 submenu.
+- Uninstaller: it raises UAC once at launch (re-launching itself elevated),
+  removes HKCU and HKLM associations, and only asks whether to keep the config.
+  Setup itself stays per-user.
 
 ## Settings layout in 1.3.0
 
@@ -49,43 +69,55 @@ no side panels. Nothing is installed or patched by Wiina.
 
 Dropped-frame numbers come from mpv counters and are estimates; the rate is
 measured over a 3-second window with a 12-second cooldown, so a single bad
-frame does not spam the OSD. Since 1.3.1 the notice is anchored to the
-left-middle of the picture (ASS `\an4`) instead of the top-right corner. The
+frame does not spam the OSD. Since 1.3.2 the notice is anchored to the
+left-middle of the picture (ASS `\an4`, derived from the OSD size) instead of the top-right corner. The
 statistics panel remains the detailed view.
 
-## Cursor hiding is still unreliable (1.3.0–1.3.1)
+## Screenshot file names
 
-Status: known limitation, root-caused; a second attempt landed in 1.3.1 and is still unverified.
+- Screenshots are named `media-hour-minute-second-millisecond.png`
+  (`movie-1-28-39-980.png`); a collision gets ` (2)`, ` (3)`, ... appended.
+- Illegal Windows filename characters are replaced, and the media-name part is
+  capped at 100 characters.
+- With no media loaded (folder picker path) the legacy
+  `wiina-yyyyMMdd-HHmmss.png` name is kept.
+- The subtitle include/exclude switch is shared by settings, the quick-settings
+  video page and the OSC 更多 -> 视频 submenu; the file is always PNG via mpv
+  `screenshot-raw` flags `subtitles` or `video`.
 
-The desktop pointer over a WinUI 3 client area is driven by CoreMessaging, not
-by the window procedure or the XAML thread. Three mechanisms were implemented
-and verified inert on a real 1080p playback session:
+## Cursor hiding (fixed in 1.3.2)
 
-- `WM_SETCURSOR` override plus subclassing every WinUI cursor host
-  (`Microsoft.UI.Content.DesktopChildSiteBridge`, `InputSiteWindowClass`,
-  `InputNonClientPointerSource`): 3 windows subclassed, 0 messages received.
-- A thread-level `WH_CALLWNDPROCRET` hook on the input/XAML thread: hook
-  installed, 0 pointer messages observed.
-- Reflected `UIElement.ProtectedCursor` on `RootGrid`, `VideoHost` and the inner
-  `SwapChainPanel`: the setter succeeds, but `null` means "default arrow" in
-  this WinAppSDK and `InputSystemCursorShape` has no "none" member.
+Status: fixed and measured on a real 1080p session.
 
-`GetCursorInfo` keeps returning the arrow (0x10019) immediately after a
-successful `SetCursor(blank)` on every candidate thread, so it cannot be used as
-an oracle; screenshots never contain the OS pointer either.
+The desktop pointer over a WinUI 3 client area is driven by the input thread
+inside Microsoft.UI.Input.dll / Microsoft.InputStateManager.dll /
+Windows.UI.Immersive.dll, not by the window procedure or the XAML thread. Those
+modules re-apply `SetCursor(arrow)` themselves, so every application-side
+`SetCursor`, `ShowCursor`, `WM_SETCURSOR` or `ProtectedCursor` attempt was
+overwritten within milliseconds (this is why the 1.3.0 and 1.3.1 attempts were
+reported as unverified).
 
-Next route (requires a resource/csproj change): embed a 1×1 transparent `.cur`,
-load it via `InputDesktopResourceCursor.CreateFromResourceId`, and assign it to
-`ProtectedCursor`; alternatively adopt a WinAppSDK that exposes
-`InputCursor.CreateFromVisual`. Until then, use the Windows pointer settings if
-an always-hidden pointer is required.
-1.3.1 attempt: an embedded 1×1 transparent `.cur` (resource id 101), the
-reflected `ProtectedCursor` assigned to all 489 elements under `RootGrid`, and a
-60 ms helper-thread `SetCursor(NULL)` re-assert. It builds and passes tests but
-still did not hide the pointer on a real session — CoreMessaging re-applies the
-arrow within milliseconds. Treat the feature as partial; the remaining routes
-are the CoreMessaging `SetCursor` export or hosting the video in a Win32 child
-window (both need a real-machine test).
+1.3.2 adds `src/Wiina.App/Interop/CursorHider.cs`, which walks the import
+address table of a fixed candidate list (`Microsoft.UI.Input.dll`,
+`Microsoft.InputStateManager.dll`, `CoreMessaging.dll`, `Microsoft.UI.Content.dll`,
+`Microsoft.UI.Xaml.dll`, `Microsoft.UI.Windowing.Core.dll`,
+`Windows.UI.Immersive.dll`) and redirects their `user32!SetCursor` entries to a
+`UnmanagedCallersOnly` detour that calls `SetCursor(NULL)` while the pointer is
+supposed to be hidden. Only IAT pointers are rewritten, never code, and the
+original pointer is kept alive so unhide and pass-through still work.
+
+Measured: after hiding, 20/20 `GetCursorInfo` samples returned
+`hCursor=0, flags=0` and stayed that way for 4.75 s; after moving the pointer,
+54/54 samples returned `flags=1`. `WIINA_CURSOR_HOOK=0` disables the hook,
+`WIINA_CURSOR_HOOK=scan` only enumerates importing modules, and a failed
+installation keeps the pre-1.3.2 fallback in place.
+
+Residual risks: some antivirus engines treat IAT patching as suspicious
+(behaviour is equivalent to a themed cursor, but the technique is unusual), and
+a future Windows App SDK could rename the input modules, in which case the hook
+finds no import and falls back. Hardware cursors never appear in screenshots,
+so `GetCursorInfo` flags are the documented evidence rather than a captured
+image.
 
 ## Slow thumbnail mode
 
@@ -137,6 +169,7 @@ instant). The default mode (pre-generation) is unchanged.
   Auto keeps `hwdec=auto-safe`, CPU only forces `hwdec=no`; measured 29 ms wall /
   15.6 ms CPU vs 104 ms / 461 ms per frame), and the **memory** cache now keeps
   every 5-second bucket of the current file (≈57.6 KB per bucket, ≈41 MB/hour).
+- **1.3.2:** the cache-count settings row is gone (the memory cache always covers the whole file); turning previews off skips all thumbnail work - no headless mpv instance, no disk writes, no cache sizing.
 - Limits: the cache key includes file size and mtime, so an in-place replacement
   with identical size/mtime can hit a stale frame; dragging the timeline is not
   throttled (only stale results are dropped); network/UNC sources are
@@ -259,9 +292,12 @@ instant). The default mode (pre-generation) is unchanged.
   under `%LOCALAPPDATA%\Programs\Wiina` (no administrator needed); a machine-wide
   install is not offered.
 - The **portable** `Uninstall Wiina.exe` always elevates (`requireAdministrator`
-  in `src/Wiina.Uninstall/app.manifest`). The Inno uninstaller of the installed
-  copy starts unelevated because the install is per-user, and only requests one
-  UAC prompt when machine-wide (HKLM) associations are still present.
+  in `src/Wiina.Uninstall/app.manifest`). Since 1.3.2 the Inno uninstaller of the
+  installed copy also raises UAC once at launch: `InitializeUninstall` re-launches
+  itself with `runas` and the original instance exits. The old PowerShell
+  elevation helper is gone, and no "uninstall was incomplete" dialog is shown.
+  Declining UAC still removes the HKCU keys and the app folder; HKLM leftovers
+  are written to the log for a later administrator.
 - Any uninstaller prompts before force-closing a running Wiina, always removes
   both HKCU and HKLM associations, and only asks whether to keep the
   configuration.
@@ -275,6 +311,17 @@ instant). The default mode (pre-generation) is unchanged.
   reports that the folder must be removed manually (exit code 1).
 - The installed copy intentionally does not contain `Uninstall Wiina.exe`;
   use Settings → Apps → Wiina → Uninstall there.
+
+## Fullscreen frame and drag
+
+- The 1-3 px strip at the top of fullscreen was the WinUI XAML island child
+  window (`Microsoft.UI.Content.DesktopChildSiteBridge`) sitting at (0,1).
+  `WindowInterop.CoverClientArea` covers the client area at startup and after
+  presenter changes, so the first pixel row is video.
+- Dragging the video area in fullscreen returns immediately, `WM_NCHITTEST`
+  answers `HTCLIENT` for the caption band, and the title-bar drag path is
+  suspended while fullscreen, so a drag cannot pull the window out of the
+  presenter.
 
 ## Windows 10 title bar
 
@@ -346,7 +393,7 @@ instant). The default mode (pre-generation) is unchanged.
   `docs/performance.md`), not a representative codec matrix. Real-world 4K
   HEVC/AV1 files may use more memory/GPU and were not benchmarked here.
 
-## Shutdown path and hang analysis (R1 shipped, R2 not implemented)
+## Shutdown path and hang analysis (R1 shipped, R2 implemented)
 
 - Closing now stops UI timers first, saves settings once, detaches the video
   panel before disposing mpv, stops the statistics refresh while the card is
@@ -354,6 +401,7 @@ instant). The default mode (pre-generation) is unchanged.
   `ChromeBlur.SetActive(false)` + `ChromeBlur.Shutdown()` (worker joined for up
   to one second) before the player is disposed, so the 8 Hz screenshot thread
   can no longer touch a disposed mpv handle.
+- **1.3.2:** close path measured at 170-179 ms (process exit 362-426 ms), one settings save, no watchdog. R2 now has `src/Wiina.Core/Playback/DeviceLoss.cs` (classifies `0x887A0005/0x887A0006/0x887A0007/0x887A0020`, bounded `video-reload` recovery, 2 min window / 5 s cooldown). A real TDR has not been reproduced on hardware, so the recovery is code-verified only.
 - **Still open**: there is no per-event mpv callback detach step
   (`MpvPlayer.Dispose()` stops its own event thread), and the staging-texture
   flush buffer described in the task does not exist in the code. The report in

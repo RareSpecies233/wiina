@@ -5,6 +5,7 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Controls.Primitives;
 using Microsoft.UI.Xaml.Input;
+using Microsoft.UI.Xaml.Media;
 using Windows.ApplicationModel.DataTransfer;
 using Windows.Foundation;
 using Windows.Graphics;
@@ -88,6 +89,16 @@ public sealed partial class MainWindow
             new KeyEventHandler(OnRootKeyDown),
             handledEventsToo: false);
 
+        // Media chrome (OSC, titlebar, mini controls) must never own keyboard
+        // focus, otherwise Space/Enter activate the focused button instead of
+        // toggling playback or fullscreen. Tab is swallowed in the
+        // keyboard-driven modes as a safety net for lazily created controls.
+        MakeMediaChromeKeyboardTransparent();
+        RootGrid.AddHandler(
+            UIElement.KeyDownEvent,
+            new KeyEventHandler(OnRootKeyDownCapture),
+            handledEventsToo: true);
+
         VideoFrame.PointerPressed += OnVideoPointerPressed;
         VideoFrame.PointerMoved += OnVideoPointerMoved;
         VideoFrame.PointerReleased += OnVideoPointerReleased;
@@ -152,6 +163,28 @@ public sealed partial class MainWindow
         _historyTimer?.Stop();
         _clickTimer?.Stop();
         _suppressClickTimer?.Stop();
+
+        // Unhook mpv callbacks before disposal: the event thread is still
+        // running and must not re-enter a window that is tearing down.
+        if (_player is { } player)
+        {
+            player.Log -= OnPlayerLog;
+            player.DisplaySwapChainChanged -= OnDisplaySwapChainChanged;
+            player.NumberPropertyChanged -= OnNumberPropertyChanged;
+            player.FlagPropertyChanged -= OnFlagPropertyChanged;
+            player.StringPropertyChanged -= OnStringPropertyChanged;
+            player.FileLoaded -= OnFileLoaded;
+            player.TrackListChanged -= OnTrackListChanged;
+            player.ChapterListChanged -= OnChapterListChanged;
+            player.PlaylistChanged -= OnPlaylistChanged;
+            player.AudioDeviceListChanged -= OnAudioDeviceListChanged;
+            player.PlaylistPositionChanged -= OnPlaylistPositionChanged;
+            player.ChapterChanged -= OnChapterChanged;
+            player.VideoSizeChanged -= OnVideoSizeChanged;
+            player.FileLoadFailed -= OnFileLoadFailed;
+            player.CommandFailed -= OnCommandFailed;
+            player.MetadataChanged -= OnMetadataChanged;
+        }
     }
 
     // ---------------------------------------------------------------- opening
@@ -336,7 +369,7 @@ public sealed partial class MainWindow
                 return;
             }
 
-            string name = $"wiina-{DateTime.Now:yyyyMMdd-HHmmss}.png";
+            string name = BuildScreenshotName(folder.Path);
             string path = Path.Combine(folder.Path, name);
             SendPlayerCommandAsync(
                 "screenshot-to-file",
@@ -1023,9 +1056,7 @@ public sealed partial class MainWindow
         try
         {
             string folder = GetScreenshotFolder();
-            string path = Path.Combine(
-                folder,
-                $"wiina-{DateTime.Now:yyyyMMdd-HHmmss}.png");
+            string path = Path.Combine(folder, BuildScreenshotName(folder));
             Trace($"screenshot -> {path}");
             SendPlayerCommandAsync(
                 "screenshot-to-file",
@@ -1038,6 +1069,22 @@ public sealed partial class MainWindow
             Trace("screenshot failed: " + ex);
             ShowOsd(Loc.T("osd.screenshotFailed"), ex.Message);
         }
+    }
+
+    /// <summary>
+    /// Names a capture after the playing video plus the playback position to
+    /// the millisecond (<c>xxx-1-28-39-980.png</c>), so a folder of screenshots
+    /// can be sorted back into the film. Falls back to the legacy
+    /// <c>wiina-yyyyMMdd-HHmmss.png</c> name when nothing is playing.
+    /// </summary>
+    private string BuildScreenshotName(string folder)
+    {
+        double position = _player?.GetPropertyDouble("time-pos") ?? 0;
+        return ScreenshotNaming.BuildUniqueFileName(
+            _currentPath,
+            position,
+            DateTimeOffset.Now,
+            candidate => File.Exists(Path.Combine(folder, candidate)));
     }
 
     private string GetScreenshotFolder()
@@ -1950,6 +1997,61 @@ public sealed partial class MainWindow
         return focused is TextBox or PasswordBox or RichEditBox or AutoSuggestBox or NumberBox;
     }
 
+    /// <summary>
+    /// Removes keyboard focusability from the media chrome (OSC, titlebar, mini
+    /// player) so Space/Enter keep their player meaning: with a focused button,
+    /// Space presses that button instead of pausing playback. Buttons stay fully
+    /// clickable, and every chrome action also has a keyboard shortcut, so
+    /// nothing becomes unreachable.
+    /// </summary>
+    private void MakeMediaChromeKeyboardTransparent()
+    {
+        foreach (FrameworkElement root in new FrameworkElement[] { OscBottom, OscFloating, TitleBar, MiniPlayer })
+        {
+            MakeNonFocusable(root);
+            // Items created by templates/lists appear after layout.
+            root.Loaded += (_, _) => MakeNonFocusable(root);
+        }
+    }
+
+    private static void MakeNonFocusable(DependencyObject root)
+    {
+        if (root is Button button)
+        {
+            button.IsTabStop = false;
+            button.AllowFocusOnInteraction = false;
+        }
+        else if (root is Slider slider)
+        {
+            // Sliders must stay draggable; they only need to stay out of the
+            // Tab order (a focused slider still lets Space bubble to the player).
+            slider.IsTabStop = false;
+        }
+
+        int count = VisualTreeHelper.GetChildrenCount(root);
+        for (int i = 0; i < count; i++)
+        {
+            MakeNonFocusable(VisualTreeHelper.GetChild(root, i));
+        }
+    }
+
+    /// <summary>
+    /// Mini mode and fullscreen are keyboard-driven, so Tab must not park focus
+    /// on a chrome control (where Space would press it instead of pausing).
+    /// Registered with <c>handledEventsToo</c>, i.e. it runs after the normal
+    /// key handler and only manages focus, never the shortcut itself.
+    /// </summary>
+    private void OnRootKeyDownCapture(object sender, KeyRoutedEventArgs e)
+    {
+        if (e.Key != VirtualKey.Tab || (!InMiniMode && !IsFullscreen))
+        {
+            return;
+        }
+
+        e.Handled = true;
+        RootGrid.Focus(FocusState.Programmatic);
+    }
+
     private void OnRootKeyDown(object sender, KeyRoutedEventArgs e)
     {
         if (IsTextInputFocused())
@@ -2258,6 +2360,15 @@ public sealed partial class MainWindow
             return;
         }
 
+        // Fullscreen has no draggable frame: moving or resizing the window would
+        // make Windows drop the fullscreen presenter, so a drag on the video
+        // must stay a click. (Clicks/taps are handled by Tapped, not here.)
+        if (IsFullscreen)
+        {
+            RootGrid.Focus(FocusState.Pointer);
+            return;
+        }
+
         _suppressClick = false;
         _windowDragCandidate = true;
         _windowDragging = false;
@@ -2275,6 +2386,15 @@ public sealed partial class MainWindow
     {
         if (!_windowDragCandidate)
         {
+            return;
+        }
+
+        // Mode may have switched to fullscreen mid-gesture (shortcut, OSC, or
+        // media end); never move the window from a fullscreen frame.
+        if (IsFullscreen)
+        {
+            _windowDragCandidate = false;
+            _windowDragging = false;
             return;
         }
 

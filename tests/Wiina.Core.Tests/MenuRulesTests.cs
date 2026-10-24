@@ -9,13 +9,54 @@ public sealed class MenuRulesTests
         MenuCatalog.Flatten(MenuCatalog.Build(state)).Single(item => item.Id == id);
 
     [Fact]
-    public void SevenTopLevelMenusInSpecOrderWithoutDuplicateVideoGroup()
+    public void EightTopLevelMenusKeepWindowAndVideoWorkSeparate()
     {
         IReadOnlyList<MenuGroupDefinition> groups = MenuCatalog.Build(new MenuState());
         Assert.Equal(
-            new[] { "文件", "播放", "音频", "字幕", "插件", "窗口", "帮助" },
+            new[] { "文件", "播放", "视频", "音频", "字幕", "插件", "窗口", "帮助" },
             groups.Select(group => group.Title));
         Assert.All(groups, group => Assert.NotEmpty(group.Items));
+    }
+
+    [Fact]
+    public void WindowColumnsHoldOnlyWindowAndLayoutOperations()
+    {
+        IReadOnlyList<MenuGroupDefinition> groups = MenuCatalog.Build(new MenuState());
+        MenuGroupDefinition window = groups.Single(group => group.Title == "窗口");
+        MenuGroupDefinition video = groups.Single(group => group.Title == "视频");
+
+        // Window/layout operations stay together in 窗口 ...
+        string[] windowIds = window.Items.Select(item => item.Id).ToArray();
+        Assert.Contains("window.half", windowIds);
+        Assert.Contains("window.fit", windowIds);
+        Assert.Contains("video.fullscreen", windowIds);
+        Assert.Contains("video.topmost", windowIds);
+        Assert.Contains("video.lock-aspect", windowIds);
+        Assert.Contains("video.music-mode", windowIds);
+        Assert.Contains("video.pip", windowIds);
+
+        // ... while the pure picture family never appears there.
+        Assert.DoesNotContain("video.aspect", windowIds);
+        Assert.DoesNotContain("video.crop", windowIds);
+        Assert.DoesNotContain("video.rotate", windowIds);
+        Assert.DoesNotContain("video.flip-h", windowIds);
+        Assert.DoesNotContain("video.deinterlace", windowIds);
+        Assert.DoesNotContain("video.filters", windowIds);
+        Assert.DoesNotContain("video.screenshot", windowIds);
+        Assert.DoesNotContain("video.panel", windowIds);
+        Assert.DoesNotContain("video.tracks", windowIds);
+
+        string[] videoIds = video.Items.Select(item => item.Id).ToArray();
+        Assert.Contains("video.aspect", videoIds);
+        Assert.Contains("video.crop", videoIds);
+        Assert.Contains("video.rotate", videoIds);
+        Assert.Contains("video.flip-h", videoIds);
+        Assert.Contains("video.flip-v", videoIds);
+        Assert.Contains("video.deinterlace", videoIds);
+        Assert.Contains("video.filters", videoIds);
+        Assert.Contains("video.screenshot", videoIds);
+        Assert.Contains("video.panel", videoIds);
+        Assert.Contains("video.tracks", videoIds);
     }
 
     [Fact]
@@ -24,7 +65,7 @@ public sealed class MenuRulesTests
         var state = new MenuState();
         Assert.False(Find(state, "playback.play-pause").Enabled);
         Assert.False(Find(state, "playback.seek-back").Enabled);
-        Assert.False(Find(state, "playback.screenshot").Enabled);
+        Assert.False(Find(state, "video.screenshot").Enabled);
         Assert.False(Find(state, "audio.mute").Enabled);
         Assert.False(Find(state, "subtitles.load").Enabled);
         Assert.True(Find(state, "file.open").Enabled);

@@ -52,21 +52,6 @@ public sealed partial class MainWindow
         // transport has no room for a rate picker, and the quick menu keeps
         // only the continuous slider on its video page.
         flyout.Items.Add(BuildSpeedMenu());
-
-        // Screenshot options sit right under the pin action so the two most
-        // frequent one-off toggles are reachable without opening a submenu.
-        var screenshotSubtitles = new ToggleMenuFlyoutItem
-        {
-            Text = Loc.T("ui.screenshotSubtitles"),
-            IsChecked = _settings.ScreenshotWithSubtitles,
-        };
-        screenshotSubtitles.Click += (_, _) =>
-        {
-            _settings.ScreenshotWithSubtitles = screenshotSubtitles.IsChecked;
-            SaveSettings();
-            ShowChrome();
-        };
-        flyout.Items.Add(screenshotSubtitles);
         flyout.Items.Add(new MenuFlyoutSeparator());
 
         foreach (MenuGroupDefinition group in MenuCatalog.Build(state, Loc.CurrentLanguage))
@@ -80,38 +65,6 @@ public sealed partial class MainWindow
             AppendExtraMenuItems(top, group.Id, state);
             flyout.Items.Add(top);
         }
-
-        // Quick picture-quality switch without leaving the OSC overflow. Only the
-        // two built-in profiles are offered; custom profiles live in the
-        // dedicated preset window (video.quality-editor).
-        var quality = new MenuFlyoutSubItem { Text = Loc.T("ui.qualityPreset") };
-        foreach ((VideoQualityPreset preset, string labelKey) in new[]
-                 {
-                     (VideoQualityPreset.Auto, "ui.qualityAuto"),
-                     (VideoQualityPreset.Performance, "ui.qualityPerformance"),
-                 })
-        {
-            var option = new ToggleMenuFlyoutItem
-            {
-                Text = Loc.T(labelKey),
-                // Legacy Balanced/HighQuality values (kept only for JSON
-                // compatibility) render as the default profile being active.
-                IsChecked = preset == VideoQualityPreset.Auto
-                    ? _settings.VideoQualityPreset is VideoQualityPreset.Auto
-                        or VideoQualityPreset.Balanced or VideoQualityPreset.HighQuality
-                    : _settings.VideoQualityPreset == preset,
-            };
-            option.Click += (_, _) =>
-            {
-                _settings.VideoQualityPreset = preset;
-                ApplyQualityPreset();
-                SaveSettings();
-                ShowChrome();
-            };
-            quality.Items.Add(option);
-        }
-
-        flyout.Items.Add(quality);
 
         // Settings is a frequent destination but not a player command, so it
         // lives at the bottom of the overflow menu rather than as a permanent
@@ -152,8 +105,46 @@ public sealed partial class MainWindow
     }
 
     /// <summary>
-    /// Adds post-v1 entries that are window-local instead of living in the
-    /// shared MenuCatalog: external audio and the keyboard profile picker.
+    /// Quick picture-quality switch for the 视频 submenu. Only the two built-in
+    /// profiles are offered; custom profiles live in the dedicated preset window
+    /// (video.quality-editor). Legacy Balanced/HighQuality values (kept only for
+    /// JSON compatibility) render as the default profile being active.
+    /// </summary>
+    private MenuFlyoutSubItem BuildQualityMenu()
+    {
+        var menu = new MenuFlyoutSubItem { Text = Loc.T("ui.qualityPreset") };
+        foreach ((VideoQualityPreset preset, string labelKey) in new[]
+                 {
+                     (VideoQualityPreset.Auto, "ui.qualityAuto"),
+                     (VideoQualityPreset.Performance, "ui.qualityPerformance"),
+                 })
+        {
+            var option = new ToggleMenuFlyoutItem
+            {
+                Text = Loc.T(labelKey),
+                IsChecked = preset == VideoQualityPreset.Auto
+                    ? _settings.VideoQualityPreset is VideoQualityPreset.Auto
+                        or VideoQualityPreset.Balanced or VideoQualityPreset.HighQuality
+                    : _settings.VideoQualityPreset == preset,
+            };
+            option.Click += (_, _) =>
+            {
+                _settings.VideoQualityPreset = preset;
+                ApplyQualityPreset();
+                SaveSettings();
+                ShowChrome();
+            };
+            menu.Items.Add(option);
+        }
+
+        return menu;
+    }
+
+    /// <summary>
+    /// Adds entries that are window-local instead of living in the shared
+    /// <see cref="MenuCatalog"/>: external audio, the 视频 settings tail
+    /// (screenshot subtitles, deband, quality presets) and the keyboard
+    /// profile picker plus the shortcut-editor shortcut.
     /// </summary>
     private void AppendExtraMenuItems(
         MenuFlyoutSubItem top,
@@ -170,6 +161,44 @@ public sealed partial class MainWindow
             };
             load.Click += async (_, _) => await OpenExternalAudioPickerAsync();
             top.Items.Add(load);
+            return;
+        }
+
+        if (string.Equals(groupId, "video", StringComparison.Ordinal))
+        {
+            top.Items.Add(new MenuFlyoutSeparator());
+
+            // The screenshot-subtitle switch lives only inside 视频 now: the
+            // expanded menu's top level stays reserved for the pin action and
+            // the playback-rate presets.
+            var screenshotSubtitles = new ToggleMenuFlyoutItem
+            {
+                Text = Loc.T("ui.screenshotSubtitles"),
+                IsChecked = _settings.ScreenshotWithSubtitles,
+            };
+            screenshotSubtitles.Click += (_, _) =>
+            {
+                _settings.ScreenshotWithSubtitles = screenshotSubtitles.IsChecked;
+                SaveSettings();
+                ShowChrome();
+            };
+            top.Items.Add(screenshotSubtitles);
+
+            var deband = new ToggleMenuFlyoutItem
+            {
+                Text = Loc.T("menu.deband"),
+                IsChecked = _settings.DebandEnabled,
+            };
+            deband.Click += (_, _) =>
+            {
+                _settings.DebandEnabled = deband.IsChecked;
+                ApplyQualityPreset();
+                SaveSettings();
+                ShowChrome();
+            };
+            top.Items.Add(deband);
+
+            top.Items.Add(BuildQualityMenu());
             return;
         }
 
@@ -199,6 +228,12 @@ public sealed partial class MainWindow
         }
 
         top.Items.Add(profiles);
+
+        // K09: the profile picker is the natural place to jump into the full
+        // shortcut editor, without detouring through Settings → 控制.
+        var editor = new MenuFlyoutItem { Text = Loc.T("menu.shortcutEditor") };
+        editor.Click += (_, _) => App.ShowKeyBindingWindow();
+        top.Items.Add(editor);
     }
 
     private void CloseApplicationMenu()

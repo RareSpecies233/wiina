@@ -1,6 +1,7 @@
 using System.Reflection;
 using System.Runtime.InteropServices;
 using Microsoft.UI.Xaml;
+using Windows.Graphics;
 using Wiina.Core.State;
 
 namespace Wiina.App.Interop;
@@ -143,6 +144,22 @@ internal static class WindowInterop
     [DllImport("user32.dll", CharSet = CharSet.Unicode)]
     private static extern int GetClassName(nint hWnd, char[] lpClassName, int nMaxCount);
 
+    [DllImport("user32.dll", SetLastError = true)]
+    private static extern bool SetWindowPos(
+        nint hWnd,
+        nint hWndInsertAfter,
+        int x,
+        int y,
+        int cx,
+        int cy,
+        uint flags);
+
+    [DllImport("user32.dll")]
+    private static extern bool GetClientRect(nint hWnd, out RECT rect);
+
+    [DllImport("user32.dll")]
+    private static extern bool ClientToScreen(nint hWnd, ref POINT point);
+
     public static void SetImmersiveDarkMode(Window window, bool dark)
     {
         nint hwnd = Microsoft.UI.Win32Interop.GetWindowFromWindowId(window.AppWindow.Id);
@@ -196,6 +213,128 @@ internal static class WindowInterop
     /// </summary>
     public static void SetSnappedFrame(Window window, bool snapped) =>
         SetWindowFrame(window, snapped ? WindowFrameStyle.Snapped : WindowFrameStyle.Default);
+
+    private const uint SWP_NOZORDER = 0x0004;
+    private const uint SWP_NOACTIVATE = 0x0010;
+    private const uint SWP_NOOWNERZORDER = 0x0200;
+
+    /// <summary>
+    /// Stretches the WinUI content island (the <c>DesktopChildSiteBridge</c> that
+    /// hosts the XAML tree) over the window's whole client area. WinUI normally
+    /// places that island one pixel below the top edge and keeps the window's
+    /// background visible in that row, which shows up as a 1 px light or dark
+    /// strip above the video in fullscreen (the row follows the window
+    /// background, so it looks white in the light theme and black in the dark
+    /// one). Re-positioning and growing the island covers the strip with video.
+    /// Cosmetic and idempotent: it does nothing when the island already matches
+    /// the client area, and it never throws.
+    /// </summary>
+    public static void CoverClientArea(Window window)
+    {
+        try
+        {
+            nint hwnd = Microsoft.UI.Win32Interop.GetWindowFromWindowId(window.AppWindow.Id);
+            if (hwnd == 0 || !GetClientRect(hwnd, out RECT client))
+            {
+                return;
+            }
+
+            int width = client.Right - client.Left;
+            int height = client.Bottom - client.Top;
+            if (width <= 0 || height <= 0)
+            {
+                return;
+            }
+
+            nint site = FindDesktopChildSite(hwnd);
+            if (site == 0 || !GetWindowRect(site, out RECT siteRect))
+            {
+                return;
+            }
+
+            POINT origin = default;
+            if (!ClientToScreen(hwnd, ref origin))
+            {
+                return;
+            }
+
+            bool aligned = siteRect.Left == origin.X &&
+                siteRect.Top == origin.Y &&
+                siteRect.Right - siteRect.Left == width &&
+                siteRect.Bottom - siteRect.Top == height;
+            if (aligned)
+            {
+                return;
+            }
+
+            _ = SetWindowPos(
+                site,
+                0,
+                0,
+                0,
+                width,
+                height,
+                SWP_NOZORDER | SWP_NOACTIVATE | SWP_NOOWNERZORDER);
+        }
+        catch
+        {
+            // Cosmetic workaround for the 1 px content inset; never fatal.
+        }
+    }
+
+    private static nint FindDesktopChildSite(nint hwnd)
+    {
+        nint found = 0;
+        _ = EnumChildWindows(
+            hwnd,
+            (child, _) =>
+            {
+                char[] buffer = new char[96];
+                int length = GetClassName(child, buffer, buffer.Length);
+                if (length > 0 &&
+                    new string(buffer, 0, length).Contains("DesktopChildSiteBridge", StringComparison.Ordinal))
+                {
+                    found = child;
+                    return false;
+                }
+
+                return true;
+            },
+            0);
+        return found;
+    }
+
+    /// <summary>
+    /// Clears the native caption drag region while the window is fullscreen.
+    /// Dragging anywhere on a fullscreen window must never start the OS move
+    /// loop: moving or resizing the window makes Windows drop the fullscreen
+    /// presenter (the same behaviour that makes content drags leave fullscreen).
+    /// Windows exposes the caption of a custom-titlebar window through
+    /// <see cref="Microsoft.UI.Input.InputNonClientPointerSource"/>; removing the
+    /// region means the whole client area gets normal client hit-testing.
+    /// </summary>
+    public static void SetCaptionDragEnabled(Window window, bool enabled)
+    {
+        try
+        {
+            if (enabled)
+            {
+                // The caller restores the titlebar element, which reintroduces
+                // the caption region; nothing to do here.
+                return;
+            }
+
+            Microsoft.UI.Input.InputNonClientPointerSource source =
+                Microsoft.UI.Input.InputNonClientPointerSource.GetForWindowId(window.AppWindow.Id);
+            source.SetRegionRects(
+                Microsoft.UI.Input.NonClientRegionKind.Caption,
+                Array.Empty<RectInt32>());
+        }
+        catch
+        {
+            // Best effort only: fullscreen also drops the titlebar element itself.
+        }
+    }
 
     // Frame margins are measured from DWM once per DPI (and re-measured at the
     // start of every drag gesture), so WM_MOVING does not pay for two extra
@@ -297,6 +436,17 @@ internal static class WindowInterop
     private static readonly bool CursorDiagEnabled =
         Environment.GetEnvironmentVariable("WIINA_CURSOR_DIAG") == "1";
 
+    /// <summary>
+    /// Temporary experiment switch: when set to an <c>InputSystemCursorShape</c>
+    /// name (for example <c>SizeAll</c>), the "hidden" cursor is that visible
+    /// system cursor instead of the transparent one. If the arrow on screen
+    /// turns into the probe shape, winrt cursor plumbing works and the blank
+    /// resource is the problem; if it stays an arrow, the protected cursor is
+    /// not what the compositor uses. Never set in shipping builds.
+    /// </summary>
+    private static readonly string? CursorProbeShape =
+        Environment.GetEnvironmentVariable("WIINA_CURSOR_PROBE");
+
     /// <summary>Env-gated cursor diagnostics (WIINA_CURSOR_DIAG=1) for the
     /// WM_SETCURSOR path, which is otherwise invisible from a release build.</summary>
     private static void Diag(string message)
@@ -319,6 +469,25 @@ internal static class WindowInterop
     }
 
     private const int CursorShowingFlag = 0x00000001;
+
+    /// <summary>
+    /// Diagnostic line that is always recorded, even without WIINA_CURSOR_DIAG.
+    /// Only used for the handful of one-shot cursor-state transitions that a
+    /// bug report would otherwise leave as guesswork.
+    /// </summary>
+    private static void DiagAlways(string message)
+    {
+        try
+        {
+            File.AppendAllText(
+                Path.Combine(Path.GetTempPath(), "wiina-cursor-state.log"),
+                $"{DateTime.Now:HH:mm:ss.fff} {message}{Environment.NewLine}");
+        }
+        catch
+        {
+            // Diagnostics must never affect playback.
+        }
+    }
 
     [StructLayout(LayoutKind.Sequential)]
     private struct CURSORINFO
@@ -368,7 +537,8 @@ internal static class WindowInterop
         Action? windowResizeStarted = null,
         Action? windowMoveEnded = null,
         Func<WindowRect, WindowRect>? windowMoving = null,
-        Action? windowMoveStarted = null)
+        Action? windowMoveStarted = null,
+        Func<bool>? isFullscreen = null)
     {
         nint hwnd = Microsoft.UI.Win32Interop.GetWindowFromWindowId(window.AppWindow.Id);
         if (Hooks.ContainsKey(hwnd))
@@ -386,10 +556,16 @@ internal static class WindowInterop
             windowResizeStarted,
             windowMoveEnded,
             windowMoving,
-            windowMoveStarted);
+            windowMoveStarted,
+            isFullscreen);
         Hooks[hwnd] = hook;
         hook.Attach();
         _cursorRootHwnd = hwnd;
+
+        // Install the SetCursor IAT hook as early as possible: the WinUI input
+        // thread starts re-applying the arrow as soon as the pointer moves, and
+        // the hidden state must be interceptable from the very first frame.
+        _ = CursorHider.Install(Diag);
     }
 
     public static void Detach(Window window)
@@ -455,6 +631,10 @@ internal static class WindowInterop
         {
             if (visible)
             {
+                // Stop intercepting before restoring so the restore call itself
+                // is not rewritten to NULL.
+                CursorHider.SetHidden(false, Diag);
+
                 if (CursorHidden)
                 {
                     while (ShowCursor(true) < 0)
@@ -482,6 +662,8 @@ internal static class WindowInterop
                 // Install the input-thread hook; the UI-thread SetCursor is only
                 // a stopgap until the next message arrives.
                 HookCursorChildren();
+                _ = CursorHider.Install(Diag);
+                CursorHider.SetHidden(true, Diag);
                 SetCursor(GetBlankCursor());
                 StartCursorHider();
             }
@@ -694,6 +876,27 @@ internal static class WindowInterop
 
         try
         {
+            if (!string.IsNullOrEmpty(CursorProbeShape))
+            {
+                Type? systemCursor = FindType("Microsoft.UI.Input.InputSystemCursor");
+                Type? shapeType = FindType("Microsoft.UI.Input.InputSystemCursorShape");
+                MethodInfo? createSystem = systemCursor?.GetMethod(
+                    "Create",
+                    BindingFlags.Public | BindingFlags.Static);
+                if (createSystem is null || shapeType is null)
+                {
+                    _blankCursorLookupFailed = true;
+                    Diag("probecursor: InputSystemCursor unavailable");
+                    return null;
+                }
+
+                object shape = Enum.Parse(shapeType, CursorProbeShape, ignoreCase: true);
+                _blankInputCursor = createSystem.Invoke(null, new[] { shape });
+                DiagAlways($"probe: shape={CursorProbeShape} ok={_blankInputCursor is not null}");
+                _blankCursorLookupFailed = _blankInputCursor is null;
+                return _blankInputCursor;
+            }
+
             Type? cursorType = FindType("Microsoft.UI.Input.InputDesktopResourceCursor");
             if (cursorType is null)
             {
@@ -949,22 +1152,40 @@ internal static class WindowInterop
         nuint uIdSubclass,
         nint dwRefData)
     {
+        // The platform's own procedure (and the XAML pointer pipeline it drives)
+        // sets the arrow while processing input, so the clear has to happen
+        // *after* it runs. Doing it before only lets the platform overwrite it
+        // one line later.
+        nint result = DefSubclassProc(hWnd, msg, wParam, lParam);
+
+        if (msg != WM_SETCURSOR && msg != WM_MOUSEMOVE && msg != WM_NCMOUSEMOVE &&
+            msg != WM_POINTERUPDATE && msg != WM_POINTERENTER && msg != 0x0246 /* WM_POINTERDOWN */ &&
+            msg != 0x0247 /* WM_POINTERUP */ && msg != 0x0245)
+        {
+            return result;
+        }
+
+        DiagChildMessage(msg, hWnd);
+
         if (CursorHidden)
         {
-            if (msg == WM_SETCURSOR)
+            switch (msg)
             {
-                _cursorChildHits++;
-                SetCursor(0);
-                return 1;
-            }
-
-            if (msg == WM_MOUSEMOVE)
-            {
-                SetCursor(0);
+                case WM_SETCURSOR:
+                    SetCursor(0);
+                    _cursorChildHits++;
+                    return 1;
+                case WM_MOUSEMOVE:
+                case WM_NCMOUSEMOVE:
+                case WM_POINTERUPDATE:
+                case WM_POINTERENTER:
+                    SetCursor(0);
+                    _cursorChildHits++;
+                    break;
             }
         }
 
-        return DefSubclassProc(hWnd, msg, wParam, lParam);
+        return result;
     }
 
     private static void UninstallCursorHook()
@@ -1014,6 +1235,23 @@ internal static class WindowInterop
         }
 
         return CallNextHookEx(0, nCode, wParam, lParam);
+    }
+
+    private static readonly HashSet<uint> _childMessagesLogged = new();
+
+    /// <summary>
+    /// Records the first few cursor-related messages the WinUI host windows
+    /// actually dispatch. Without this there is no way to tell whether the
+    /// island gets WM_SETCURSOR at all or the platform bypasses messages.
+    /// </summary>
+    private static void DiagChildMessage(uint msg, nint hwnd)
+    {
+        if (!CursorDiagEnabled || !_childMessagesLogged.Add(msg))
+        {
+            return;
+        }
+
+        Diag($"child msg=0x{msg:X} hwnd=0x{hwnd:X} class={ClassNameOf(hwnd)}");
     }
 
     private static string ClassNameOf(nint hwnd)
@@ -1255,6 +1493,39 @@ internal static class WindowInterop
         return false;
     }
 
+    /// <summary>
+    /// Cursor position in window-local DIPs, which is the space XAML hit
+    /// testing uses. Needed because WinUI drops PointerExited often enough that
+    /// "is the pointer still on the OSC?" has to be answered from the real
+    /// cursor position rather than from cached pointer events.
+    /// </summary>
+    public static bool TryGetCursorInWindow(Window window, out Windows.Foundation.Point point)
+    {
+        point = default;
+
+        try
+        {
+            nint hwnd = Microsoft.UI.Win32Interop.GetWindowFromWindowId(window.AppWindow.Id);
+            if (!GetCursorPos(out POINT cursor) || !ClientToScreen(hwnd, ref cursor))
+            {
+                return false;
+            }
+
+            double scale = window.Content?.XamlRoot?.RasterizationScale ?? 1.0;
+            if (scale <= 0)
+            {
+                scale = 1.0;
+            }
+
+            point = new Windows.Foundation.Point(cursor.X / scale, cursor.Y / scale);
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
     private sealed class Hook
     {
         private readonly nint _hwnd;
@@ -1267,6 +1538,7 @@ internal static class WindowInterop
         private readonly Action? _windowMoveEnded;
         private readonly Func<WindowRect, WindowRect>? _windowMoving;
         private readonly Action? _windowMoveStarted;
+        private readonly Func<bool>? _isFullscreen;
         private readonly SubclassProc _proc;
         private bool _sizingGesture;
 
@@ -1280,7 +1552,8 @@ internal static class WindowInterop
             Action? windowResizeStarted,
             Action? windowMoveEnded,
             Func<WindowRect, WindowRect>? windowMoving,
-            Action? windowMoveStarted)
+            Action? windowMoveStarted,
+            Func<bool>? isFullscreen)
         {
             _hwnd = hwnd;
             _minWidthDip = minWidthDip;
@@ -1292,6 +1565,7 @@ internal static class WindowInterop
             _windowMoveEnded = windowMoveEnded;
             _windowMoving = windowMoving;
             _windowMoveStarted = windowMoveStarted;
+            _isFullscreen = isFullscreen;
             _proc = WndProc;
         }
 
@@ -1327,6 +1601,15 @@ internal static class WindowInterop
             if (msg == WM_MOUSEMOVE && CursorHidden && hWnd == _hwnd)
             {
                 SetCursor(GetBlankCursor());
+            }
+
+            if (msg == WM_NCHITTEST && _isFullscreen is not null && _isFullscreen())
+            {
+                // Fullscreen must present a borderless, immovable surface. Every
+                // point is reported as client area so the OS never treats an
+                // edge as a resize border or a drag region; moving or resizing
+                // the window would drop the fullscreen presenter.
+                return HTCLIENT;
             }
 
             if (msg == WM_APPCOMMAND && _appCommand is not null)

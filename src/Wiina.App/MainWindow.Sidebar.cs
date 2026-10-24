@@ -586,11 +586,10 @@ public sealed partial class MainWindow
                 break;
             case QuickSettingKey.ThumbnailPreview:
                 _settings.ThumbnailPreviewEnabled = e.Flag;
-                if (!e.Flag)
-                {
-                    HideTimePreview();
-                }
-
+                // Route through the same live-apply path as the settings
+                // window so switching off also stops pre-generation, drops
+                // queued jobs and blocks disk writes immediately.
+                ApplySettingsRow("video.thumbnail-preview");
                 break;
             case QuickSettingKey.SidebarSide:
                 MoveSidebarTo(e.Number >= 1 ? SidebarSide.Trailing : SidebarSide.Leading);

@@ -197,6 +197,7 @@ public static class MenuCatalog
         {
             FileMenu(state),
             PlaybackMenu(state),
+            VideoMenu(state),
             AudioMenu(state),
             SubtitlesMenu(state),
             PluginMenu(state),
@@ -282,8 +283,6 @@ public static class MenuCatalog
                 Item("playback.jump-start", "跳到开头", MenuCommands.JumpToStart,
                     enabled: state.HasMedia),
                 Separator(),
-                Item("playback.screenshot", "截图", MenuCommands.Screenshot, shortcut: "Ctrl+S",
-                    enabled: state.HasMedia),
                 Item("playback.ab-loop", "A-B 循环", MenuCommands.AbLoop, shortcut: "Ctrl+L",
                     enabled: state.HasMedia, isChecked: state.AbLoopActive),
                 Submenu("playback.loop", "循环模式", MenuCommands.Loop,
@@ -401,9 +400,10 @@ public static class MenuCatalog
                 Item("plugin.folder", "打开插件文件夹", MenuCommands.PluginFolder),
             });
 
-    // One 窗口 submenu carries the whole window/picture family. The separate
-    // 视频 group duplicated most of these entries (half/normal/double/fit), so
-    // its unique items now live here instead of behind a second submenu.
+    // 窗口 keeps window/layout operations only (minimize, window scaling,
+    // fullscreen/pin/aspect lock and the window modes). Pure picture work lives
+    // in the separate 视频 group below; that split is what avoids duplicate
+    // entries while keeping both audiences one click away.
     private static MenuGroupDefinition WindowMenu(MenuState state) =>
         new(
             "window",
@@ -425,9 +425,6 @@ public static class MenuCatalog
                 Item("window.zoom-out", "缩小窗口", MenuCommands.VideoZoomOut,
                     enabled: state.HasMedia),
                 Separator(),
-                Item("video.panel", "显示视频面板", MenuCommands.VideoPanel),
-                Submenu("video.tracks", "视频轨道", MenuCommands.VideoTracks,
-                    enabled: state.HasVideo),
                 Item("video.pip", state.IsPip ? "退出画中画" : "画中画", MenuCommands.Pip,
                     shortcut: "Ctrl+Shift+P", isChecked: state.IsPip),
                 Item("video.fullscreen", state.IsFullscreen ? "退出全屏" : "进入全屏",
@@ -439,6 +436,29 @@ public static class MenuCatalog
                 Item("video.music-mode", state.IsMini ? "退出音乐模式" : "音乐模式",
                     MenuCommands.MusicMode, shortcut: "Ctrl+Shift+M", isChecked: state.IsMini),
                 Separator(),
+                Item("window.inspector", "检查器…", MenuCommands.Inspector),
+                Item("window.log", "日志查看器…", MenuCommands.LogViewer),
+                Separator(),
+                Item("window.settings", "设置…", MenuCommands.Settings, shortcut: "Ctrl+,"),
+                Item("window.close", "关闭窗口", MenuCommands.CloseWindow, shortcut: "Ctrl+W"),
+            });
+
+    // 视频 carries the picture-only commands: panel, tracks, screenshot, the
+    // aspect/crop/rotate/flip family and the filter window. The screenshot
+    // subtitle toggle, debanding and the quality presets are appended by the
+    // window (they depend on AppSettings or on window-local state).
+    private static MenuGroupDefinition VideoMenu(MenuState state) =>
+        new(
+            "video",
+            "视频",
+            new[]
+            {
+                Item("video.panel", "显示视频面板", MenuCommands.VideoPanel),
+                Submenu("video.tracks", "视频轨道", MenuCommands.VideoTracks,
+                    enabled: state.HasVideo),
+                Separator(),
+                Item("video.screenshot", "截图", MenuCommands.Screenshot, shortcut: "Ctrl+S",
+                    enabled: state.HasMedia),
                 Submenu("video.aspect", "宽高比", MenuCommands.Aspect,
                     enabled: state.HasMedia,
                     children: AspectItems(state)),
@@ -460,14 +480,9 @@ public static class MenuCatalog
                     enabled: state.HasMedia, isChecked: state.FlipVertical),
                 Item("video.deinterlace", "去隔行", MenuCommands.Deinterlace,
                     enabled: state.HasMedia, isChecked: state.Deinterlace),
+                Separator(),
                 Item("video.filters", "视频滤镜…", MenuCommands.VideoFilters,
                     enabled: true),
-                Separator(),
-                Item("window.inspector", "检查器…", MenuCommands.Inspector),
-                Item("window.log", "日志查看器…", MenuCommands.LogViewer),
-                Separator(),
-                Item("window.settings", "设置…", MenuCommands.Settings, shortcut: "Ctrl+,"),
-                Item("window.close", "关闭窗口", MenuCommands.CloseWindow, shortcut: "Ctrl+W"),
             });
 
     private static MenuGroupDefinition HelpMenu(MenuState state) =>

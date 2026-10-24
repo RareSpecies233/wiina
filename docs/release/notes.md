@@ -1,11 +1,88 @@
 # Wiina release notes
 
-Release date (1.3.1): 2026-10-24
+Release date (1.3.2): 2026-10-25
 
 Windows-native, IINA-inspired mpv front end built with WinUI 3, Windows App
 SDK 2.5, and libmpv.
 
-## What's new in 1.3.1
+## What's new in 1.3.2
+
+### Cursor hiding actually works now
+
+The pointer stayed visible because the WinUI input stack re-applies
+`SetCursor(arrow)` on its own input thread; `SetCursor`, `ShowCursor`,
+`WM_SETCURSOR`, and `ProtectedCursor` from application code never reached that
+thread. `src/Wiina.App/Interop/CursorHider.cs` now patches the import address
+table of the candidate modules (`Microsoft.UI.Input.dll`,
+`Microsoft.InputStateManager.dll`, `CoreMessaging.dll`, `Microsoft.UI.Content.dll`,
+`Microsoft.UI.Xaml.dll`, `Microsoft.UI.Windowing.Core.dll`,
+`Windows.UI.Immersive.dll`) so their `user32!SetCursor` calls become
+`SetCursor(NULL)` while chrome is hidden. Only IAT pointers change; the original
+pointer is kept alive for pass-through and restore. Measured: 20/20
+`GetCursorInfo` samples reported `hCursor=0, flags=0` for 4.75 s after hiding,
+and 54/54 reported `flags=1` after the pointer moved. `WIINA_CURSOR_HOOK=0`
+disables the hook; `=scan` only lists importing modules. If installation fails
+the old fallback stays in place. Risk: some antivirus engines flag IAT patching,
+and a future Windows App SDK may rename the modules — both cases fall back.
+
+### Fullscreen edge and drag fixes
+
+- The 1-3 px strip at the top of fullscreen came from the WinUI XAML island
+  child window (`Microsoft.UI.Content.DesktopChildSiteBridge`) sitting at (0,1).
+  `WindowInterop.CoverClientArea` now covers the client area at startup and after
+  presenter changes; the first pixel row is video.
+- Dragging the video in fullscreen no longer drops fullscreen: the gesture
+  returns early, `WM_NCHITTEST` reports `HTCLIENT` for the caption area, and the
+  title-bar drag path is suspended while fullscreen.
+
+### OSC and menus
+
+- Media-chrome controls (OSC, titlebar, mini player) are removed from the Tab
+  order and from click-focus, so Space/Enter keep their player meaning; Tab in
+  mini/fullscreen is returned to the root grid.
+- Fixed eight menu groups (File, Playback, Video, Audio, Subtitles, Plugins,
+  Window, Help). The Video menu keeps picture-only commands; window controls
+  live only in Window. The screenshot-subtitles toggle moved from the expanded
+  flyout top level into Video. Menu items went from 83 to 80 and
+  `MenuRulesTests` (13 cases) covers the layout.
+- Auto-hide hardening: 5x5 DIP jitter threshold, hover keeps the OSC parked,
+  leaving the window or deactivating hides immediately, clicking the video hides
+  according to Control > Mouse > click action, the cursor follows the chrome, and
+  fast enter/leave no longer leaves the timer in a wrong state.
+- Dragging the timeline and all seek shortcuts show the progress OSD
+  (`OsdMessages.Seek`), and the frame-drop notice is pinned to the left edge,
+  vertically centred, instead of the top-centre slot.
+- The uninstaller raises UAC once at launch (Inno `InitializeUninstall`
+  re-launches itself elevated and exits the old instance; the PowerShell
+  elevation helper is gone). The "uninstall was incomplete" dialog is removed —
+  machine-wide leftovers are logged only. Silent uninstalls stay unelevated.
+
+### Screenshots and thumbnails
+
+- Screenshot names are now `media-hour-minute-second-millisecond.png`
+  (`movie-1-28-39-980.png`); collisions get a numeric suffix and illegal
+  characters are sanitised. Without media the legacy
+  `wiina-yyyyMMdd-HHmmss.png` name is kept.
+- The thumbnail cache-count setting row is gone. Turning previews off now stops
+  all thumbnail work: no headless mpv instance and no disk writes. The memory
+  cache sizes itself to every 5-second bucket of the current file
+  (about 57.6 KB per bucket).
+
+### Shutdown and device loss
+
+Close takes 170-179 ms (process exit 362-426 ms) with a single settings save and
+no watchdog. `src/Wiina.Core/Playback/DeviceLoss.cs` classifies
+`0x887A0005/0x887A0006/0x887A0007/0x887A0020` and schedules a bounded
+`video-reload` recovery; a real TDR has not been reproduced on hardware, so the
+recovery path is code-verified only.
+
+### Known issues and documentation
+
+`docs/reports/known-issues-1.3.1.md` now carries the user's 1.3.2 decision for
+every entry (feature / expected / fixed). New `docs/acceptance/v1.3.2.md`
+records the eleven user items, the decision table, the settings delta
+(129 -> 128 rows, 563 -> 568 keys, still eleven pages) and 827 tests.
+## 1.3.1 — previous release
 
 ### Key-binding profiles: Wiina and mpv only
 

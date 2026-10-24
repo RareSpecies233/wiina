@@ -327,6 +327,8 @@ public static class UiStrings
     public const string menu_subtitleFont = "menu.subtitleFont";
     public const string menu_loadExternalAudio = "menu.loadExternalAudio";
     public const string menu_keyboardProfile = "menu.keyboardProfile";
+    public const string menu_shortcutEditor = "menu.shortcutEditor";
+    public const string menu_deband = "menu.deband";
     public const string menu_profileDefault = "menu.profileDefault";
     public const string menu_profileWiina = "menu.profileWiina";
     public const string menu_profileMpv = "menu.profileMpv";
@@ -383,6 +385,9 @@ public static class UiStrings
     public const string osd_videoFilters = "osd.videoFilters";
     public const string osd_softwareDecode = "osd.softwareDecode";
     public const string osd_engineFailed = "osd.engineFailed";
+    public const string osd_deviceLost = "osd.deviceLost";
+    public const string osd_deviceRecovered = "osd.deviceRecovered";
+    public const string osd_deviceLostFailed = "osd.deviceLostFailed";
     public const string osd_miniOnTopOn = "osd.miniOnTopOn";
     public const string osd_miniOnTopOff = "osd.miniOnTopOff";
     public const string osd_fullscreenOnTop = "osd.fullscreenOnTop";
@@ -971,6 +976,8 @@ public static class UiStrings
         Add("menu.subtitleFont", "字幕字体", "Subtitle font");
         Add("menu.loadExternalAudio", "加载外部音频…", "Load External Audio…");
         Add("menu.keyboardProfile", "键盘方案", "Keyboard Profile");
+        Add("menu.shortcutEditor", "快捷键编辑器…", "Shortcut Editor…");
+        Add("menu.deband", "去色带", "Deband");
         Add("menu.profileDefault", "默认", "Default");
         Add("menu.profileWiina", "Wiina 默认", "Wiina Default");
         Add("menu.profileMpv", "mpv", "mpv");
@@ -1027,6 +1034,9 @@ public static class UiStrings
         Add("osd.videoFilters", "视频滤镜", "Video filters");
         Add("osd.softwareDecode", "已切换为软件解码以应用滤镜", "Switched to software decoding to apply filters");
         Add("osd.engineFailed", "播放引擎启动失败", "The playback engine failed to start");
+        Add("osd.deviceLost", "显示设备已重置，正在恢复视频输出…", "The display device was reset; recovering video output…");
+        Add("osd.deviceRecovered", "视频输出已恢复", "Video output restored");
+        Add("osd.deviceLostFailed", "视频输出无法恢复，播放继续进行但没有画面", "Video output could not be restored; playback continues without video");
         Add("osd.miniOnTopOn", "迷你播放器：置顶已开启", "Mini player: always on top enabled");
         Add("osd.miniOnTopOff", "迷你播放器：置顶已关闭", "Mini player: always on top disabled");
         Add("osd.fullscreenOnTop", "全屏中，置顶设置将在退出全屏后生效", "Always on top applies after leaving fullscreen");

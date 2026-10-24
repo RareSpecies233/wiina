@@ -260,13 +260,6 @@ public static class SettingsCatalog
             (settings, value) => settings.ThumbnailBucketSeconds = Math.Clamp(value, 1, 30),
             "thumbnail bucket interval 缩略图 间隔"));
         rows.Add(NumberRow(
-            "video.thumbnail-cache", SettingsPageId.Video, "缩略图",
-            "缩略图缓存下限", "内存至少保留的张数；实际会缓存当前视频的全部时间点，便于快速预览（约每 5 秒一张、每张 58 KB）。",
-            10, 240, 10, " 张",
-            settings => settings.ThumbnailCacheCount,
-            (settings, value) => settings.ThumbnailCacheCount = (int)Math.Round(Math.Clamp(value, 10, 240)),
-            "thumbnail cache 缩略图 缓存"));
-        rows.Add(NumberRow(
             "video.thumbnail-cache-mb", SettingsPageId.Video, "缩略图",
             "缩略图磁盘缓存", "0 关闭磁盘缓存；超出上限时按最近最少使用自动清理。",
             0, 4096, 64, " MB",
@@ -538,7 +531,7 @@ public static class SettingsCatalog
         rows.Add(ActionRow(
             "general.screenshot-folder", SettingsPageId.Video, "截图",
             "截图文件夹",
-            "Ctrl+S 保存截图的目录（默认 图片\\Wiina Screenshots）。",
+            "截图保存目录（默认 图片\\Wiina）；文件名取视频名与播放时间，精确到毫秒，如 xxx-1-28-39-980.png。",
             "choose-screenshot-folder",
             "screenshot folder 截图 文件夹",
             settings => GetScreenshotFolder(settings)));
@@ -1258,6 +1251,8 @@ public static class SettingsCatalog
         }
 
         string pictures = Environment.GetFolderPath(Environment.SpecialFolder.MyPictures);
-        return System.IO.Path.Combine(pictures, "Wiina Screenshots");
+        // Must match MainWindow.GetScreenshotFolder and mpv's screenshot-directory,
+        // otherwise the row reports a folder the app never writes to.
+        return System.IO.Path.Combine(pictures, "Wiina");
     }
 }

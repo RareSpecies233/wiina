@@ -1,6 +1,6 @@
 # Accessibility, localization, DPI and motion
 
-This document records what Wiina v1.3.1 implements, how it was checked, and
+This document records what Wiina v1.3.2 implements, how it was checked, and
 what is intentionally limited. It is a summary, not a certification.
 
 ## 1. Keyboard and focus
@@ -38,12 +38,13 @@ what is intentionally limited. It is a summary, not a certification.
   the refresh button has a localized AutomationProperties.Name plus tooltip.
   The unavailable-device placeholder is part of the item text, so it is read
   out instead of being hidden.
+- Media chrome (OSC, title bar, mini player) is removed from the Tab order and from click focus since 1.3.2 (`IsTabStop=false` / `AllowFocusOnInteraction=false`), so Space/Enter always reach the player; Tab in mini/fullscreen is returned to the root grid. Every chrome action also has a keyboard shortcut.
 - Since 1.3.1 the thumbnail-acceleration row is a two-item ComboBox
   (Auto/CPU only), the previous/next-behaviour row is a ComboBox
   (track skip / ±5 s), and screenshot-subtitles is a ToggleSwitch; all three use
   the localized row title as their AutomationProperties.Name and are reachable
-  with Tab/arrow keys. Cursor hiding is not an accessibility feature and remains
-  unverified (see `release/known-issues.md`).
+  with Tab/arrow keys. Cursor hiding became functional in 1.3.2 (see `release/known-issues.md`) and is not an accessibility feature; it remains
+  a low-risk IAT hook rather than a documented accessibility guarantee.
 
 ## 2. Automation names
 
@@ -133,9 +134,9 @@ generic text containers mirror.
 
 ## 7. Localization coverage
 
-- Runtime catalog: 563 keys in `UiStringCatalog.cs`, each with a non-empty
+- Runtime catalog: 568 keys in `UiStringCatalog.cs`, each with a non-empty
   zh-Hans and English string. Coverage includes the title bar, OSC, OSD, menus,
-  sidebars, quick settings, all settings pages (12 catalog entries, 11 navigable;
+  sidebars, quick settings, all settings pages (11 pages, 128 rows;
   page titles, summaries, section headers, row titles/descriptions/choices), welcome/about/log/inspector/open-URL
   dialogs, filter/equalizer windows, playlist/chapters, mini player, PiP badge,
   the 1.2.6 audio-device labels (auto/refresh/unavailable), the 1.2.7 thumbnail-cache and administrator-association labels, the 1.3.1

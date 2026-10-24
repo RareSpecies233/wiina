@@ -55,6 +55,7 @@ public sealed class ThumbnailService : IDisposable
     private DateTime _lastInteractionUtc = DateTime.UtcNow;
     private volatile bool _slowMode;
     private volatile bool _cpuOnly;
+    private volatile bool _previewEnabled = true;
     private bool _restartPlayer;
     private bool _loggedDecodePath;
     private bool _disposed;
@@ -193,6 +194,71 @@ public sealed class ThumbnailService : IDisposable
     public void SetSlowMode(bool enabled) => SlowMode = enabled;
 
     /// <summary>
+    /// Whether timeline thumbnails are wanted at all. When off, Wiina does no
+    /// thumbnail work: no whole-file pre-generation pass, no headless mpv
+    /// player, no hover extraction and no new disk-cache writes. Frames that
+    /// were already generated stay in memory and on disk (they are simply not
+    /// requested) so switching the preview back on is instant.
+    /// </summary>
+    public bool PreviewEnabled
+    {
+        get => _previewEnabled;
+        set
+        {
+            if (_previewEnabled == value)
+            {
+                return;
+            }
+
+            _previewEnabled = value;
+            if (value)
+            {
+                Log?.Invoke("thumbnail generation enabled");
+            }
+            else
+            {
+                StopPreGeneration();
+                CompleteQueuedJobsLocked();
+                Log?.Invoke(
+                    "thumbnail generation disabled: no pre-generation, hover " +
+                    "extraction, or disk writes until it is switched back on");
+            }
+
+            // Wake an idle worker so it notices the new policy immediately.
+            try
+            {
+                _wake.Release();
+            }
+            catch (ObjectDisposedException)
+            {
+            }
+        }
+    }
+
+    /// <summary>Live-apply entry point used by the settings window.</summary>
+    public void SetPreviewEnabled(bool enabled) => PreviewEnabled = enabled;
+
+    /// <summary>
+    /// Fails every queued job instead of letting it start an extraction after
+    /// the preview was switched off. The worker's in-flight job (if any) is
+    /// checked separately by <see cref="ExtractAsync"/> before it caches or
+    /// writes anything.
+    /// </summary>
+    private void CompleteQueuedJobsLocked()
+    {
+        lock (_gate)
+        {
+            foreach (Job job in _queue)
+            {
+                _jobs.Remove(job.Id);
+                job.Completion.TrySetResult(null);
+            }
+
+            _queue.Clear();
+        }
+    }
+
+    /// <summary>
     /// Decode path for thumbnails. <see cref="ThumbnailAcceleration.Auto"/> keeps
     /// libmpv's <c>hwdec=auto-safe</c> (GPU when the driver works, software
     /// otherwise), <see cref="ThumbnailAcceleration.Cpu"/> forces <c>hwdec=no</c>.
@@ -249,7 +315,10 @@ public sealed class ThumbnailService : IDisposable
         CancellationToken cancellationToken = default,
         bool background = false)
     {
-        if (_disposed || cancellationToken.IsCancellationRequested || !IsLocalFile(mediaPath))
+        if (_disposed
+            || !_previewEnabled
+            || cancellationToken.IsCancellationRequested
+            || !IsLocalFile(mediaPath))
         {
             return null;
         }
@@ -293,6 +362,13 @@ public sealed class ThumbnailService : IDisposable
                     $"{diskClock.Elapsed.TotalMilliseconds:0} ms");
                 return diskFrame;
             }
+        }
+
+        if (!_previewEnabled)
+        {
+            // Switched off while the disk read above was in flight; do not queue
+            // an extraction that nobody will display.
+            return null;
         }
 
         Job job = GetOrCreateJob(mediaPath!, bucketTime, durationSeconds, height, background);
@@ -350,6 +426,13 @@ public sealed class ThumbnailService : IDisposable
         int targetHeight = PreGenerationHeight)
     {
         StopPreGeneration();
+
+        if (!_previewEnabled)
+        {
+            // The caller (settings row, startup) already knows thumbnails are
+            // off; this guard also covers live toggles racing a file open.
+            return;
+        }
 
         // Size the memory cache before any early return (slow mode, disk cache
         // disabled) so hovering still fills a cache that covers the whole file.
@@ -431,7 +514,7 @@ public sealed class ThumbnailService : IDisposable
         {
             for (long bucket = 0; bucket <= lastBucket; bucket++)
             {
-                if (ct.IsCancellationRequested || _disposed)
+                if (ct.IsCancellationRequested || _disposed || !_previewEnabled)
                 {
                     return;
                 }
@@ -555,6 +638,7 @@ public sealed class ThumbnailService : IDisposable
                         return;
                     }
 
+                    DisposePlayerWhenPreviewOff();
                     continue;
                 }
 
@@ -583,6 +667,8 @@ public sealed class ThumbnailService : IDisposable
                     _jobs.Remove(job.Id);
                 }
 
+                DisposePlayerWhenPreviewOff();
+
                 if (_slowMode)
                 {
                     // One-core mode: leave the CPU alone between frames so
@@ -595,6 +681,27 @@ public sealed class ThumbnailService : IDisposable
         {
             _workerThread = null;
         }
+    }
+
+    /// <summary>
+    /// Releases the headless player shortly after the preview is switched off,
+    /// so no thumbnail mpv process stays alive for a feature the user disabled.
+    /// Runs on the worker thread only — the sole thread that drives the player —
+    /// therefore no extraction can be using it at this point.
+    /// </summary>
+    private void DisposePlayerWhenPreviewOff()
+    {
+        if (_previewEnabled || _player is null)
+        {
+            return;
+        }
+
+        _player.Dispose();
+        _player = null;
+        _fileLoaded = null;
+        _loadedPath = null;
+        _loggedDecodePath = false;
+        Log?.Invoke("thumbnail headless player released: preview is off");
     }
 
     private Job? TakeNextLocked()
@@ -638,6 +745,13 @@ public sealed class ThumbnailService : IDisposable
 
     private async Task<ThumbnailFrame?> ExtractAsync(Job job)
     {
+        // The preview may have been switched off after this job was dequeued;
+        // never create the headless player for work nobody wants any more.
+        if (!_previewEnabled || _disposed)
+        {
+            return null;
+        }
+
         var clock = Stopwatch.StartNew();
         MpvPlayer? player = EnsurePlayer();
         if (player is null || !await LoadFileAsync(player, job.Path).ConfigureAwait(false))
@@ -661,8 +775,10 @@ public sealed class ThumbnailService : IDisposable
         }
 
         // The user may have switched files while this seek was in flight; a stale
-        // frame must never land in the new source's cache.
-        if (string.Equals(_sourcePath, job.Path, StringComparison.OrdinalIgnoreCase))
+        // frame must never land in the new source's cache. A frame requested
+        // after the preview was switched off is dropped instead of cached.
+        if (_previewEnabled
+            && string.Equals(_sourcePath, job.Path, StringComparison.OrdinalIgnoreCase))
         {
             _cache.Put(job.Seconds, frame);
             _frameBytes = ThumbnailCacheSizing.FrameBytes(frame.Width, frame.Height);
@@ -678,7 +794,7 @@ public sealed class ThumbnailService : IDisposable
                 (string.IsNullOrWhiteSpace(hwdec) ? "unknown" : hwdec) +
                 (_cpuOnly ? " (CPU only requested)" : " (auto)"));
         }
-        if (_disk is not null && job.Duration > 0)
+        if (_previewEnabled && _disk is not null && job.Duration > 0)
         {
             await WriteDiskAsync(job, frame).ConfigureAwait(false);
         }
@@ -696,6 +812,13 @@ public sealed class ThumbnailService : IDisposable
 
     private MpvPlayer? EnsurePlayer()
     {
+        // Hard gate: with the preview off no headless mpv process is created,
+        // even if a job slipped through a race with the toggle.
+        if (!_previewEnabled || _disposed)
+        {
+            return null;
+        }
+
         if (_player is { IsRunning: true } && !_restartPlayer)
         {
             return _player;

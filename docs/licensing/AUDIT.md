@@ -1,12 +1,12 @@
-# 许可证与合规审计（v1.3.1）
+# 许可证与合规审计（v1.3.2）
 
 > 结论先行：**Wiina 以 GPL-3.0-only 发布**。不复制 IINA 的 Swift/AppKit 源码、图片资产、SF Symbols 或应用图标；
 > 不把 mpv/libmpv 二进制提交进 git；发布包附带 mpv 的许可证文本与源码获取方式。
 > 本文件不是法律意见；发布前建议做一次人工复核。
 
-本文件自 v0.1 起随版本更新。当前状态对应 **v1.3.1**：插件系统、在线字幕、yt-dlp 均未实现（Stage 9/10 按维护者要求跳过），
+本文件自 v0.1 起随版本更新。当前状态对应 **v1.3.2**：插件系统、在线字幕、yt-dlp 均未实现（Stage 9/10 按维护者要求跳过），
 因此本文件中所有“（v1）”字样的集成条目都已改为**未使用**，不再作为分发内容或义务来源。
-v1.3.1 没有新增第三方依赖，也没有复制第三方代码：mpv.net 配置导出只是把选项/键位文本写到
+v1.3.2 没有新增第三方依赖，也没有复制第三方代码：mpv.net 配置导出只是把选项/键位文本写到
 `resources/mpvnet/`（mpv.net 本身不随包分发、不被调用）；键位对照文档
 `docs/reference/iina-shortcuts.md` 是从 IINA 默认配置推导出的行为描述（GPL-3.0 文档），不含源码；
 系统媒体键只调用 Windows SDK 的 SMTC API。安装器仍使用 Inno Setup（构建期工具，见 `docs/installer.md`）。
@@ -137,14 +137,19 @@ v1.3.1 没有新增第三方依赖，也没有复制第三方代码：mpv.net �
 
 1. **shinchiro 构建的确切许可证文本**：发布前下载对应 7z，确认包内 `LICENSE.GPL`/`Copyright` 与构建选项；按其文本原样附带。
 2. **名称商标**：见 §3；若计划商业化，建议先做商标检索或改名。
-3. **文件关联（1.2.3 新增）**：只写当前用户注册表（HKCU），不需要管理员权限，不写 HKLM；不接管默认应用，
-   只提供 `OpenWithProgids` 与 `RegisteredApplications` 条目，最终由用户在“默认应用”确认。卸载/取消关联只删除本应用自己的键，
-   不清理系统或其他应用的关联。实现见 `docs/file-associations.md`，不使用任何第三方代码。
+3. **文件关联（1.2.3 新增；1.2.7 增管理员模式）**：默认只写当前用户注册表（HKCU，不需要管理员权限）；
+   用户显式点击「管理员一键关联…」并经 UAC 后，才写 `HKLM\Software\Classes` 的系统级副本（仍不静默接管默认应用，
+   只提供 ProgID/`OpenWithProgids`/`RegisteredApplications`，最终由用户在“默认应用”确认）。卸载始终清理两个 hive 中
+   本应用自己的键，不动其他应用。实现见 `docs/file-associations.md`，不使用任何第三方代码。
 4. **插件系统**：未实现（Stage 9 跳过）。若将来实现，插件 API 的许可证、沙箱、第三方插件分发需单独审计；插件是独立作品，
    宿主不为其授权；插件安装页需显示权限与来源。
 5. **在线服务**：未实现（Stage 10 跳过）。若将来实现，OpenSubtitles/yt-dlp 的 ToS、API key、速率限制需重新审计。
 6. **HDR/杜比视界**：杜比视界元数据/专利另有限制；v1 不做杜比视界，HDR 输出精调放 v2。
 7. **CI 构建产物**：不要把 `libmpv-2.dll` 作为 artifact 公开发布，除非同时满足 §4 的源码/许可义务。
+8. **进程内 IAT hook（1.3.2 新增）**：`src/Wiina.App/Interop/CursorHider.cs` 只在**本进程**内重定向 WinUI 输入模块对
+   `user32!SetCursor` 的导入（PE 解析 + `VirtualProtect` + detour，原指针保活），不注入其他进程、不修改系统文件、
+   不引入第三方代码。风险是杀软可能误报为“进程注入/补丁”；hook 失败会自动回退到旧的 `ShowCursor`/`ProtectedCursor`
+   机制。若将来改用签名或官方 API，应删除该 hack。
 
 ---
 

@@ -55,6 +55,7 @@ public sealed partial class MainWindow : Window
 
     private readonly DispatcherQueueTimer _resizeTimer;
     private readonly DispatcherQueueTimer _autoHideTimer;
+    private readonly DispatcherQueueTimer _pointerWatchTimer;
     private readonly OscVisibilityController _oscState = new();
 
     /// <summary>Monotonic clock for the OSC idle rules (unaffected by system time changes).</summary>
@@ -72,6 +73,27 @@ public sealed partial class MainWindow : Window
     private bool _started;
     private bool _closed;
     private bool _compact;
+
+    // Close path: an explicit state machine with per-step tracing plus a
+    // watchdog, so a blocked teardown can never leave a hung window behind
+    // (AppHangB1, 26 s in 1.2.6: the window stayed "not responding" because
+    // OnClosed never returned).
+    private bool _closing;
+    private bool _closeCompleted;
+    private CancellationTokenSource? _closeWatchdog;
+    private readonly Stopwatch _closeClock = new();
+
+    /// <summary>Upper bound for teardown before the process is terminated.</summary>
+    private static readonly TimeSpan CloseWatchdogTimeout = TimeSpan.FromMilliseconds(4000);
+
+    // Device loss (DXGI_ERROR_DEVICE_REMOVED and friends): mpv's event thread
+    // reports the loss in its log, the swapchain bind fails with the same
+    // HRESULT, and playback keeps rendering into a dead device until the VO is
+    // rebuilt. Recovery is bounded so broken hardware cannot loop forever.
+    private readonly DeviceLossRecoveryBudget _deviceRecovery = new();
+    private bool _deviceRecoveryPending;
+    private bool _deviceRecoveryFailed;
+    private DispatcherQueueTimer? _deviceRecoveryTimer;
     private bool _titleBarVisible = true;
 
     /// <summary>
@@ -85,6 +107,7 @@ public sealed partial class MainWindow : Window
     private bool _oscDragging;
     private Point? _pointerPressPosition;
     private bool _seeking;
+    private double _seekOsdTarget;
     private bool _wasPlayingBeforeSeek;
     private bool _chromeShown = true;
     private bool _pointerOverChrome;
@@ -140,13 +163,21 @@ public sealed partial class MainWindow : Window
     private static readonly string TracePath =
         Path.Combine(Path.GetTempPath(), "wiina-trace.log");
 
+    private static readonly object TraceLock = new();
+
     private static void Trace(string message)
     {
         try
         {
-            File.AppendAllText(
-                TracePath,
-                $"{DateTimeOffset.Now:O} {message}{Environment.NewLine}");
+            // mpv's event thread and the blur capture thread trace too; without
+            // the lock a concurrent append throws and the line is lost exactly
+            // when the close path needs it most.
+            lock (TraceLock)
+            {
+                File.AppendAllText(
+                    TracePath,
+                    $"{DateTimeOffset.Now:O} {message}{Environment.NewLine}");
+            }
         }
         catch
         {
@@ -201,6 +232,15 @@ public sealed partial class MainWindow : Window
         _autoHideTimer.Interval = TimeSpan.FromMilliseconds(2500);
         _autoHideTimer.IsRepeating = false;
         _autoHideTimer.Tick += OnAutoHideTick;
+
+        // WinUI does not raise PointerExited when the pointer leaves the window
+        // during a fast in-and-out gesture (the root handler can also miss the
+        // exit while a child owns the capture). A cheap presence poll covers the
+        // "move in, move out quickly" case: the chrome must vanish immediately.
+        _pointerWatchTimer = DispatcherQueue.CreateTimer();
+        _pointerWatchTimer.Interval = TimeSpan.FromMilliseconds(200);
+        _pointerWatchTimer.IsRepeating = true;
+        _pointerWatchTimer.Tick += OnPointerWatchTick;
 
         _statsTimer = DispatcherQueue.CreateTimer();
         _statsTimer.Interval = TimeSpan.FromSeconds(1);
@@ -319,7 +359,7 @@ public sealed partial class MainWindow : Window
 
     private void SubscribeOsc()
     {
-        _oscVm.SeekRequested += seconds => SeekAbsolute(seconds, showOsd: false);
+        _oscVm.SeekRequested += OnOscSeekRequested;
         _oscVm.VolumeRequested += SetVolume;
         _oscVm.PlayPauseRequested += TogglePlayPause;
         _oscVm.MuteRequested += ToggleMute;
@@ -403,12 +443,39 @@ public sealed partial class MainWindow : Window
     {
         _seeking = true;
         _wasPlayingBeforeSeek = _oscVm.IsPlaying;
+        _seekOsdTarget = _oscVm.Position;
         HideTimePreview();
         _autoHideTimer.Stop();
         if (_wasPlayingBeforeSeek)
         {
             SendPlayerCommand("set", "pause", "yes");
         }
+
+        // Show the scrub position immediately: pressing the track must not wait
+        // for the first slider tick (or for the release) to show feedback.
+        ShowOsd(OsdMessages.Seek(_seekOsdTarget, _oscVm.Duration));
+    }
+
+    /// <summary>
+    /// Timeline drags seek continuously. The OSD follows the thumb so the user
+    /// sees the target time and percentage while dragging, not just a flash on
+    /// release; OsdQueue coalesces the rapid series into one updating message.
+    /// </summary>
+    private void OnOscSeekRequested(double seconds)
+    {
+        if (!HasMedia())
+        {
+            return;
+        }
+
+        SeekAbsolute(seconds, showOsd: false);
+        if (!_seeking)
+        {
+            return;
+        }
+
+        _seekOsdTarget = seconds;
+        ShowOsd(OsdMessages.Seek(seconds, _oscVm.Duration));
     }
 
     private void OnSeekCompleted()
@@ -425,7 +492,7 @@ public sealed partial class MainWindow : Window
         }
 
         _wasPlayingBeforeSeek = false;
-        ShowOsd(OsdMessages.Seek(_oscVm.Position, _oscVm.Duration));
+        ShowOsd(OsdMessages.Seek(_seekOsdTarget, _oscVm.Duration));
         ResetAutoHideTimer();
     }
 
@@ -463,6 +530,13 @@ public sealed partial class MainWindow : Window
         // WinUI resets the cursor to the arrow for every mouse move; while the
         // chrome is faded out the pointer must stay hidden even for jitter.
         ReapplyHiddenCursor();
+
+        // A pointer on the chrome parks the countdown (hover keeps the OSC up);
+        // only movement over the video restarts it.
+        if (_pointerOverChrome)
+        {
+            _autoHideTimer.Stop();
+        }
 
         // Sub-threshold jitter (a hand resting on the mouse) is not activity:
         // the OSC must still fade out, even with the pointer sitting on it.
@@ -704,9 +778,29 @@ public sealed partial class MainWindow : Window
             return;
         }
 
+        // Hovering the chrome parks the countdown: the user is pointing at the
+        // OSC/titlebar, so fading it out from under the pointer is wrong. Moving
+        // off the chrome restarts the countdown.
+        if (_pointerOverChrome && _chromeShown)
+        {
+            // PointerExited is not delivered reliably while the video surface is
+            // swapping, so a stale "over chrome" flag used to park this countdown
+            // forever - the OSC (and with it the cursor) stayed on screen until
+            // the pointer moved again. Re-check the real cursor position.
+            bool stillOver = WindowInterop.IsCursorInsideWindow(this) &&
+                WindowInterop.TryGetCursorInWindow(this, out Point cursor) &&
+                IsOverChrome(cursor);
+            if (stillOver)
+            {
+                StartPointerWatch();
+                return;
+            }
+
+            _pointerOverChrome = false;
+        }
+
         // The idle clock, not the timer tick, is the source of truth: a resting
-        // pointer over the chrome (fullscreen bottom bar) must not keep the OSC
-        // visible forever.
+        // pointer over the video must not keep the OSC visible forever.
         if (_oscState.ShouldHideOnIdle(_idleClock.Elapsed))
         {
             HideChrome();
@@ -731,14 +825,60 @@ public sealed partial class MainWindow : Window
 
     private void OnChromePointerEntered(object sender, PointerRoutedEventArgs e)
     {
-        // Entering the chrome is activity, but it must not park the timer: the
-        // chrome still fades out under a resting pointer.
+        // Hovering the chrome keeps it on screen: the pointer resting on the OSC
+        // is a user reading the controls, not an idle player. Leaving the chrome
+        // (or the window) re-arms the normal idle countdown.
+        _pointerOverChrome = true;
         ShowChrome();
+        _autoHideTimer.Stop();
     }
 
     private void OnChromePointerExited(object sender, PointerRoutedEventArgs e)
     {
+        _pointerOverChrome = false;
         ResetAutoHideTimer();
+    }
+
+    /// <summary>
+    /// Presence watchdog for the "move in, move out fast" case: WinUI may not
+    /// deliver PointerExited when the pointer leaves during a capture change, so
+    /// the chrome would stay up until the idle timer expires. Polling the real
+    /// cursor position costs one Win32 call every 200 ms and only runs while the
+    /// chrome is visible.
+    /// </summary>
+    private void OnPointerWatchTick(DispatcherQueueTimer sender, object args)
+    {
+        if (_closed || !_chromeShown || !ChromeInteractionEnabled)
+        {
+            sender.Stop();
+            return;
+        }
+
+        if (!_windowActive ||
+            WindowInterop.IsCursorInsideWindow(this) ||
+            _openFlyoutCount > 0 ||
+            WindowInterop.IsLeftButtonDown() ||
+            _oscDragging)
+        {
+            return;
+        }
+
+        sender.Stop();
+        _pointerOverChrome = false;
+        _oscState.ResetPointerAnchor();
+        CloseApplicationMenu();
+        if (!HasVisibleSidebar)
+        {
+            HideChrome(force: true);
+        }
+    }
+
+    private void StartPointerWatch()
+    {
+        if (_pointerWatchTimer.IsRunning == false)
+        {
+            _pointerWatchTimer.Start();
+        }
     }
 
     private void ShowChrome()
@@ -758,6 +898,7 @@ public sealed partial class MainWindow : Window
             UpdateCursorForChrome();
         }
 
+        StartPointerWatch();
         ResetAutoHideTimer();
     }
 
@@ -799,6 +940,7 @@ public sealed partial class MainWindow : Window
         _chromeShown = false;
         ChromeBlur.SetActive(false);
         _autoHideTimer.Stop();
+        _pointerWatchTimer.Stop();
         FadeChrome(0, hitTest: false);
         UpdateCursorForChrome();
     }
@@ -2008,6 +2150,11 @@ public sealed partial class MainWindow : Window
 
         _frameStyleApplied = null;
         ApplyWindowFrame();
+
+        // The content island is re-created on a presenter switch and WinUI puts
+        // it one pixel below the client top, which shows as a 1 px strip above
+        // the video in fullscreen. Re-stretch it once the frame has settled.
+        DispatcherQueue.TryEnqueue(() => WindowInterop.CoverClientArea(this));
     }
 
     private void OnRootLoaded(object sender, RoutedEventArgs e)
@@ -2025,7 +2172,10 @@ public sealed partial class MainWindow : Window
             SnapWindowToEdges,
             SnapMovingRect,
             // A fresh drag/resize gesture starts with no magnet engaged.
-            () => _snapSession.Reset());
+            () => _snapSession.Reset(),
+            // Fullscreen reports every hit as client area: a native move or
+            // resize would drop the fullscreen presenter.
+            () => IsFullscreen);
 
         if (RootGrid.XamlRoot is { } xamlRoot)
         {
@@ -2115,7 +2265,7 @@ public sealed partial class MainWindow : Window
 
             Trace($"creating mpv {width}x{height}");
             _player = new MpvPlayer();
-            _player.Log += message => Trace("mpv: " + message);
+            _player.Log += OnPlayerLog;
             _player.DisplaySwapChainChanged += OnDisplaySwapChainChanged;
             _player.NumberPropertyChanged += OnNumberPropertyChanged;
             _player.FlagPropertyChanged += OnFlagPropertyChanged;
@@ -2159,6 +2309,20 @@ public sealed partial class MainWindow : Window
         }
     }
 
+    private void OnPlayerLog(string message)
+    {
+        Trace("mpv: " + message);
+
+        // A lost device floods the log (the 1.2.6 trace had 73 hits of
+        // 0x887A0005 from the screenshot path). Only the first line of a burst
+        // may start recovery; the budget ignores the rest.
+        if (DeviceLoss.ClassifyLogLine(message) is DeviceLossSignal signal &&
+            signal != DeviceLossSignal.None)
+        {
+            _ = DispatcherQueue.TryEnqueue(() => RecoverFromDeviceLoss($"mpv log ({signal})"));
+        }
+    }
+
     private void OnDisplaySwapChainChanged(long swapChain)
     {
         DispatcherQueue.TryEnqueue(() =>
@@ -2179,12 +2343,150 @@ public sealed partial class MainWindow : Window
                 {
                     VideoHost.Attach(_swapChain);
                 }
+
+                CompleteDeviceRecovery();
             }
             catch (Exception ex)
             {
                 Trace("swapchain bind failed: " + ex);
+
+                // The bind reports the device loss directly when the device is
+                // already gone; the log path would also catch it, but acting
+                // here avoids waiting for mpv to print the next line.
+                if (DeviceLoss.IsDeviceLoss(ex.HResult))
+                {
+                    RecoverFromDeviceLoss($"bind hr=0x{ex.HResult:X8}");
+                }
             }
         });
+    }
+
+    /// <summary>
+    /// Rebuilds the video output after the D3D11 device was removed. mpv owns
+    /// the device and the composition swapchain, so the app cannot recreate
+    /// either itself: it detaches the panel, asks the VO to rebuild
+    /// (<c>video-reload</c>), and lets mpv publish a fresh
+    /// <c>display-swapchain</c> that rebinds through
+    /// <see cref="OnDisplaySwapChainChanged"/>. Playback state (position,
+    /// playlist, audio) is untouched by a video-output reload.
+    /// </summary>
+    private void RecoverFromDeviceLoss(string reason)
+    {
+        if (_closed || _closing || _deviceRecoveryFailed)
+        {
+            return;
+        }
+
+        if (_player is not { } player || !player.IsRunning)
+        {
+            return;
+        }
+
+        if (_deviceRecoveryPending)
+        {
+            Trace($"[devicelost] {reason}: recovery already pending");
+            return;
+        }
+
+        if (!_deviceRecovery.TryBegin(DateTimeOffset.UtcNow))
+        {
+            Trace($"[devicelost] {reason}: budget exhausted after {_deviceRecovery.Attempts} attempt(s)");
+            FailDeviceRecovery();
+            return;
+        }
+
+        _deviceRecoveryPending = true;
+        Trace($"[devicelost] {reason}: attempt {_deviceRecovery.Attempts}/{DeviceLossRecoveryBudget.DefaultAttempts}");
+
+        // The blur worker is the only part of Wiina that keeps submitting GPU
+        // work against the dead device (8 Hz screenshot-raw). Stop it first.
+        ChromeBlur.SetActive(false);
+
+        try
+        {
+            DetachVideoSurface();
+        }
+        catch (Exception ex)
+        {
+            Trace("[devicelost] detach failed: " + ex.Message);
+        }
+
+        ShowOsd(Loc.T("osd.deviceLost"));
+
+        try
+        {
+            player.CommandAsync("video-reload");
+        }
+        catch (Exception ex)
+        {
+            Trace("[devicelost] video-reload failed: " + ex);
+            _deviceRecoveryPending = false;
+            FailDeviceRecovery();
+            return;
+        }
+
+        StartDeviceRecoveryTimeout();
+    }
+
+    /// <summary>Detaches mpv's swapchain from whichever panel currently shows it.</summary>
+    private void DetachVideoSurface()
+    {
+        if (InPipMode && _pipWindow is { } pip)
+        {
+            pip.DetachSwapChain();
+        }
+        else
+        {
+            VideoHost.Detach();
+        }
+
+        _swapChain = 0;
+    }
+
+    private void StartDeviceRecoveryTimeout()
+    {
+        _deviceRecoveryTimer ??= DispatcherQueue.CreateTimer();
+        _deviceRecoveryTimer.Interval = TimeSpan.FromSeconds(5);
+        _deviceRecoveryTimer.IsRepeating = false;
+        _deviceRecoveryTimer.Tick += (_, _) =>
+        {
+            if (!_deviceRecoveryPending)
+            {
+                return;
+            }
+
+            _deviceRecoveryPending = false;
+            Trace("[devicelost] no new swapchain within 5 s");
+            FailDeviceRecovery();
+        };
+        _deviceRecoveryTimer.Start();
+    }
+
+    private void CompleteDeviceRecovery()
+    {
+        if (!_deviceRecoveryPending)
+        {
+            return;
+        }
+
+        _deviceRecoveryPending = false;
+        _deviceRecoveryTimer?.Stop();
+        Trace("[devicelost] recovered");
+        ChromeBlur.SetMode(_settings.ChromeBlurMode);
+        ShowOsd(Loc.T("osd.deviceRecovered"));
+    }
+
+    private void FailDeviceRecovery()
+    {
+        if (_deviceRecoveryFailed)
+        {
+            return;
+        }
+
+        _deviceRecoveryFailed = true;
+        _deviceRecoveryTimer?.Stop();
+        Trace("[devicelost] giving up; playback continues without video output");
+        ShowOsd(Loc.T("osd.deviceLostFailed"));
     }
 
     private (int Width, int Height) _lastCompositionSize;
@@ -2240,6 +2542,10 @@ public sealed partial class MainWindow : Window
         }
 
         _lastCompositionSize = (pixelWidth, pixelHeight);
+
+        // Keep the WinUI content island flush with the client area; after a
+        // fullscreen switch Windows/WinUI leaves a 1 px row above the video.
+        WindowInterop.CoverClientArea(this);
     }
 
     private (int Width, int Height) GetPixelSize()
@@ -2690,8 +2996,35 @@ public sealed partial class MainWindow : Window
 
     private void OnClosed(object sender, WindowEventArgs args)
     {
-        Trace("Window closed");
+        if (_closing)
+        {
+            return;
+        }
+
+        _closing = true;
+        _closeClock.Restart();
+        CloseStage("enter");
+
+        // Start the watchdog before touching anything that can block: if any
+        // step below hangs (the 1.2.6 hang was mpv teardown racing a dead GPU),
+        // the process ends instead of leaving an unresponsive window.
+        StartCloseWatchdog();
+
         _closed = true;
+        _deviceRecoveryTimer?.Stop();
+
+        // Make the close feel instant even if teardown needs a moment.
+        try
+        {
+            AppWindow.Hide();
+        }
+        catch
+        {
+            // The window may already be gone.
+        }
+
+        CloseStage("hidden");
+
         AppWindow.Changed -= OnAppWindowChanged;
         App.SettingsChanged -= OnSharedSettingsChanged;
         _resizeTimer.Stop();
@@ -2699,10 +3032,23 @@ public sealed partial class MainWindow : Window
         _statsTimer?.Stop();
         _cursorHideTimer?.Stop();
         _settingsSaveTimer?.Stop();
-        _settings.SidebarWidth = _sidebar.Width;
         SidebarHost.Log = null;
         WindowInterop.SetCursorVisible(true);
         ApplyProtectedCursor(false);
+        CloseStage("timers stopped");
+
+        // Exactly one settings write in the whole close path, and it happens
+        // before any teardown call that could block.
+        _settings.SidebarWidth = _sidebar.Width;
+        SaveSettings();
+        CloseStage("settings saved");
+
+        // Stop GPU work on a (possibly dead) device before anything is torn
+        // down, and pause so the video output is not producing frames while
+        // its swapchain is detached.
+        ChromeBlur.SetActive(false);
+        PausePlaybackForClose();
+        CloseStage("playback paused, blur off");
 
         if (_pipWindow is { } pip)
         {
@@ -2718,20 +3064,88 @@ public sealed partial class MainWindow : Window
             }
         }
 
-        OnClosedStage3();
-        DisposeStage5();
-        SaveSettings();
+        CloseStage("pip closed");
 
-        // Stop the blur capture worker before the player goes away: it calls
-        // mpv screenshot-raw from its own thread, which used to race disposal.
-        ChromeBlur.SetActive(false);
+        OnClosedStage3();
+        CloseStage("history, timers, player events closed");
+
+        DisposeStage5();
+        CloseStage("thumbnails disposed");
+
+        // The blur worker may be inside mpv screenshot-raw right now; join it
+        // before the player handle is destroyed (known hang/crash source).
         ChromeBlur.Shutdown();
+        CloseStage("blur worker stopped");
 
         WindowInterop.Detach(this);
+        CloseStage("interop detached");
 
         VideoHost.Detach();
         _swapChain = 0;
+        CloseStage("video surface detached");
+
         _player?.Dispose();
         _player = null;
+        CloseStage("player disposed");
+
+        CompleteClose();
+    }
+
+    private void CloseStage(string stage) =>
+        Trace($"[close +{_closeClock.ElapsedMilliseconds} ms] {stage}");
+
+    private void StartCloseWatchdog()
+    {
+        var cts = new CancellationTokenSource();
+        _closeWatchdog = cts;
+
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await Task.Delay(CloseWatchdogTimeout, cts.Token).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException)
+            {
+                return;
+            }
+
+            if (Volatile.Read(ref _closeCompleted))
+            {
+                return;
+            }
+
+            Trace($"[close +{_closeClock.ElapsedMilliseconds} ms] WATCHDOG: teardown blocked, terminating process");
+            try
+            {
+                Process.GetCurrentProcess().Kill();
+            }
+            catch
+            {
+                Environment.Exit(0);
+            }
+        });
+    }
+
+    private void CompleteClose()
+    {
+        Volatile.Write(ref _closeCompleted, true);
+        _closeWatchdog?.Cancel();
+        _closeWatchdog = null;
+        CloseStage("done");
+    }
+
+    private void PausePlaybackForClose()
+    {
+        try
+        {
+            // Async: queueing the pause never blocks the UI thread, and mpv
+            // stops presenting frames before Dispose joins the event thread.
+            _player?.CommandAsync("set", "pause", "yes");
+        }
+        catch (Exception ex)
+        {
+            Trace("[close] pause failed: " + ex.Message);
+        }
     }
 }

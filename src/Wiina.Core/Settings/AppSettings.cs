@@ -61,6 +61,11 @@ public sealed partial class AppSettings
 
     public double ThumbnailBucketSeconds { get; set; } = 5;
 
+    /// <summary>
+    /// Legacy compatibility only: the settings UI no longer exposes a cache
+    /// floor because the memory cache always sizes itself to every bucket of
+    /// the playing video (see <c>ThumbnailService.SetSource</c>).
+    /// </summary>
     public int ThumbnailCacheCount { get; set; } = 60;
 
     /// <summary>Disk budget for pre-generated thumbnails, in megabytes; 0 disables it.</summary>

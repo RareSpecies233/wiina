@@ -144,6 +144,10 @@ public sealed partial class MainWindow
                 UpdateFullscreenStatus();
                 break;
             case "video.thumbnail-preview":
+                // Hard switch: the service refuses hover extraction,
+                // pre-generation, headless mpv creation and disk writes while
+                // this is off, and fails any queued job immediately.
+                _thumbnailService?.SetPreviewEnabled(_settings.ThumbnailPreviewEnabled);
                 if (!_settings.ThumbnailPreviewEnabled)
                 {
                     HideTimePreview();

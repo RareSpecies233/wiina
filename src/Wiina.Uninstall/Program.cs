@@ -234,13 +234,9 @@ internal static class Program
             message.Append("\n\nSome settings files could not be deleted because they are in use.");
         }
 
-        if (machineLeftovers > 0)
-        {
-            message.Append("\n\n部分系统级文件关联无法删除（可能被系统策略或权限保护）：\n");
-            message.Append("HKLM\\Software\\Classes\\Wiina.Video / Wiina.Audio、HKLM\\Software\\Wiina。\n");
-            message.Append("\n\nSome machine-wide Wiina file associations could not be removed.\n");
-            message.Append("They may be protected by system policy or permissions.");
-        }
+        // Machine-wide leftovers are explained in the log only: the uninstaller
+        // is elevated, so they are rare (policy-protected keys) and the user is
+        // never shown a "the uninstall was incomplete" dialog.
 
         if (!scheduled && !options.DryRun)
         {

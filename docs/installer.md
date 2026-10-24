@@ -1,11 +1,11 @@
 # 安装、卸载与分发
 
-Wiina 提供两种分发形式，二者使用**同一份载荷**（`artifacts/wiina-1.3.1-win-x64/`）：
+Wiina 提供两种分发形式，二者使用**同一份载荷**（`artifacts/wiina-1.3.2-win-x64/`）：
 
 | 形式 | 产物 | 卸载方式 |
 |---|---|---|
-| 便携 zip | `artifacts/wiina-1.3.1-win-x64.zip` | 同目录的 `Uninstall Wiina.exe` |
-| 按用户安装包 | `artifacts/Wiina-Setup-1.3.1-x64.exe` | 设置 → 应用 → Wiina → 卸载（Inno Setup 卸载器） |
+| 便携 zip | `artifacts/wiina-1.3.2-win-x64.zip` | 同目录的 `Uninstall Wiina.exe` |
+| 按用户安装包 | `artifacts/Wiina-Setup-1.3.2-x64.exe` | 设置 → 应用 → Wiina → 卸载（Inno Setup 卸载器） |
 
 > 产物的字节数与 SHA-256 以每次实际构建为准（`scripts/release.ps1` 会在结束时打印）；
 > 本文不记录具体哈希，避免复制过期数值。
@@ -23,11 +23,11 @@ Wiina 提供两种分发形式，二者使用**同一份载荷**（`artifacts/wi
   `Uninstall Wiina.exe`、`*.pdb`、`*.xml`——安装版用 Inno 自己的卸载器，不重复放便携卸载器。
 - **快捷方式**：开始菜单必选，桌面快捷方式可选（默认不勾）。
 - **安装后**：可直接启动 Wiina；应用数据仍写入 `%LOCALAPPDATA%\Wiina`，与便携版共用。
-- 产物名：`artifacts/Wiina-Setup-1.3.1-x64.exe`（`OutputBaseFilename=Wiina-Setup-{#MyAppVersion}-x64`）。
+- 产物名：`artifacts/Wiina-Setup-1.3.2-x64.exe`（`OutputBaseFilename=Wiina-Setup-{#MyAppVersion}-x64`）。
 
 ### 卸载：关联一律移除，只问配置
 
-1.3.1 起，卸载只询问一件事：
+1.3.2 起，卸载只询问一件事：
 
 > 是否保留配置文件？
 > “是”（推荐）：保留 `%LOCALAPPDATA%\Wiina` 中的设置、播放历史、插件和日志，重新安装后可以继续使用。
@@ -53,9 +53,9 @@ Wiina 提供两种分发形式，二者使用**同一份载荷**（`artifacts/wi
 - **安装包本身不需要管理员**（`PrivilegesRequired=lowest`，按用户装到
   `%LOCALAPPDATA%\Programs\Wiina`，不弹 UAC、不写 HKLM）。
 - **卸载时的提权分两种**：
-  - 已安装副本走 Inno 卸载器，按用户安装因此**启动时不弹 UAC**；只有检测到
-    `HKLM` 仍留有 Wiina 关联（应用内「管理员一键关联…」造成）时，才用一次提权
-    PowerShell 清理机器级键，用户在 UAC 上拒绝时保留这些键并在日志/结束提示里说明。
+  - 已安装副本走 Inno 卸载器：1.3.2 起它在 `InitializeUninstall` 阶段用 `runas` 重启自身并退出旧实例，
+    因此**启动即弹一次 UAC**，随后直接删 `HKLM` 中的 Wiina 关联；不再派生提权 PowerShell 子进程。
+    用户拒绝 UAC 时卸载继续（仅清 HKCU），日志记录剩下的机器级项；静默卸载不会弹 UAC。
   - 便携 zip 里的 `Uninstall Wiina.exe` 的 manifest 是 `requireAdministrator`，
     **启动即请求管理员**，因此能直接清 `HKLM` 和其他已加载用户的 hive。
 - 两条卸载路径都**先结束占用安装目录的 Wiina 进程**：便携卸载器会弹「是否强制结束」，
@@ -105,13 +105,13 @@ Wiina 提供两种分发形式，二者使用**同一份载荷**（`artifacts/wi
 
 ```powershell
 # 1) 便携 zip（内部先发布卸载器，再构建/校验 Wiina.dll 版本并打包）
-pwsh -File scripts/package.ps1 -Version 1.3.1
+pwsh -File scripts/package.ps1 -Version 1.3.2
 
 # 2) 安装包（在便携 zip 之后；没有 ISCC 时脚本会警告并跳过）
-pwsh -File scripts/release.ps1 -Version 1.3.1
+pwsh -File scripts/release.ps1 -Version 1.3.2
 
 # 只要便携 zip，跳过安装包
-pwsh -File scripts/release.ps1 -Version 1.3.1 -NoInstaller
+pwsh -File scripts/release.ps1 -Version 1.3.2 -NoInstaller
 ```
 
 `release.ps1` 的安装包流程：
