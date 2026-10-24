@@ -31,6 +31,9 @@ public sealed partial class AppSettings
 
     public bool OscAutoHide { get; set; } = true;
 
+    /// <summary>Idle seconds before the OSC/titlebar fade out (0.5–30).</summary>
+    public double OscAutoHideSeconds { get; set; } = 2.5;
+
     // ---- Stage 5: OSD, status overlays and timeline thumbnails ----
 
     public bool OsdEnabled { get; set; } = true;

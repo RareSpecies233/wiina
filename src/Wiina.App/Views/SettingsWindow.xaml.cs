@@ -83,6 +83,20 @@ public sealed partial class SettingsWindow : Window
 
         RootGrid.Loaded += (_, _) => RootGrid.Focus(FocusState.Programmatic);
 
+        // mpv pushes a new audio-device-list while this window may be in the
+        // background; re-reading only the device picker on activation keeps it
+        // current without disturbing text/number controls the user is editing.
+        Activated += (_, _) =>
+        {
+            foreach ((SettingsRowDefinition row, Action refreshRow, Border _) in _rowWidgets)
+            {
+                if (row.Kind == SettingsRowKind.AudioDevice)
+                {
+                    refreshRow();
+                }
+            }
+        };
+
         App.SettingsChanged += OnSettingsChanged;
         Loc.LanguageChanged += OnLanguageChanged;
         Closed += OnClosed;
@@ -600,6 +614,80 @@ public sealed partial class SettingsWindow : Window
                     _loading = false;
                 };
                 return box;
+            }
+
+            case SettingsRowKind.AudioDevice:
+            {
+                var combo = new ComboBox
+                {
+                    Width = 280,
+                    FontSize = 12,
+                    DisplayMemberPath = nameof(AudioDeviceService.AudioDeviceOption.DisplayName),
+                };
+                var refreshButton = new Button
+                {
+                    Content = new FontIcon { Glyph = "\uE72C", FontSize = 14 },
+                    Padding = new Thickness(8, 5, 8, 5),
+                    VerticalAlignment = VerticalAlignment.Center,
+                };
+                ToolTipService.SetToolTip(refreshButton, Loc.T("settings.audioDeviceRefresh"));
+                Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(
+                    refreshButton, Loc.T("settings.audioDeviceRefresh"));
+                Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(
+                    combo, SettingsLocalization.Title(row, Loc.CurrentLanguage));
+
+                void Reload()
+                {
+                    IReadOnlyList<AudioDeviceService.AudioDeviceOption> options =
+                        AudioDeviceService.Build(
+                            row.Value(App.Settings) as string,
+                            Loc.T("settings.audioDeviceAuto"),
+                            Loc.T("settings.audioDeviceUnavailable"));
+                    _loading = true;
+                    try
+                    {
+                        combo.ItemsSource = options;
+                        int index = AudioDeviceService.IndexOf(
+                            options, row.Value(App.Settings) as string);
+                        combo.SelectedIndex = index;
+                        // Tooltip carries the raw mpv device name (useful for support
+                        // and for the persisted settings value) or the empty hint.
+                        ToolTipService.SetToolTip(
+                            combo,
+                            options.Count > 1
+                                ? index > 0 ? options[index].Name : null
+                                : Loc.T("quick.noAudioDevices"));
+                    }
+                    finally
+                    {
+                        _loading = false;
+                    }
+                }
+
+                combo.SelectionChanged += (_, _) =>
+                {
+                    if (_loading ||
+                        combo.SelectedItem is not AudioDeviceService.AudioDeviceOption option)
+                    {
+                        return;
+                    }
+
+                    // audio.device is applied to mpv immediately by MainWindow.
+                    Apply(row, option.Name, immediate: true);
+                };
+                refreshButton.Click += (_, _) => Reload();
+
+                var panel = new StackPanel
+                {
+                    Orientation = Orientation.Horizontal,
+                    Spacing = 6,
+                    VerticalAlignment = VerticalAlignment.Center,
+                };
+                panel.Children.Add(combo);
+                panel.Children.Add(refreshButton);
+                refresh = Reload;
+                Reload();
+                return panel;
             }
 
             case SettingsRowKind.Action:

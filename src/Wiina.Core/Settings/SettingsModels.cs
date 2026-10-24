@@ -39,6 +39,12 @@ public enum SettingsRowKind
     /// <summary>Editable TextBox (string).</summary>
     Text,
 
+    /// <summary>
+    /// ComboBox of the audio output devices libmpv reports (<c>audio-device-list</c>);
+    /// the value is the mpv device name, "auto" meaning "follow the system default".
+    /// </summary>
+    AudioDevice,
+
     /// <summary>Button that runs <see cref="SettingsRowDefinition.ActionId"/>.</summary>
     Action,
 

@@ -231,6 +231,9 @@ public static class UiStrings
     public const string settings_openKeyBindings = "settings.openKeyBindings";
     public const string settings_keyBindingsHint = "settings.keyBindingsHint";
     public const string settings_choose = "settings.choose";
+    public const string settings_audioDeviceAuto = "settings.audioDeviceAuto";
+    public const string settings_audioDeviceRefresh = "settings.audioDeviceRefresh";
+    public const string settings_audioDeviceUnavailable = "settings.audioDeviceUnavailable";
     public const string settings_open = "settings.open";
     public const string settings_reset = "settings.reset";
     public const string settings_clear = "settings.clear";
@@ -742,7 +745,7 @@ public static class UiStrings
         Add("ui.pluginStage9Hint", "插件 API 与 WebView2 宿主在 Stage 9 实装", "Plugin API and WebView2 host arrive in Stage 9");
         Add("ui.zeroItemsShort", "0 项", "0 items");
         Add("ui.eq10", "10 段均衡器", "10-band equalizer");
-        Add("ui.autohide25", "2.5 秒自动隐藏", "Auto-hide after 2.5 s");
+        Add("ui.autohide25", "自动隐藏", "Auto-hide");
         Add("ui.eqRange", "31 Hz – 16 kHz · 每段 −12…+12 dB", "31 Hz – 16 kHz · −12…+12 dB per band");
         Add("ui.installPluginStage9", "安装插件…（Stage 9）", "Install plugin… (Stage 9)");
         Add("ui.dragHint", "把文件、文件夹或 URL 拖到窗口中即可播放。", "Drag files, folders, or URLs into the window to play.");
@@ -827,6 +830,9 @@ public static class UiStrings
         Add("settings.openKeyBindings", "编辑键位…", "Edit key bindings…");
         Add("settings.keyBindingsHint", "在独立窗口中录制、清除、重置或导入导出快捷键。", "Record, clear, reset, import, or export shortcuts in a dedicated window.");
         Add("settings.choose", "选择…", "Choose…");
+        Add("settings.audioDeviceAuto", "跟随系统默认 (auto)", "Follow system default (auto)");
+        Add("settings.audioDeviceRefresh", "刷新设备列表", "Refresh device list");
+        Add("settings.audioDeviceUnavailable", "当前设备不可用：{0}", "Current device unavailable: {0}");
         Add("settings.open", "打开", "Open");
         Add("settings.reset", "重置", "Reset");
         Add("settings.clear", "清空", "Clear");

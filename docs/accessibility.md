@@ -1,6 +1,6 @@
 # Accessibility, localization, DPI and motion
 
-This document records what Wiina v1.2.5 implements, how it was checked, and
+This document records what Wiina v1.2.6 implements, how it was checked, and
 what is intentionally limited. It is a summary, not a certification.
 
 ## 1. Keyboard and focus
@@ -26,6 +26,11 @@ what is intentionally limited. It is a summary, not a certification.
   custom `ControlTemplate` whose `PointerOver`/`Pressed` states are empty, and
   the icon/label `Foreground` is bound to the button so no theme fallback colour
   can read as a hover highlight.
+- Since 1.2.6 the audio-output-device row is a ComboBox (not a text box):
+  it is keyboard reachable, its automation name is the localized row title, and
+  the refresh button has a localized AutomationProperties.Name plus tooltip.
+  The unavailable-device placeholder is part of the item text, so it is read
+  out instead of being hidden.
 
 ## 2. Automation names
 
@@ -115,12 +120,12 @@ generic text containers mirror.
 
 ## 7. Localization coverage
 
-- Runtime catalog: 550 keys in `UiStringCatalog.cs`, each with a non-empty
+- Runtime catalog: 547 keys in `UiStringCatalog.cs`, each with a non-empty
   zh-Hans and English string. Coverage includes the title bar, OSC, OSD, menus,
   sidebars, quick settings, all 12 settings pages (titles, summaries, section
   headers, row titles/descriptions/choices), welcome/about/log/inspector/open-URL
   dialogs, filter/equalizer windows, playlist/chapters, mini player, PiP badge,
-  and common errors.
+  the 1.2.6 audio-device labels (auto/refresh/unavailable) and common errors.
 - The language row is enabled; changing it applies immediately, re-renders the
   main shell and settings window, and persists `Language` in
   `%LOCALAPPDATA%\Wiina\settings.json`. Already-open auxiliary windows pick up
