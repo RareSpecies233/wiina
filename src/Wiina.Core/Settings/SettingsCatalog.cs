@@ -7,7 +7,7 @@ using Wiina.Core.State;
 namespace Wiina.Core.Settings;
 
 /// <summary>
-/// The complete Stage 7 settings catalog: eleven pages, their sections and every
+/// The complete Stage 7 settings catalog: twelve pages, their sections and every
 /// row with a typed getter/setter over <see cref="AppSettings"/>. The WinUI
 /// window renders this list; keeping it in Core makes coverage, search ranking
 /// and round-trips testable without starting the app.
@@ -25,6 +25,7 @@ public static class SettingsCatalog
         new(SettingsPageId.Control, "控制", "鼠标、滚轮与键盘入口", "\uE765"),
         new(SettingsPageId.KeyBindings, "按键绑定", "录制、冲突检测与导入导出", "\uE765"),
         new(SettingsPageId.Advanced, "高级", "诊断、文件夹与维护", "\uE7EF"),
+        new(SettingsPageId.Integration, "文件关联", "让 Windows 用 Wiina 打开视频与音频", "\uE71B"),
         new(SettingsPageId.Plugin, "插件", "插件管理（Stage 9）", "\uEA86"),
         new(SettingsPageId.Utilities, "工具", "字体、日志、检查器与关于", "\uE90F"),
     };
@@ -137,15 +138,6 @@ public static class SettingsCatalog
                 ? WindowLayoutMode.Docked
                 : WindowLayoutMode.EdgeToEdge,
             "layout docked edge 布局"));
-        rows.Add(ChoiceRow(
-            "ui.blur-mode", SettingsPageId.Ui, "窗口与 OSC",
-            "毛玻璃性能模式",
-            "固定：显示面板时取一帧后复用，最省电；动态：面板可见时持续更新；始终：面板隐藏时也计算。",
-            new[] { "固定（预渲染一帧）", "动态（默认）", "始终计算", "无模糊（纯色）" },
-            settings => (int)settings.ChromeBlurMode,
-            (settings, value) => settings.ChromeBlurMode =
-                (ChromeBlurMode)Math.Clamp(value, 0, 3),
-            "blur acrylic glass performance 毛玻璃 性能 固定 动态 始终"));
         rows.Add(BoolRow(
             "ui.always-on-top", SettingsPageId.Ui, "窗口与 OSC",
             "窗口置顶", "播放窗口始终位于其他窗口之上。",
@@ -308,10 +300,10 @@ public static class SettingsCatalog
             "quality profile scaler import export 画质 预设 管理"));
         rows.Add(BoolRow(
             "video.mpv-stats", SettingsPageId.Video, "解码",
-            "mpv 统计信息", "在画面上显示 mpv 原始帧率、渲染与丢帧统计。",
+            "播放统计面板", "在画面右上角显示解码、渲染、音画同步与丢帧等完整统计。",
             settings => settings.ShowMpvStats,
             (settings, value) => settings.ShowMpvStats = value,
-            "mpv stats 丢帧 帧率 渲染 statistics"));
+            "mpv stats 丢帧 帧率 渲染 statistics panel 播放统计"));
         rows.Add(BoolRow(
             "video.frame-drop-osd", SettingsPageId.Video, "解码",
             "丢帧提示", "丢帧计数增加时在 OSD 中提示。",
@@ -847,6 +839,44 @@ public static class SettingsCatalog
             "重置所有设置", "恢复全部默认值（按键绑定、窗口位置与历史不受影响）。",
             "reset-all-settings",
             "reset all settings 重置 全部"));
+
+        // --------------------------------------------------------- Integration
+        rows.Add(InfoRow(
+            "integration.status", SettingsPageId.Integration, "文件关联",
+            "当前关联状态",
+            "只写入当前用户（HKCU），不需要管理员权限；Windows 仍会要求在“默认应用”中确认。",
+            "file association status registry 关联 状态 默认应用",
+            settings => string.Empty));
+        rows.Add(ActionRow(
+            "integration.associate-video", SettingsPageId.Integration, "关联格式",
+            "关联视频格式",
+            "把常见视频扩展名注册给 Wiina，并在默认应用中列出。",
+            "associate-video",
+            "associate video file type mp4 mkv 关联 视频 格式"));
+        rows.Add(ActionRow(
+            "integration.associate-audio", SettingsPageId.Integration, "关联格式",
+            "关联音频格式",
+            "把常见音频扩展名注册给 Wiina，并在默认应用中列出。",
+            "associate-audio",
+            "associate audio file type mp3 flac 关联 音频 格式"));
+        rows.Add(ActionRow(
+            "integration.associate-all", SettingsPageId.Integration, "关联格式",
+            "关联全部支持格式",
+            "同时注册视频与音频；重复执行是安全的。",
+            "associate-all",
+            "associate all video audio 关联 全部 格式"));
+        rows.Add(ActionRow(
+            "integration.unregister", SettingsPageId.Integration, "维护",
+            "取消 Wiina 关联",
+            "只删除 Wiina 自己写入的 ProgID 与 OpenWith 项，不影响其他播放器。",
+            "unregister-associations",
+            "unregister remove association 取消 关联 移除"));
+        rows.Add(ActionRow(
+            "integration.default-apps", SettingsPageId.Integration, "维护",
+            "在默认应用中确认…",
+            "Windows 不允许应用静默抢占默认程序；请在打开的设置页里选择 Wiina。",
+            "open-default-apps",
+            "default apps settings confirm 默认应用 确认"));
 
         // -------------------------------------------------------------- Plugin
         rows.Add(InfoRow(

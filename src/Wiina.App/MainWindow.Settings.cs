@@ -102,9 +102,6 @@ public sealed partial class MainWindow
                 _oscState.AutoHideEnabled = _settings.OscAutoHide;
                 ResetAutoHideTimer();
                 break;
-            case "ui.blur-mode":
-                ChromeBlur.SetMode(_settings.ChromeBlurMode);
-                break;
             case "ui.osd-enabled":
             case "ui.osd-position":
             case "ui.osd-size":

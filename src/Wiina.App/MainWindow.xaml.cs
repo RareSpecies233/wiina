@@ -72,7 +72,9 @@ public sealed partial class MainWindow : Window
     private bool _wasPlayingBeforeSeek;
     private bool _chromeShown = true;
     private bool _pointerOverChrome;
+    private int _openFlyoutCount;
     private MenuFlyout? _applicationMenu;
+    private Storyboard? _chromeStoryboard;
     private bool? _animationsEnabled;
     private DispatcherQueueTimer? _settingsSaveTimer;
     private Point _oscDragStart;
@@ -196,6 +198,13 @@ public sealed partial class MainWindow : Window
         VideoFrame.SizeChanged += OnVideoFrameSizeChanged;
         RootGrid.SizeChanged += OnRootSizeChanged;
         RootGrid.Loaded += OnRootLoaded;
+        // Sliders capture the pointer, so their release may not bubble as a
+        // normal event. Listen with handledEventsToo to re-arm auto-hide after
+        // any drag that ended (inside or outside the window).
+        RootGrid.AddHandler(
+            UIElement.PointerReleasedEvent,
+            new PointerEventHandler(OnRootPointerReleased),
+            handledEventsToo: true);
         Activated += (_, args) =>
         {
             if (args.WindowActivationState == WindowActivationState.Deactivated)
@@ -390,6 +399,14 @@ public sealed partial class MainWindow : Window
             return;
         }
 
+        // A flyout or an active drag temporarily owns the pointer outside the
+        // window; hiding the chrome underneath it made menus and sliders appear
+        // to "go crazy" mid-interaction.
+        if (_openFlyoutCount > 0 || WindowInterop.IsLeftButtonDown())
+        {
+            return;
+        }
+
         // Root PointerExited also fires when the pointer moves between child
         // elements; only a real window exit should hide the chrome.
         if (WindowInterop.IsCursorInsideWindow(this))
@@ -413,6 +430,39 @@ public sealed partial class MainWindow : Window
         HideChrome(force: true);
     }
 
+    private void OnRootPointerReleased(object sender, PointerRoutedEventArgs e)
+    {
+        if (_mode.Current != PlayerMode.Normal)
+        {
+            return;
+        }
+
+        _pointerOverChrome = IsOverChrome(e.GetCurrentPoint(RootGrid).Position);
+        ResetAutoHideTimer();
+    }
+
+    /// <summary>
+    /// Tracks a menu that belongs to the player chrome. While any flyout is
+    /// open the auto-hide timer stays parked; otherwise the popup window makes
+    /// the main window look "left" and the OSC disappears under the menu.
+    /// </summary>
+    private void TrackChromeFlyout(MenuFlyout flyout)
+    {
+        flyout.Opened += (_, _) =>
+        {
+            _openFlyoutCount++;
+            _autoHideTimer.Stop();
+        };
+        flyout.Closed += (_, _) =>
+        {
+            _openFlyoutCount = Math.Max(0, _openFlyoutCount - 1);
+            if (_openFlyoutCount == 0)
+            {
+                ResetAutoHideTimer();
+            }
+        };
+    }
+
     private void OnStatsTick(DispatcherQueueTimer sender, object args)
     {
         if (_player is not { IsRunning: true } player ||
@@ -424,35 +474,30 @@ public sealed partial class MainWindow : Window
         try
         {
             long dropped = player.GetPropertyInt64("vo-drop-frame-count");
-            if (_settings.FrameDropOsd && dropped > _lastDroppedFrames)
+            // The statistics card already shows the dropped-frame counter, so
+            // the transient mpv OSD is only useful while the card is closed.
+            if (_settings.FrameDropOsd && !_settings.ShowMpvStats &&
+                dropped > _lastDroppedFrames)
             {
                 long delta = dropped - _lastDroppedFrames;
                 player.Command("show-text", $"Wiina · 丢帧 +{delta}（总计 {dropped}）", "1600");
             }
 
             _lastDroppedFrames = dropped;
-
-            if (_settings.ShowMpvStats)
-            {
-                long width = player.GetPropertyInt64("width");
-                long height = player.GetPropertyInt64("height");
-                double fps = player.GetPropertyDouble("estimated-vf-fps");
-                double avsync = player.GetPropertyDouble("avsync");
-                string stats =
-                    $"{width}x{height} · {fps:F2} fps · dropped {dropped} · avsync {avsync:F3}s";
-                player.Command("show-text", stats, "1100");
-            }
         }
         catch
         {
             // Tracks/decoders disappear while switching files; try again next tick.
         }
+
+        UpdateStatsPanel();
     }
 
     private void OnAutoHideTick(DispatcherQueueTimer sender, object args)
     {
         _autoHideTimer.Stop();
         if (_pointerOverChrome || _oscDragging || _seeking ||
+            _openFlyoutCount > 0 || WindowInterop.IsLeftButtonDown() ||
             HasVisibleSidebar || _oscState.IsSuppressed)
         {
             return;
@@ -474,6 +519,7 @@ public sealed partial class MainWindow : Window
         _autoHideTimer.Stop();
         if (_oscState.AutoHideEnabled &&
             !_oscState.IsSuppressed &&
+            _openFlyoutCount == 0 &&
             !HasVisibleSidebar)
         {
             _autoHideTimer.Start();
@@ -492,7 +538,6 @@ public sealed partial class MainWindow : Window
             _chromeShown = true;
             _oscState.Show();
             _oscState.CompleteShow();
-            ChromeBlur.SetActive(true);
             FadeChrome(1, hitTest: true);
             WindowInterop.SetCursorVisible(true);
         }
@@ -519,6 +564,11 @@ public sealed partial class MainWindow : Window
             return;
         }
 
+        if (_openFlyoutCount > 0 || WindowInterop.IsLeftButtonDown())
+        {
+            return;
+        }
+
         if (!force && !_oscState.CanHide)
         {
             return;
@@ -531,7 +581,6 @@ public sealed partial class MainWindow : Window
 
         _oscState.CompleteHide();
         _chromeShown = false;
-        ChromeBlur.SetActive(false);
         _autoHideTimer.Stop();
         FadeChrome(0, hitTest: false);
         WindowInterop.SetCursorVisible(false);
@@ -546,6 +595,8 @@ public sealed partial class MainWindow : Window
             _oscDragging ||
             _seeking ||
             _sidebarResizing ||
+            _openFlyoutCount > 0 ||
+            WindowInterop.IsLeftButtonDown() ||
             HasVisibleSidebar ||
             _pointerOverChrome)
         {
@@ -591,6 +642,8 @@ public sealed partial class MainWindow : Window
 
         if (!AnimationsEnabled)
         {
+            _chromeStoryboard?.Stop();
+            _chromeStoryboard = null;
             foreach (FrameworkElement element in elements)
             {
                 element.Opacity = opacity;
@@ -600,6 +653,12 @@ public sealed partial class MainWindow : Window
             UpdateOsdPlacement();
             return;
         }
+
+        // Rapid show/hide (pointer sweeping across the chrome) used to leave two
+        // storyboards animating the same property; the later one won visually
+        // but the earlier one could finish last and strand the chrome at a
+        // half-visible opacity. Always cancel the previous fade first.
+        _chromeStoryboard?.Stop();
 
         var storyboard = new Storyboard();
         foreach (FrameworkElement element in elements)
@@ -615,6 +674,14 @@ public sealed partial class MainWindow : Window
             storyboard.Children.Add(animation);
         }
 
+        storyboard.Completed += (_, _) =>
+        {
+            foreach (FrameworkElement element in elements)
+            {
+                element.Opacity = opacity;
+            }
+        };
+        _chromeStoryboard = storyboard;
         storyboard.Begin();
         UpdateFullscreenStatus();
         UpdateOsdPlacement();
@@ -628,12 +695,14 @@ public sealed partial class MainWindow : Window
             (OscFloating.Visibility == Visibility.Visible && Contains(OscFloating, point)) ||
             (SidebarLeading.Visibility == Visibility.Visible && Contains(SidebarLeading, point)) ||
             (SidebarTrailing.Visibility == Visibility.Visible && Contains(SidebarTrailing, point)) ||
+            (StatsPanel.Visibility == Visibility.Visible && Contains(StatsPanel, point)) ||
             (Osd.IsPersistentShowing && Contains(Osd, point));
     }
 
     private bool Contains(FrameworkElement element, Point point)
     {
         if (element.Visibility != Visibility.Visible ||
+            element.Opacity <= 0.01 ||
             element.ActualWidth <= 0 ||
             element.ActualHeight <= 0)
         {
@@ -1102,6 +1171,10 @@ public sealed partial class MainWindow : Window
         // OsdText is loaded before the first theme pass; its ThemeResource
         // brushes can otherwise keep the dark values used at construction.
         Osd.RequestedTheme = theme;
+        // Chrome paint is a solid colour mixed with the system accent, so it
+        // must be recomputed whenever the theme (and therefore the resolved
+        // theme-dictionary brush) changes.
+        Services.ChromeTint.Recolor();
 
         DispatcherQueue.TryEnqueue(ConfigureCaptionButtons);
     }
@@ -1109,6 +1182,17 @@ public sealed partial class MainWindow : Window
     private void ConfigureCaptionButtons()
     {
         AppWindowTitleBar bar = AppWindow.TitleBar;
+        if (!AppWindowTitleBar.IsCustomizationSupported())
+        {
+            // Windows 10 and hosts without title-bar customisation: the
+            // caption-colour/height setters throw or are ignored there, so
+            // keep the native chrome and hide our XAML duplicates instead of
+            // crashing the dispatcher callback.
+            TitleBar.ShowCustomCaptionButtons = false;
+            return;
+        }
+
+        TitleBar.ShowCustomCaptionButtons = true;
         bar.ExtendsContentIntoTitleBar = true;
 
         bool dark = RootGrid.ActualTheme != ElementTheme.Light;
@@ -1143,7 +1227,12 @@ public sealed partial class MainWindow : Window
         // System caption buttons are always collapsed: DWM paints an opaque
         // backing behind them in an extended titlebar. The custom WinUI
         // controls in TitleBarView provide the native-looking window buttons.
-        AppWindow.TitleBar.PreferredHeightOption = TitleBarHeightOption.Collapsed;
+        // Only touch this when the platform supports titlebar customisation:
+        // on Windows 10 the setter faults.
+        if (AppWindowTitleBar.IsCustomizationSupported())
+        {
+            AppWindow.TitleBar.PreferredHeightOption = TitleBarHeightOption.Collapsed;
+        }
         TitleBar.Visibility = Visibility.Visible;
         OscTop.Margin = new Thickness(0, visible ? 40 : 0, 0, 0);
         UpdateSidebarMargins();
@@ -1162,6 +1251,10 @@ public sealed partial class MainWindow : Window
         }
         else
         {
+            // A maximized/restored transition invalidates the edge magnet; the
+            // flush-edge DWM frame must be restored when leaving the edge.
+            _snapSession.Reset();
+            ApplySnapFrame(false);
             presenter.Maximize();
         }
     }
@@ -1271,70 +1364,93 @@ public sealed partial class MainWindow : Window
         ResetAutoHideTimer();
     }
 
+    /// <summary>Shared edge magnet: snap threshold + breakaway hysteresis.</summary>
+    private readonly EdgeSnapSession _snapSession = new();
+
+    private bool? _snapFrameApplied;
+
     private void SnapWindowToEdges()
     {
         if (!_settings.EdgeSnapping ||
             AppWindow.Presenter is not OverlappedPresenter { State: OverlappedPresenterState.Restored })
         {
+            _snapSession.Reset();
+            ApplySnapFrame(false);
             return;
         }
 
         PointInt32 position = AppWindow.Position;
         SizeInt32 size = AppWindow.Size;
-        WindowRect snapped = SnapMovingRect(new WindowRect(
-            position.X, position.Y, position.X + size.Width, position.Y + size.Height));
-        if (snapped.Left != position.X || snapped.Top != position.Y)
+        EdgeSnapResult result = _snapSession.Apply(
+            new WindowRect(position.X, position.Y, position.X + size.Width, position.Y + size.Height),
+            WorkAreaUnderPointer(),
+            DisplayScale,
+            fromApplied: true);
+        if (result.Rect.Left != position.X || result.Rect.Top != position.Y)
         {
-            AppWindow.Move(new PointInt32(snapped.Left, snapped.Top));
+            AppWindow.Move(new PointInt32(result.Rect.Left, result.Rect.Top));
         }
+
+        ApplySnapFrame(result.IsSnapped);
     }
 
     /// <summary>
     /// Snaps the live WM_MOVING rectangle so edges feel magnetic while the user
-    /// is still dragging, not only after releasing the mouse.
+    /// is still dragging, not only after releasing the mouse. The session
+    /// converts the OS-proposed rectangle back to the raw cursor position, so a
+    /// 1 px drag can still leave the magnet (issue 4: re-snapping from the
+    /// already snapped rectangle used to swallow the cumulative movement).
     /// </summary>
     private WindowRect SnapMovingRect(WindowRect rect)
     {
         if (!_settings.EdgeSnapping ||
             AppWindow.Presenter is not OverlappedPresenter { State: OverlappedPresenterState.Restored })
         {
+            _snapSession.Reset();
+            ApplySnapFrame(false);
             return rect;
         }
 
-        DisplayArea area = DisplayArea.GetFromWindowId(AppWindow.Id, DisplayAreaFallback.Nearest);
+        EdgeSnapResult result = _snapSession.Apply(
+            rect,
+            WorkAreaUnderPointer(),
+            DisplayScale,
+            fromApplied: true);
+        ApplySnapFrame(result.IsSnapped);
+        return result.Rect;
+    }
+
+    private double DisplayScale => RootGrid.XamlRoot?.RasterizationScale ?? 1.0;
+
+    /// <summary>Work area of the monitor under the pointer (fallback: nearest).</summary>
+    private WorkArea WorkAreaUnderPointer()
+    {
+        DisplayArea area = WindowInterop.TryGetCursorPosition(out int x, out int y)
+            ? DisplayArea.GetFromPoint(new PointInt32(x, y), DisplayAreaFallback.Nearest)
+            : DisplayArea.GetFromWindowId(AppWindow.Id, DisplayAreaFallback.Nearest);
         RectInt32 work = area.WorkArea;
-        double scale = RootGrid.XamlRoot?.RasterizationScale ?? 1.0;
-        int threshold = (int)Math.Round(10 * Math.Max(1.0, scale));
-        int width = rect.Right - rect.Left;
-        int height = rect.Bottom - rect.Top;
-        int left = rect.Left;
-        int top = rect.Top;
+        return new WorkArea(work.X, work.Y, work.Width, work.Height);
+    }
 
-        if (Math.Abs(left - work.X) <= threshold)
+    /// <summary>
+    /// Applies the flush-edge DWM frame only on transitions. A snapped window
+    /// gets no border line and no rounded corners, so it really touches the
+    /// monitor edge (issue 4 acceptance: no white gap).
+    /// </summary>
+    private void ApplySnapFrame(bool snapped)
+    {
+        if (_snapFrameApplied == snapped)
         {
-            left = work.X;
-        }
-        else if (Math.Abs(rect.Right - (work.X + work.Width)) <= threshold)
-        {
-            left = work.X + work.Width - width;
-        }
-
-        if (Math.Abs(top - work.Y) <= threshold)
-        {
-            top = work.Y;
-        }
-        else if (Math.Abs(rect.Bottom - (work.Y + work.Height)) <= threshold)
-        {
-            top = work.Y + work.Height - height;
+            return;
         }
 
-        return new WindowRect(left, top, left + width, top + height);
+        _snapFrameApplied = snapped;
+        WindowInterop.SetSnappedFrame(this, snapped);
     }
 
     private void OnRootLoaded(object sender, RoutedEventArgs e)
     {
         ConfigureCaptionButtons();
-        ChromeBlur.SetMode(_settings.ChromeBlurMode);
         WindowInterop.Attach(
             this,
             285,
@@ -1344,7 +1460,9 @@ public sealed partial class MainWindow : Window
             OnAppCommand,
             () => _userResizedWindow = true,
             SnapWindowToEdges,
-            SnapMovingRect);
+            SnapMovingRect,
+            // A fresh drag/resize gesture starts with no magnet engaged.
+            () => _snapSession.Reset());
 
         if (RootGrid.XamlRoot is { } xamlRoot)
         {
@@ -1495,6 +1613,8 @@ public sealed partial class MainWindow : Window
         });
     }
 
+    private (int Width, int Height) _lastCompositionSize;
+
     private void ApplyVideoLayout()
     {
         UpdateCompactState();
@@ -1517,7 +1637,10 @@ public sealed partial class MainWindow : Window
         int pixelWidth = Math.Max(1, (int)Math.Round(dipWidth * dpi));
         int pixelHeight = Math.Max(1, (int)Math.Round(dipHeight * dpi));
 
-        VideoHost.SetBufferSize(pixelWidth, pixelHeight, dpi);
+        // The XAML surface always spans the whole video area; only mpv's
+        // composition buffer may be capped (PiP). Passing the render size here
+        // used to shrink the panel and leave part of the window uncovered.
+        VideoHost.SetLayoutSize(pixelWidth, pixelHeight, dpi);
 
         VideoFrame.Clip = new RectangleGeometry
         {
@@ -1532,7 +1655,17 @@ public sealed partial class MainWindow : Window
             {
                 Trace($"resize {pixelWidth}x{pixelHeight} failed");
             }
+            else if (_lastCompositionSize != (pixelWidth, pixelHeight) &&
+                _player.GetPropertyFlag("pause"))
+            {
+                // A paused mpv does not present new frames on its own; a
+                // relative zero seek forces one exact refresh so a resize while
+                // paused never leaves the surface stale/black.
+                _player.CommandAsync("seek", "0", "relative", "exact");
+            }
         }
+
+        _lastCompositionSize = (pixelWidth, pixelHeight);
     }
 
     private (int Width, int Height) GetPixelSize()

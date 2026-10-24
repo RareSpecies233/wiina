@@ -2,7 +2,9 @@
 
 ## 开始之前
 
-- 先读 [实施计划](docs/PLAN.md)、[许可证审计](docs/licensing/AUDIT.md)、[ADR-0001](docs/architecture/0001-video-pipeline.md)。
+- 先读 [README](README.md)、[许可证审计](docs/licensing/AUDIT.md)、[ADR-0001](docs/architecture/0001-video-pipeline.md)、
+  [ADR-0004](docs/architecture/0004-solid-chrome.md)。[实施计划](docs/PLAN.md) 是 v1 前的历史文档，
+  只用于了解设计意图，不代表当前行为。
 - 本项目以 **GPL-3.0-only** 发布。提交即表示你同意以该许可证授权你的贡献。
 - 不提交 IINA 的 Swift/AppKit 源码、`.xcassets` 图片、SF Symbols、IINA 图标或任何专有字体。
 - 不提交 mpv/libmpv 二进制；用 `tools/fetch-libmpv.ps1` 获取。
@@ -22,8 +24,11 @@ powershell -ExecutionPolicy Bypass -File tools/fetch-libmpv.ps1
 
 ```powershell
 dotnet build src/Wiina.App/Wiina.App.csproj -c Debug -p:Platform=x64
-dotnet test
+dotnet test tests/Wiina.Core.Tests/Wiina.Core.Tests.csproj -c Release
 ```
+
+> 解决方案 `Wiina.slnx` 也带 x64 平台映射，但 `dotnet build Wiina.slnx -p:Platform=x64` 在当前 SDK 下会因
+> 平台名不被识别而失败；请按上面的项目构建，或用 `scripts/dev-build.ps1`。测试当前 622 项。
 
 ## 代码约定
 
@@ -43,7 +48,7 @@ dotnet test
 
 ## Stage 11：本地化 / 无障碍 / 打包
 
-- 界面字符串：`src/Wiina.Core/Localization/UiStringCatalog.cs`（zh-Hans/en 成对）；
+- 界面字符串：`src/Wiina.Core/Localization/UiStringCatalog.cs`（zh-Hans/en 成对，当前 549 条）；
   设置行、菜单、OSD 分别有 `SettingsLocalization.cs`、`MenuLocalization.cs`、`OsdMessage.cs` 覆盖。
   两种语言必须同时补齐；缺英文或英文残留中文会让单元测试失败。XAML 用
   `src/Wiina.App/Localization/Loc.cs` 的附加属性（`loc:Loc.Text`、`loc:Loc.AutomationName` 等），
@@ -52,8 +57,11 @@ dotnet test
   `docs/accessibility.md`。
 - 纯图标按钮必须有 `AutomationProperties.Name`；新动画必须同时尊重
   `AnimationsEnabled` 和系统动画设置；播放器画面/OSC 固定从左到右。
-- 打包：`pwsh -File scripts/package.ps1`。修改清单时同步更新
-  `src/Wiina.Core/Release/PackageManifest.cs` 与脚本，`Stage11ReleaseTests` 会校验一致性。
+- 打包：`pwsh -File scripts/package.ps1 -Version 1.2.3`。修改清单时同步更新
+  `src/Wiina.Core/Release/PackageManifest.cs` 与脚本，`Stage11ReleaseTests` 会校验一致性；
+  打包器还会校验 `Wiina.dll` 的文件版本必须等于 `-Version`。
+- 新增纯逻辑（吸附、几何、文件关联目录等）请配 Core 测试；现有 `EdgeSnapTests`、
+  `FileAssociationCatalogTests`、`RenderSizeTests` 是范例。
 - **v1 范围**：Stage 9（插件）与 Stage 10（在线字幕/yt-dlp）明确跳过；不要提交只启用入口、
   却没有完整功能的半成品。
 

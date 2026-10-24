@@ -12,10 +12,20 @@ internal static class WindowInterop
 {
     private const uint WM_GETMINMAXINFO = 0x0024;
     private const uint WM_SIZING = 0x0214;
-    private const uint WM_EXITSIZEMOVE = 0x0232;
     private const uint WM_MOVING = 0x0216;
+    private const uint WM_ENTERSIZEMOVE = 0x0231;
+    private const uint WM_EXITSIZEMOVE = 0x0232;
     private const uint WM_NCHITTEST = 0x0084;
     private const uint WM_APPCOMMAND = 0x0319;
+
+    // DWM window-attribute ids used to make a snapped window flush with the
+    // monitor edge (no 1 px border line, no rounded corner gap).
+    private const int DWMWA_WINDOW_CORNER_PREFERENCE = 33;
+    private const int DWMWA_BORDER_COLOR = 34;
+    private const int DWMWCP_DONOTROUND = 1;
+    private const int DWMWCP_ROUND = 2;
+    private const int DWMWA_COLOR_DEFAULT = unchecked((int)0xFFFFFFFF);
+    private const int DWMWA_COLOR_NONE = unchecked((int)0xFFFFFFFE);
 
     /// <summary>APPCOMMAND_* values carried by WM_APPCOMMAND (media keys).</summary>
     public const int AppCommandMediaNextTrack = 11;
@@ -59,6 +69,29 @@ internal static class WindowInterop
         _ = DwmSetWindowAttribute(hwnd, 20, ref value, sizeof(int));
     }
 
+    /// <summary>
+    /// Removes the DWM frame decoration while the window is snapped flush
+    /// against a monitor edge: the 1 px border (which shows up as a light line
+    /// between the window and the edge) is suppressed and the rounded corners
+    /// are disabled, so the client area really touches the screen edge. Both
+    /// attributes are ignored on Windows 10, where the call is a no-op.
+    /// </summary>
+    public static void SetSnappedFrame(Window window, bool snapped)
+    {
+        try
+        {
+            nint hwnd = Microsoft.UI.Win32Interop.GetWindowFromWindowId(window.AppWindow.Id);
+            int corner = snapped ? DWMWCP_DONOTROUND : DWMWCP_ROUND;
+            _ = DwmSetWindowAttribute(hwnd, DWMWA_WINDOW_CORNER_PREFERENCE, ref corner, sizeof(int));
+            int border = snapped ? DWMWA_COLOR_NONE : DWMWA_COLOR_DEFAULT;
+            _ = DwmSetWindowAttribute(hwnd, DWMWA_BORDER_COLOR, ref border, sizeof(int));
+        }
+        catch
+        {
+            // Cosmetic only; never let it break dragging.
+        }
+    }
+
     [DllImport("user32.dll", SetLastError = true)]
     private static extern bool GetWindowRect(nint hWnd, out RECT rect);
 
@@ -96,7 +129,8 @@ internal static class WindowInterop
         Func<int, bool>? appCommand = null,
         Action? windowResizeStarted = null,
         Action? windowMoveEnded = null,
-        Func<WindowRect, WindowRect>? windowMoving = null)
+        Func<WindowRect, WindowRect>? windowMoving = null,
+        Action? windowMoveStarted = null)
     {
         nint hwnd = Microsoft.UI.Win32Interop.GetWindowFromWindowId(window.AppWindow.Id);
         if (Hooks.ContainsKey(hwnd))
@@ -113,7 +147,8 @@ internal static class WindowInterop
             appCommand,
             windowResizeStarted,
             windowMoveEnded,
-            windowMoving);
+            windowMoving,
+            windowMoveStarted);
         Hooks[hwnd] = hook;
         hook.Attach();
     }
@@ -165,6 +200,13 @@ internal static class WindowInterop
             // Cursor feedback must never break playback.
         }
     }
+
+    /// <summary>
+    /// True while the left mouse button is physically down. Used by the OSC
+    /// auto-hide logic so dragging a slider past the window edge cannot hide
+    /// the chrome mid-gesture.
+    /// </summary>
+    public static bool IsLeftButtonDown() => (GetKeyState(0x01) & 0x8000) != 0;
 
     /// <summary>Global key state for shortcut modifier detection.</summary>
     public static bool IsKeyDown(Windows.System.VirtualKey key)
@@ -219,6 +261,7 @@ internal static class WindowInterop
         private readonly Action? _windowResizeStarted;
         private readonly Action? _windowMoveEnded;
         private readonly Func<WindowRect, WindowRect>? _windowMoving;
+        private readonly Action? _windowMoveStarted;
         private readonly SubclassProc _proc;
         private bool _sizingGesture;
 
@@ -231,7 +274,8 @@ internal static class WindowInterop
             Func<int, bool>? appCommand,
             Action? windowResizeStarted,
             Action? windowMoveEnded,
-            Func<WindowRect, WindowRect>? windowMoving)
+            Func<WindowRect, WindowRect>? windowMoving,
+            Action? windowMoveStarted)
         {
             _hwnd = hwnd;
             _minWidthDip = minWidthDip;
@@ -242,6 +286,7 @@ internal static class WindowInterop
             _windowResizeStarted = windowResizeStarted;
             _windowMoveEnded = windowMoveEnded;
             _windowMoving = windowMoving;
+            _windowMoveStarted = windowMoveStarted;
             _proc = WndProc;
         }
 
@@ -288,6 +333,13 @@ internal static class WindowInterop
                 moving.Bottom = snapped.Bottom;
                 Marshal.StructureToPtr(moving, lParam, fDeleteOld: false);
                 return 1;
+            }
+
+            if (msg == WM_ENTERSIZEMOVE)
+            {
+                // A new drag/resize gesture starts; edge-snap state must not leak
+                // across gestures (the window may have been snapped elsewhere).
+                _windowMoveStarted?.Invoke();
             }
 
             if (msg == WM_SIZING && !_sizingGesture)

@@ -16,7 +16,7 @@
             MaxWidth="460"
             Padding="16,8"
             CornerRadius="12"
-            Background="{ThemeResource OsdBackgroundBrush}"
+            Background="{ThemeResource ChromeSolidBrush}"
             BorderBrush="{ThemeResource PanelBorderBrush}"
             BorderThickness="1"
             IsHitTestVisible="False">

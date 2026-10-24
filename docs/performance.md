@@ -1,7 +1,9 @@
-# Performance measurements (v1.0.0)
+# Performance measurements (v1.2.3)
 
-Measured on the development machine on 2026-10-19 (Asia/Hong_Kong). Numbers are
-what this machine produced; they are not universal guarantees.
+Measured on the development machine on 2026-10-19 (Asia/Hong_Kong), at v1.0.0.
+The numbers below are the historical baseline; they were **not** re-measured
+for 1.2.3 (see “What changed in 1.2.3” for the known deltas). Numbers are what
+this machine produced; they are not universal guarantees.
 
 ## Environment
 
@@ -67,12 +69,35 @@ scenarios (peak 265.7 MB at 4K). Private bytes exceed 300 MB at 4K because the
 GPU/driver surfaces and the video swapchain are charged to the process; this is
 reported honestly rather than trimmed by a smaller measurement window.
 
+## What changed in 1.2.3
+
+- **Capture/blur pipeline removed (issue 2).** Up to 1.2.2 the chrome sampled
+  one libmpv frame every 125 ms, downscaled it to 320 px, and blurred it with
+  Win2D: about 45 ms and 3.7 MB per 1280×720 frame, roughly a third of one CPU
+  core at 720p, with more at 4K. 1.2.3 paints an opaque `ChromeSolidBrush`
+  mixed with 16 % system accent instead — one solid fill per chrome surface, no
+  frame readback, no worker thread, no Win2D package. See
+  [ADR-0004](architecture/0004-solid-chrome.md).
+- **Statistics panel.** The old path pushed a handful of properties through mpv
+  `show-text` every second (competing with every other OSD message). The native
+  WinUI card reads about 30 properties once per second, renders a normal XAML
+  list of ~29 rows, and fills immediately when enabled rather than waiting for a
+  live frame.
+- **Settings grew**: 12 pages / 119 rows (was 11 / 114), because
+  Settings → 文件关联 was added. Row construction is still code-generated and
+  showed no visible stall.
+- Settings rail templating no longer animates a hover brush on unselected
+  items, so it does strictly less work per pointer move.
+- Startup/memory were not re-measured for this version; the capture pipeline's
+  removal can only lower steady-state chrome cost, and no new background
+  threads were added.
+
 ## UI-thread behavior
 
 - Thumbnails (scrub peek) and the inspector run off the UI thread; the UI shows
   placeholder/loading state while data arrives. No synchronous file or IPC work
   was observed blocking the window during the measurements.
-- Settings/page navigation builds rows in code; 11 pages with 105 rows total
+- Settings/page navigation builds rows in code; 12 pages with 119 rows total
   render without a visible stall on this machine.
 - Library scanning is not a feature of this stage; playlist import is bounded
   by the files the user opens.

@@ -8,7 +8,6 @@
 
     <Grid x:Name="Root"
           Background="Black"
-          RequestedTheme="Dark"
           PointerEntered="OnRootPointerEntered"
           PointerMoved="OnRootPointerMoved"
           PointerExited="OnRootPointerExited"
@@ -16,7 +15,6 @@
           DoubleTapped="OnRootDoubleTapped">
         <Grid.KeyboardAccelerators>
             <KeyboardAccelerator Key="Escape" Invoked="OnEscapeAccelerator" />
-            <KeyboardAccelerator Key="Space" Invoked="OnSpaceAccelerator" />
         </Grid.KeyboardAccelerators>
 
         <controls:MpvVideoView x:Name="VideoHost"

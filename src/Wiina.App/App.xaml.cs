@@ -95,6 +95,7 @@ public partial class App : Application
         Apply(_logWindow);
         Apply(_inspectorWindow);
         Apply(_filtersWindow);
+        Apply(_qualityWindow);
 
         void Apply(Window? window)
         {

@@ -26,8 +26,13 @@ public sealed partial class PipWindow : Window
     private bool _pointerInside;
     private bool _isActive;
     private bool _isPinned = true;
-    private double _lastWidth;
-    private double _lastHeight;
+    private int _lastPixelWidth;
+    private int _lastPixelHeight;
+
+    /// <summary>Shared edge magnet (issue 4); PiP is its own drag surface.</summary>
+    private readonly EdgeSnapSession _snapSession = new();
+
+    private bool? _snapFrameApplied;
 
     public PipWindow(
         RectInt32 workArea,
@@ -38,11 +43,21 @@ public sealed partial class PipWindow : Window
     {
         InitializeComponent();
 
+        Root.RequestedTheme = App.Settings.Theme switch
+        {
+            Wiina.Core.Models.ThemeMode.Light => ElementTheme.Light,
+            Wiina.Core.Models.ThemeMode.System => ElementTheme.Default,
+            _ => ElementTheme.Dark,
+        };
+
         _rasterizationScale = rasterizationScale > 0.1 ? rasterizationScale : 1.0;
 
-        ExtendsContentIntoTitleBar = true;
-        SetTitleBar(DragRegion);
-        AppWindow.TitleBar.PreferredHeightOption = TitleBarHeightOption.Collapsed;
+        if (AppWindowTitleBar.IsCustomizationSupported())
+        {
+            ExtendsContentIntoTitleBar = true;
+            SetTitleBar(DragRegion);
+            AppWindow.TitleBar.PreferredHeightOption = TitleBarHeightOption.Collapsed;
+        }
         AppWindow.Title = Loc.T("pip.title");
         Title = Loc.T("pip.title");
 
@@ -84,7 +99,8 @@ public sealed partial class PipWindow : Window
             appCommand: null,
             windowResizeStarted: null,
             windowMoveEnded: SnapToEdges,
-            windowMoving: SnapMovingRect);
+            windowMoving: SnapMovingRect,
+            windowMoveStarted: _snapSession.Reset);
 
         Root.SizeChanged += OnRootSizeChanged;
         Root.Loaded += (_, _) =>
@@ -115,7 +131,11 @@ public sealed partial class PipWindow : Window
 
     public event EventHandler? PlayPauseRequested;
 
-    /// <summary>Physical buffer size the swapchain must adopt while in PiP.</summary>
+    /// <summary>
+    /// Physical layout size of the PiP video surface (the whole window). The
+    /// mpv composition buffer may be smaller — <c>PipGeometry.RenderSize</c>
+    /// caps it — and the compositor upscales it.
+    /// </summary>
     public event Action<int, int, double>? BufferSizeChanged;
 
     public bool IsClosed { get; private set; }
@@ -210,7 +230,7 @@ public sealed partial class PipWindow : Window
 
     private void UpdateSurface()
     {
-        double dpi = Root.XamlRoot?.RasterizationScale ?? 1.0;
+        double dpi = Root.XamlRoot?.RasterizationScale ?? _rasterizationScale;
         double width = Root.ActualWidth;
         double height = Root.ActualHeight;
         if (width < 16 || height < 16)
@@ -221,34 +241,28 @@ public sealed partial class PipWindow : Window
         int pixelWidth = Math.Max(1, (int)Math.Round(width * dpi));
         int pixelHeight = Math.Max(1, (int)Math.Round(height * dpi));
 
-        // Mini-player is intentionally a low-resolution compositor surface.
-        // Rendering a 4K/1080p frame into a ~500 px window wastes GPU time that
-        // a foreground game needs; cap the source buffer and let the compositor
-        // scale it. This is the closest safe equivalent of CanvasSwapChain's
-        // SourceSize without replacing mpv's render path.
-        const int maxRenderWidth = 640;
-        const int maxRenderHeight = 360;
-        int renderWidth = Math.Min(pixelWidth, maxRenderWidth);
-        int renderHeight = Math.Min(pixelHeight, maxRenderHeight);
-        if (pixelWidth > 0)
-        {
-            renderHeight = Math.Max(1, (int)Math.Round(renderWidth * (double)pixelHeight / pixelWidth));
-        }
-
-        VideoHost.SetBufferSize(renderWidth, renderHeight, dpi);
+        // Layout size: the panel always spans the whole PiP window. mpv's
+        // render buffer is capped separately (PipGeometry.RenderSize is applied
+        // to d3d11-composition-size by the main window) and the compositor
+        // upscales it. Using the capped size here shrank the XAML surface and
+        // left part of the window uncovered (issue 3).
+        VideoHost.SetLayoutSize(pixelWidth, pixelHeight, dpi);
+        // Clip in layout space: the panel is laid out at physical pixels and
+        // scaled back by 1/dpi, so a DIP-sized clip would cut a strip off the
+        // right/bottom edge on high-DPI displays.
         VideoHost.Clip = new Microsoft.UI.Xaml.Media.RectangleGeometry
         {
-            Rect = new Windows.Foundation.Rect(0, 0, width, height),
+            Rect = new Windows.Foundation.Rect(0, 0, pixelWidth, pixelHeight),
         };
 
-        if (Math.Abs(width - _lastWidth) < 0.5 && Math.Abs(height - _lastHeight) < 0.5)
+        if (pixelWidth == _lastPixelWidth && pixelHeight == _lastPixelHeight)
         {
             return;
         }
 
-        _lastWidth = width;
-        _lastHeight = height;
-        BufferSizeChanged?.Invoke(renderWidth, renderHeight, dpi);
+        _lastPixelWidth = pixelWidth;
+        _lastPixelHeight = pixelHeight;
+        BufferSizeChanged?.Invoke(pixelWidth, pixelHeight, dpi);
     }
 
     private void SnapToEdges()
@@ -256,17 +270,24 @@ public sealed partial class PipWindow : Window
         if (!App.Settings.EdgeSnapping ||
             AppWindow.Presenter is not OverlappedPresenter { State: OverlappedPresenterState.Restored })
         {
+            _snapSession.Reset();
+            ApplySnapFrame(false);
             return;
         }
 
         PointInt32 position = AppWindow.Position;
         SizeInt32 size = AppWindow.Size;
-        WindowRect snapped = SnapMovingRect(new WindowRect(
-            position.X, position.Y, position.X + size.Width, position.Y + size.Height));
-        if (snapped.Left != position.X || snapped.Top != position.Y)
+        EdgeSnapResult result = _snapSession.Apply(
+            new WindowRect(position.X, position.Y, position.X + size.Width, position.Y + size.Height),
+            WorkAreaUnderPointer(),
+            DisplayScale,
+            fromApplied: true);
+        if (result.Rect.Left != position.X || result.Rect.Top != position.Y)
         {
-            AppWindow.Move(new PointInt32(snapped.Left, snapped.Top));
+            AppWindow.Move(new PointInt32(result.Rect.Left, result.Rect.Top));
         }
+
+        ApplySnapFrame(result.IsSnapped);
     }
 
     private WindowRect SnapMovingRect(WindowRect rect)
@@ -274,35 +295,40 @@ public sealed partial class PipWindow : Window
         if (!App.Settings.EdgeSnapping ||
             AppWindow.Presenter is not OverlappedPresenter { State: OverlappedPresenterState.Restored })
         {
+            _snapSession.Reset();
+            ApplySnapFrame(false);
             return rect;
         }
 
-        DisplayArea area = DisplayArea.GetFromWindowId(AppWindow.Id, DisplayAreaFallback.Nearest);
+        EdgeSnapResult result = _snapSession.Apply(
+            rect,
+            WorkAreaUnderPointer(),
+            DisplayScale,
+            fromApplied: true);
+        ApplySnapFrame(result.IsSnapped);
+        return result.Rect;
+    }
+
+    private double DisplayScale => Root.XamlRoot?.RasterizationScale ?? _rasterizationScale;
+
+    private WorkArea WorkAreaUnderPointer()
+    {
+        DisplayArea area = WindowInterop.TryGetCursorPosition(out int x, out int y)
+            ? DisplayArea.GetFromPoint(new PointInt32(x, y), DisplayAreaFallback.Nearest)
+            : DisplayArea.GetFromWindowId(AppWindow.Id, DisplayAreaFallback.Nearest);
         RectInt32 work = area.WorkArea;
-        int threshold = (int)Math.Round(10 * Math.Max(1.0, _rasterizationScale));
-        int width = rect.Right - rect.Left;
-        int height = rect.Bottom - rect.Top;
-        int x = rect.Left;
-        int y = rect.Top;
-        if (Math.Abs(x - work.X) <= threshold)
+        return new WorkArea(work.X, work.Y, work.Width, work.Height);
+    }
+
+    private void ApplySnapFrame(bool snapped)
+    {
+        if (_snapFrameApplied == snapped)
         {
-            x = work.X;
-        }
-        else if (Math.Abs(rect.Right - (work.X + work.Width)) <= threshold)
-        {
-            x = work.X + work.Width - width;
+            return;
         }
 
-        if (Math.Abs(y - work.Y) <= threshold)
-        {
-            y = work.Y;
-        }
-        else if (Math.Abs(rect.Bottom - (work.Y + work.Height)) <= threshold)
-        {
-            y = work.Y + work.Height - height;
-        }
-
-        return new WindowRect(x, y, x + width, y + height);
+        _snapFrameApplied = snapped;
+        WindowInterop.SetSnappedFrame(this, snapped);
     }
 
     private static (int X, int Y) NudgeAwayFromMain(
@@ -396,14 +422,6 @@ public sealed partial class PipWindow : Window
     {
         args.Handled = true;
         RestoreRequested?.Invoke(this, EventArgs.Empty);
-    }
-
-    private void OnSpaceAccelerator(
-        KeyboardAccelerator sender,
-        KeyboardAcceleratorInvokedEventArgs args)
-    {
-        args.Handled = true;
-        PlayPauseRequested?.Invoke(this, EventArgs.Empty);
     }
 
     private void OnPlayPauseClick(object sender, RoutedEventArgs e)

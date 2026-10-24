@@ -2246,6 +2246,9 @@ public sealed partial class MainWindow
         WindowInterop.TryGetCursorPosition(out _dragStartCursorX, out _dragStartCursorY);
         _windowStartX = AppWindow.Position.X;
         _windowStartY = AppWindow.Position.Y;
+        // The video surface is a second drag path (issue 4); it shares the edge
+        // magnet with the native title-bar drag, starting from a clean gesture.
+        _snapSession.Reset();
         RootGrid.Focus(FocusState.Pointer);
     }
 
@@ -2273,9 +2276,26 @@ public sealed partial class MainWindow
 
         if (WindowInterop.TryGetCursorPosition(out int cursorX, out int cursorY))
         {
-            AppWindow.Move(new PointInt32(
-                _windowStartX + (cursorX - _dragStartCursorX),
-                _windowStartY + (cursorY - _dragStartCursorY)));
+            int x = _windowStartX + (cursorX - _dragStartCursorX);
+            int y = _windowStartY + (cursorY - _dragStartCursorY);
+            SizeInt32 size = AppWindow.Size;
+            if (_settings.EdgeSnapping)
+            {
+                EdgeSnapResult snap = _snapSession.Apply(
+                    new WindowRect(x, y, x + size.Width, y + size.Height),
+                    WorkAreaUnderPointer(),
+                    DisplayScale);
+                x = snap.Rect.Left;
+                y = snap.Rect.Top;
+                ApplySnapFrame(snap.IsSnapped);
+            }
+            else
+            {
+                _snapSession.Reset();
+                ApplySnapFrame(false);
+            }
+
+            AppWindow.Move(new PointInt32(x, y));
         }
     }
 

@@ -1,62 +1,91 @@
-# Wiina v1.0.2 — release notes
+# Wiina v1.2.3 — release notes
 
-Release date: 2026-10-19
+Release date: 2026-10-24
 
 Windows-native, IINA-inspired mpv front end built with WinUI 3, Windows App
 SDK 2.5, and libmpv.
 
-## What's new in 1.0.2
+## What's new in 1.2.3
 
-- **Floating OSC drag restored.** The real-video blur path no longer clears
-  the drag area's background, so the whole floating OSC panel is draggable
-  again (transparent hit-test brush instead of `null`).
-- **Stable time/chapter previews.** The preview card resets its `Margin`
-  before measuring, uses the clean `DesiredSize`, and is anchored to the
-  pointer's actual X. This removes the horizontal drift left in 1.0.1, for
-  both the video thumbnail and chapter cards.
-- **4 px OSD rail.** At 100% display scaling, the horizontal OSD progress rail
-  is 4 px tall with a 2 px corner radius.
-- **Packaging correctness.** `scripts/package.ps1` now builds and copies the
-  same `Platform=x64` output tree, rebuilds from source, and fails unless the
-  packaged `Wiina.dll` reports the requested version. The 1.0.2 archive is
-  verified as `1.0.2.0`, not a stale 1.0.1 payload.
+- **Quick Settings opens from every sidebar tab.** Clicking any Quick Settings
+  tab while the sidebar shows Playlist, Chapters, or Plugins now switches the
+  sidebar back to Settings and selects the requested page. Opening Quick
+  Settings from the player and then pressing a tab no longer gets swallowed by
+  the previous sidebar host.
+- **Opaque, accent-tinted chrome (performance).** The per-frame video capture
+  and Win2D Gaussian blur pipeline was removed. Titlebar, docked/top/floating
+  OSC, sidebar, and OSD now paint an opaque panel colour mixed with 16 % of the
+  system accent, and the tint follows accent changes live. Nothing over video
+  is translucent any more; there is no full-resolution GPU readback per frame
+  and no Win2D dependency.
+- **Native playback statistics panel.** The statistics switch now opens a
+  WinUI card instead of a one-second mpv `show-text` line. It appears
+  immediately when enabled or at startup, refreshes once per second, groups
+  rows under 文件 / 视频 / 音频 / 播放 / 渲染, and closes from its own button
+  (the choice is remembered).
+- **Mini player / PiP sizing and snapping.** The PiP video surface layout is
+  decoupled from the 640×360 render cap, so growing the window now scales the
+  picture instead of only enlarging the frame. Edge snapping moved to a shared
+  helper (10 DIP snap distance, 22 DIP breakaway hysteresis, scaled to physical
+  pixels): windows align flush with the monitor work area (the DWM border line
+  and rounded corners are dropped only while snapped), any drag surface can
+  snap, and the breakaway hysteresis makes a snapped window easy to pull off
+  again.
+- **Settings rail hover.** Unselected navigation items no longer brighten on
+  hover or press; only the selected item keeps its highlight, with the keyboard
+  focus rectangle preserved.
+- **Readable quality presets.** The quality-preset manager replaces bare mpv
+  property names with human-readable labels that state each option's trade-off
+  and recommended role, with a short explanation per dropdown.
+- **OSC auto-hide hardening.** Chrome now tracks open flyouts, re-arms after
+  pointer release, guards the left-button-down state, hit-tests against actual
+  opacity, and drives a single cancellable chrome storyboard; the statistics
+  card counts as visible chrome. This fixes the intermittent "runs away"
+  auto-hide.
+- **File associations.** Settings gains a 12th page, 文件关联, that registers
+  common video/audio extensions for the current user (HKCU), shows the current
+  status, and can remove only Wiina's own ProgID / OpenWith entries. Windows
+  still requires the user to confirm a default handler in Default Apps —
+  Wiina never takes over silently. See [../file-associations.md](../file-associations.md).
+- **WinUI 3 adaptation pass.** `AppWindowTitleBar` customization is capability-
+  guarded before every call (Windows 10 falls back cleanly), the PiP window
+  releases its theme/timer hooks, the statistics close choice persists, monitor
+  fallback in the layout code is honest, and an open quality-preset window
+  closes when the UI language changes.
+- **Documentation.** README and the release/acceptance docs were re-audited
+  against the code. ADR-0003 is archived as superseded and
+  [ADR-0004](../architecture/0004-solid-chrome.md) records the solid-chrome
+  decision; the 1.2.3 acceptance record lists all twelve user issues.
 
-## Highlights since 1.0.0
+## Changes since 1.2.2 worth knowing
 
-- **Real blur over video.** Titlebar, docked/top/floating OSC, sidebar, and
-  OSD use a real Win2D Gaussian blur of the current libmpv frame (8 fps,
-  320 px resample, translucent tint for legibility), not a flat tint.
-- **Playback:** libmpv render API with a composition swapchain in a XAML
-  `SwapChainPanel`; WinUI title bar, auto-hiding OSC, hover thumbnails,
-  playlist/chapters/history, subtitles and track selection, playback speed,
-  A-B loop, screenshots.
-- **Windows shell:** Mica/Acrylic panels, 11-page settings with search,
-  key-binding editor, menu, welcome window, about, log viewer, diagnostics
-  inspector, open-URL dialog.
-- **Modes:** fullscreen with chrome restore, PiP with main-window
-  auto-minimize and one restore action, mini player, multiple windows,
-  per-window state persistence.
-- **Audio/video:** 10-band equalizer, audio/video filters, advanced A/V
-  options, basic HDR metadata handling with SDR tone-mapping.
-- **Polish:** runtime zh-Hans/English localization, accessibility and
-  high-contrast support, reduced-motion support, six OSD positions, all-edge
-  aspect-ratio lock, reproducible self-contained packaging, GPL/NOTICE
-  compliance.
+- The blur-performance-mode setting is gone. The capture/blur pipeline it
+  controlled no longer exists, so old `settings.json` values for it are simply
+  ignored. Chrome is always the opaque accent-tinted panel.
+- The playback statistics card replaces the mpv OSD text. The separate
+  dropped-frame switch still exists, but its transient `show-text` notice only
+  fires while the statistics card is closed (the card already shows the counter).
+- PiP/mini-player sizes restored from an older `settings.json` are still
+  validated against `PipGeometry` / `MiniPlayerLayout`, and the mpv render
+  buffer is clamped separately by `PipGeometry.RenderSize`.
 
 ## Intentionally not included
 
-- **Stage 9 (plugins) was skipped.** No plugin host, plugin API, `Info.json`
-  parser, WebView2 dependency, or plugin settings that work. See
-  [docs/plugins/README.md](../plugins/README.md).
-- **Stage 10 (online subtitles / yt-dlp) was skipped.** No OpenSubtitles
-  client, no yt-dlp integration, no bundled yt-dlp, no related permissions or
-  network consent flows. Menu/settings entries remain disabled and say so.
+- **Stage 9 (plugins) is still skipped.** No plugin host, plugin API,
+  `Info.json` parser, or WebView2 dependency. See
+  [../plugins/README.md](../plugins/README.md).
+- **Stage 10 (online subtitles / yt-dlp) is still skipped.** No OpenSubtitles
+  client, no yt-dlp integration, no bundled yt-dlp. Menu/settings entries
+  remain disabled and say so.
+- **No silent default-handler takeover.** By Windows design, associating file
+  types can only make Wiina an eligible handler; confirmation happens in
+  Default Apps.
 
 ## Install
 
 Portable zip, no installer or separate runtime required:
 
-1. Extract `wiina-1.0.2-win-x64.zip`.
+1. Extract `wiina-1.2.3-win-x64.zip`.
 2. Run `Wiina.exe`.
 3. Data is stored in `%LOCALAPPDATA%\Wiina`.
 
@@ -69,8 +98,6 @@ or shipped in this repository.
 Wiina.exe
 Wiina.dll
 libmpv-2.dll
-Microsoft.Graphics.Canvas.dll
-Microsoft.Graphics.Canvas.Interop.dll
 LICENSE
 NOTICE
 README.md
@@ -78,11 +105,13 @@ SOURCE.txt
 ```
 
 Additional .NET/WinUI publish output is included by the packager; `SOURCE.txt`
-records the version, build date, commit, and source URL.
+records the version, build date, commit, and source URL. Win2D is no longer a
+dependency, so no `Microsoft.Graphics.Canvas*.dll` ships.
 
 ## Requirements
 
-- Windows 11 22H2 or later (Windows 10 2004+ best effort)
+- Windows 11 22H2 or later (Windows 10 2004+ best effort; titlebar
+  customization degrades to the system caption where unsupported)
 - x64 CPU
 - A GPU/driver with Direct3D 11 support
 
@@ -92,12 +121,13 @@ installed separately.
 ## Upgrade / settings
 
 Settings are stored in `%LOCALAPPDATA%\Wiina\settings.json`. Existing keys are
-preserved; no destructive migration is performed. The `Language` field accepts
-`system`, `zh-Hans`, and `en`.
+preserved; no destructive migration is performed. Removed keys (such as the
+old blur mode) are ignored on load. The `Language` field accepts `system`,
+`zh-Hans`, and `en`.
 
 ## Known issues
 
 See [known-issues.md](known-issues.md). Accessibility/localization details are
 in [../accessibility.md](../accessibility.md); performance numbers in
-[../performance.md](../performance.md). The blur trails the video by up to one
-125 ms frame and is a 320 px resample; at 4K it costs more CPU than at 720p.
+[../performance.md](../performance.md). The chrome is opaque by design: it no
+longer shows a blurred or translucent video background.
