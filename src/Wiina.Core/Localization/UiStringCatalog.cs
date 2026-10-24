@@ -703,7 +703,33 @@ public static class UiStrings
         Add("ui.window", "窗口", "Window");
         Add("ui.windowSize", "窗口尺寸", "Window size");
         Add("ui.alwaysOnTop", "窗口置顶", "Always on top");
-        Add("ui.mpvStats", "mpv 统计信息", "mpv statistics");
+        Add("ui.mpvStats", "播放统计面板", "Playback statistics");
+        Add("stats.title", "统计信息", "Statistics");
+        Add("stats.subtitle", "mpv 实时播放统计", "Live mpv playback statistics");
+        Add("stats.close", "关闭统计信息", "Close statistics");
+        Add("settings.associate", "关联", "Associate");
+        Add("settings.unassociate", "取消关联", "Unregister");
+        Add("settings.openSettings", "打开设置", "Open settings");
+        Add("integration.statusNone", "未关联", "Not registered");
+        Add("integration.statusVideo", "视频已注册（音频未注册）", "Video registered (audio not)");
+        Add("integration.statusAudio", "音频已注册（视频未注册）", "Audio registered (video not)");
+        Add("integration.statusBoth", "视频与音频均已注册", "Video and audio registered");
+        Add(
+            "integration.registeredTitle",
+            "已写入文件关联",
+            "File associations registered");
+        Add(
+            "integration.registeredBody",
+            "Wiina 已成为这些格式的候选打开方式。Windows 不会允许应用静默抢占默认程序，请在随后打开的“默认应用”页中确认。",
+            "Wiina is now an eligible handler. Windows does not allow an app to silently take over defaults; confirm Wiina in the Default Apps page.");
+        Add(
+            "integration.removedTitle",
+            "已取消关联",
+            "Associations removed");
+        Add(
+            "integration.removedBody",
+            "只删除了 Wiina 自己写入的 ProgID 与 OpenWith 项，其他播放器的关联未受影响。",
+            "Only Wiina's own ProgIDs and OpenWith entries were removed; other players are untouched.");
         Add("ui.flipV", "垂直翻转", "Flip vertically");
         Add("ui.panY", "垂直平移", "Pan vertically");
         Add("ui.positionY", "垂直位置", "Vertical position");

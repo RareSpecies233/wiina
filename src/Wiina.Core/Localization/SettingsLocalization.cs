@@ -3,7 +3,7 @@ using Wiina.Core.Settings;
 namespace Wiina.Core.Localization;
 
 /// <summary>
-/// English overlay for the eleven-page settings catalog. The zh-Hans strings
+/// English overlay for the twelve-page settings catalog. The zh-Hans strings
 /// stay in <see cref="SettingsCatalog"/> (the canonical data model), while this
 /// overlay supplies the English title, description and choice labels for every
 /// row/page/section. A unit test fails if a catalog row or page is missing here.
@@ -25,7 +25,6 @@ public static class SettingsLocalization
         ["general.screenshot-folder"] = new("Screenshot folder", @"Folder where Ctrl+S saves screenshots (default Pictures\Wiina Screenshots).", null),
         ["general.data-folder"] = new("Open data folder", "Folder containing settings.json, history.json, and the mpv configuration.", null),
         ["ui.layout"] = new("Layout", "Edge-to-edge fills the window with video; Docked reserves space for the titlebar and bottom OSC.", new[] { "Edge-to-edge (overlay video)", "Docked (video makes room)" }),
-        ["ui.blur-mode"] = new("Glass performance mode", "Fixed: blur one frame when chrome appears and reuse it. Dynamic: update while chrome is visible (default). Always: keep computing when chrome is hidden. Off: skip capture/blur and use a flat accent-tinted panel (best for low-end devices).", new[] { "Fixed (pre-render one frame)", "Dynamic (default)", "Always compute", "Off (solid tint)" }),
         ["ui.always-on-top"] = new("Always on top", "Keep the playback window above other windows.", null),
         ["ui.lock-aspect"] = new("Lock window aspect ratio", "Preserve the current video aspect while resizing window edges.", null),
         ["ui.sidebar-side"] = new("Sidebar side", "Which side quick settings, playlist, and chapters slide in from.", new[] { "Left", "Right" }),
@@ -116,6 +115,12 @@ public static class SettingsLocalization
         ["advanced.clear-history"] = new("Clear playback history", "Delete recent files and resume positions.", null),
         ["advanced.clear-thumbnails"] = new("Clear thumbnail cache", "Free timeline thumbnails held in memory.", null),
         ["advanced.reset-all"] = new("Reset all settings", "Restore every default (key bindings, window position, and history are unaffected).", null),
+        ["integration.status"] = new("Current registration", "Camera-free per-user registration (HKCU, no administrator rights); Windows still asks you to confirm in Default Apps.", null),
+        ["integration.associate-video"] = new("Associate video formats", "Register common video extensions for Wiina and list it under Default Apps.", null),
+        ["integration.associate-audio"] = new("Associate audio formats", "Register common audio extensions for Wiina and list it under Default Apps.", null),
+        ["integration.associate-all"] = new("Associate all supported formats", "Register both video and audio; running it again is safe.", null),
+        ["integration.unregister"] = new("Remove Wiina associations", "Delete only the ProgIDs and OpenWith entries Wiina wrote; other players are untouched.", null),
+        ["integration.default-apps"] = new("Confirm in Default Apps…", "Windows does not allow an app to silently take over defaults; pick Wiina on the settings page that opens.", null),
         ["plugin.status"] = new("Plugin system status", "The WebView2 host, Info.json, and permission model ship in Stage 9.", null),
         ["plugin.install"] = new("Install plugin…", "Install from a folder or zip and review required permissions.", null),
         ["plugin.folder"] = new("Open plugin folder", @"%LOCALAPPDATA%\Wiina\plugins (currently creates an empty folder).", null),
@@ -143,6 +148,7 @@ public static class SettingsLocalization
         ["Control"] = ("Controls", "Mouse, wheel, and keyboard entry points"),
         ["KeyBindings"] = ("Key Bindings", "Recording, conflict detection, import/export"),
         ["Advanced"] = ("Advanced", "Diagnostics, folders, and maintenance"),
+        ["Integration"] = ("File Associations", "Open video and audio with Wiina on Windows"),
         ["Plugin"] = ("Plugins", "Plugin management (Stage 9)"),
         ["Utilities"] = ("Utilities", "Fonts, logs, inspector, and about"),
     };
@@ -177,6 +183,8 @@ public static class SettingsLocalization
         ["诊断"] = "Diagnostics",
         ["文件夹"] = "Folders",
         ["维护"] = "Maintenance",
+        ["文件关联"] = "File Associations",
+        ["关联格式"] = "Formats",
         ["插件"] = "Plugins",
         ["已安装插件"] = "Installed Plugins",
         ["工具"] = "Tools",

@@ -1,6 +1,6 @@
 # Accessibility, localization, DPI and motion
 
-This document records what Wiina v1.0.0 implements, how it was checked, and
+This document records what Wiina v1.2.3 implements, how it was checked, and
 what is intentionally limited. It is a summary, not a certification.
 
 ## 1. Keyboard and focus
@@ -19,6 +19,11 @@ what is intentionally limited. It is a summary, not a certification.
 - Focus visuals come from the Fluent control templates (`TitleBarButtonStyle`,
   `SettingsNavButtonStyle`, `OscIconButtonStyle`), not from a custom-drawn
   focus rectangle.
+- Settings rail pointer rule (1.2.3): unselected items stay dim on hover and
+  press; only the selected item is highlighted, and the focus rectangle is
+  still drawn when the rail has keyboard focus. The rail uses a custom
+  `ControlTemplate` with no hover/pressed brightening states, so the list does
+  not flash as the pointer moves.
 
 ## 2. Automation names
 
@@ -49,9 +54,12 @@ pressed, sliders, sidebar rows) resolve to Windows system colors:
   selection
 - `SystemColorButtonFaceColor` / `SystemColorButtonTextColor` for pressed state
 
-The acrylic sidebar falls back to a solid system window brush in high contrast.
-Standard WinUI controls (ComboBox, ToggleSwitch, ScrollBar, ContentDialog) use
-the system high-contrast templates automatically.
+The sidebar and the chrome over the video use the opaque `ChromeSolidBrush`,
+which falls back to `SystemColorWindowColor` in high contrast (the 1.0.0–1.2.2
+capture/blur pipeline was removed in 1.2.3; see
+[ADR-0004](architecture/0004-solid-chrome.md)). Standard WinUI controls
+(ComboBox, ToggleSwitch, ScrollBar, ContentDialog) use the system high-contrast
+templates automatically.
 
 Spot check (Windows 11, “Contrast themes → Aquatic”): panels/text/icons follow
 the theme; no hardcoded white-on-white text remains in the shell. Media frames
@@ -103,9 +111,9 @@ generic text containers mirror.
 
 ## 7. Localization coverage
 
-- Runtime catalog: 510 keys in `UiStringCatalog.cs`, each with a non-empty
+- Runtime catalog: 549 keys in `UiStringCatalog.cs`, each with a non-empty
   zh-Hans and English string. Coverage includes the title bar, OSC, OSD, menus,
-  sidebars, quick settings, all 11 settings pages (titles, summaries, section
+  sidebars, quick settings, all 12 settings pages (titles, summaries, section
   headers, row titles/descriptions/choices), welcome/about/log/inspector/open-URL
   dialogs, filter/equalizer windows, playlist/chapters, mini player, PiP badge,
   and common errors.
@@ -124,6 +132,10 @@ generic text containers mirror.
     `Wiina.Core/Filters`, `VideoFilters.cs`, `AudioFilters.cs`,
     `TrackInfo.cs`, `InspectorFormatter.cs`.
   - Log viewer raw lines and trace/crash logs.
+  - Playback statistics card row labels and group names (文件 / 视频 / 音频 /
+    播放 / 渲染) are fixed Chinese strings in `MainWindow.Stats.cs`; the card
+    title, subtitle, and close button are localized. Translating the row labels
+    is a known follow-up.
   - Plugin/online-subtitle rows remain disabled and explicitly say Stage 9/10
     are skipped; they are not presented as working features.
 

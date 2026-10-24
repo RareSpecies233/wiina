@@ -1,59 +1,14 @@
-using Microsoft.UI;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
-using Microsoft.UI.Xaml.Media;
-using Wiina.App.Interop;
 
 namespace Wiina.App.Controls;
 
 public sealed partial class OscFloatingView : UserControl
 {
-    private ChromeBlurLayer? _blur;
-
     public OscFloatingView()
     {
         InitializeComponent();
         SizeChanged += OnSizeChanged;
-        Loaded += OnLoaded;
-        Unloaded += OnUnloaded;
-    }
-
-    private void OnLoaded(object sender, RoutedEventArgs e)
-    {
-        if (_blur is not null || XamlRoot is null)
-        {
-            return;
-        }
-
-        // Real blurred frame behind the floating OSC, clipped by its rounded
-        // border. The acrylic panel stays until the first frame arrives.
-        if (!ChromeBlur.TryAttach(BackdropBlurHost, 8.0, out ChromeBlurLayer layer))
-        {
-            return;
-        }
-
-        _blur = layer;
-        _blur.FirstFrame += OnFirstBlurFrame;
-        _blur.RaiseFirstFrameIfReady();
-    }
-
-    private void OnFirstBlurFrame(object? sender, EventArgs e)
-    {
-        // A null Background also removes the hit-test surface, which makes the
-        // floating OSC impossible to drag. Transparent paint keeps the panel
-        // draggable while still letting the blurred frame show through.
-        DragArea.Background = new SolidColorBrush(Colors.Transparent);
-        OscBlurTintLayer.Visibility = Visibility.Visible;
-    }
-
-    private void OnUnloaded(object sender, RoutedEventArgs e)
-    {
-        if (_blur is not null)
-        {
-            _blur.FirstFrame -= OnFirstBlurFrame;
-        }
-
-        _blur = null;
     }
 
     public TimelineControl Timeline => InnerTimeline;

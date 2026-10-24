@@ -27,7 +27,7 @@ using DispatcherQueueTimer = Microsoft.UI.Dispatching.DispatcherQueueTimer;
 namespace Wiina.App.Views;
 
 /// <summary>
-/// Stage 7 settings window: eleven catalog-driven pages, live search with jump +
+/// Stage 7 settings window: twelve catalog-driven pages, live search with jump +
 /// highlight, section dots and the key-binding editor.
 /// </summary>
 public sealed partial class SettingsWindow : Window
@@ -694,6 +694,10 @@ public sealed partial class SettingsWindow : Window
     private static string ActionVerb(string? actionId) => actionId switch
     {
         "choose-screenshot-folder" => Loc.T("settings.choose"),
+        "associate-video" or "associate-audio" or "associate-all" =>
+            Loc.T("settings.associate"),
+        "unregister-associations" => Loc.T("settings.unassociate"),
+        "open-default-apps" => Loc.T("settings.openSettings"),
         "open-data-folder" or "open-config-folder" or "open-log-folder" or
             "open-plugin-folder" => Loc.T("settings.open"),
         "reset-video" or "reset-audio" or "reset-subtitles" or "reset-control" or
@@ -715,8 +719,22 @@ public sealed partial class SettingsWindow : Window
     {
         "advanced.renderer" => App.ActiveWindow?.GetRendererInfo() ?? Loc.T("settings.noActiveWindow"),
         "advanced.libmpv" => $"libmpv {MpvRuntime.ClientApiVersion}",
+        "integration.status" => AssociationStatusText(),
         _ => row.Value(App.Settings) as string ?? string.Empty,
     };
+
+    private static string AssociationStatusText()
+    {
+        bool video = FileAssociationService.IsVideoRegistered;
+        bool audio = FileAssociationService.IsAudioRegistered;
+        return (video, audio) switch
+        {
+            (true, true) => Loc.T("integration.statusBoth"),
+            (true, false) => Loc.T("integration.statusVideo"),
+            (false, true) => Loc.T("integration.statusAudio"),
+            _ => Loc.T("integration.statusNone"),
+        };
+    }
 
     private void Apply(SettingsRowDefinition row, object? value, bool immediate)
     {
@@ -1027,6 +1045,33 @@ public sealed partial class SettingsWindow : Window
                         Navigate(SettingsPageId.General);
                     }
 
+                    break;
+
+                case "open-default-apps":
+                    await Windows.System.Launcher.LaunchUriAsync(
+                        new Uri("ms-settings:defaultapps"));
+                    break;
+
+                case "associate-video":
+                case "associate-audio":
+                case "associate-all":
+                {
+                    bool video = row.ActionId != "associate-audio";
+                    bool audio = row.ActionId != "associate-video";
+                    FileAssociationService.Register(video, audio);
+                    RefreshRows();
+                    await ShowMessageAsync(
+                        Loc.T("integration.registeredTitle"),
+                        Loc.T("integration.registeredBody"));
+                    break;
+                }
+
+                case "unregister-associations":
+                    FileAssociationService.Unregister();
+                    RefreshRows();
+                    await ShowMessageAsync(
+                        Loc.T("integration.removedTitle"),
+                        Loc.T("integration.removedBody"));
                     break;
 
                 case "install-plugin":

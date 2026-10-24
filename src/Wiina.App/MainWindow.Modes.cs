@@ -285,7 +285,7 @@ public sealed partial class MainWindow
 
         DisplayArea area = DisplayArea.GetFromWindowId(
             AppWindow.Id,
-            DisplayAreaFallback.Primary);
+            DisplayAreaFallback.Nearest);
         RectInt32 workArea = area.WorkArea;
         SizeInt32 size = AppWindow.Size;
         PointInt32 position = AppWindow.Position;
@@ -398,6 +398,11 @@ public sealed partial class MainWindow
         }
     }
 
+    /// <summary>
+    /// PiP reports the <em>layout</em> pixel size of its video surface (full
+    /// window). The mpv composition buffer is capped separately so the panel
+    /// keeps covering the window (issue 3).
+    /// </summary>
     private void OnPipBufferSizeChanged(int pixelWidth, int pixelHeight, double scale)
     {
         double dpi = scale > 0.1 ? scale : 1.0;
@@ -411,9 +416,10 @@ public sealed partial class MainWindow
             return;
         }
 
+        (int renderWidth, int renderHeight) = PipGeometry.RenderSize(pixelWidth, pixelHeight);
         _player.TrySetPropertyString(
             "d3d11-composition-size",
-            $"{Math.Max(1, pixelWidth)}x{Math.Max(1, pixelHeight)}");
+            $"{renderWidth}x{renderHeight}");
 
         // A paused mpv does not present new frames on its own; a relative
         // zero seek forces one exact refresh so rebinding never stays black.
@@ -447,10 +453,45 @@ public sealed partial class MainWindow
 
     // ------------------------------------------------------------------- mini
 
+    private bool _miniBackdropSuspended;
+
+    /// <summary>
+    /// Mini mode is fully covered by the video surface, so the window acrylic
+    /// only adds compositor work under an opaque SwapChainPanel (small-window
+    /// reference doc §4: no AcrylicBrush around the video). Dropped on entry and
+    /// restored on exit; nothing visible changes because the backdrop is
+    /// hidden behind the video.
+    /// </summary>
+    private void SetMiniBackdropSuspended(bool suspended)
+    {
+        if (_miniBackdropSuspended == suspended)
+        {
+            return;
+        }
+
+        _miniBackdropSuspended = suspended;
+        try
+        {
+            if (suspended)
+            {
+                SystemBackdrop = null;
+            }
+            else
+            {
+                TrySetBackdrop();
+            }
+        }
+        catch
+        {
+            // Backdrop is cosmetic; never block a mode switch.
+        }
+    }
+
     private bool EnterMiniInternal()
     {
         CaptureNormalFrame();
         SetTopmost(true);
+        SetMiniBackdropSuspended(true);
         ResizeWindowDip(MiniPlayerLayout.DefaultWidth, MiniPlayerLayout.DefaultHeight);
         _modeResizedWindow = true;
 
@@ -480,6 +521,11 @@ public sealed partial class MainWindow
         MiniPlayer.SetPlaylistExpanded(false);
         MiniPlayer.HideControls();
         MiniPlayer.ResetControls();
+        SetMiniBackdropSuspended(false);
+        // The restored normal frame is not edge-snapped: drop the magnet and
+        // hand the normal DWM frame back.
+        _snapSession.Reset();
+        ApplySnapFrame(false);
         RestoreTopmostFromSettings();
         RestoreNormalFrame();
     }
@@ -546,6 +592,8 @@ public sealed partial class MainWindow
         WindowInterop.TryGetCursorPosition(out _miniDragCursorX, out _miniDragCursorY);
         _miniDragWindowX = AppWindow.Position.X;
         _miniDragWindowY = AppWindow.Position.Y;
+        // Mini drag is a third drag path (issue 4) and shares the edge magnet.
+        _snapSession.Reset();
     }
 
     private void MoveMiniDrag()
@@ -556,9 +604,26 @@ public sealed partial class MainWindow
             return;
         }
 
-        AppWindow.Move(new PointInt32(
-            _miniDragWindowX + (cursorX - _miniDragCursorX),
-            _miniDragWindowY + (cursorY - _miniDragCursorY)));
+        int x = _miniDragWindowX + (cursorX - _miniDragCursorX);
+        int y = _miniDragWindowY + (cursorY - _miniDragCursorY);
+        SizeInt32 size = AppWindow.Size;
+        if (_settings.EdgeSnapping)
+        {
+            EdgeSnapResult snap = _snapSession.Apply(
+                new WindowRect(x, y, x + size.Width, y + size.Height),
+                WorkAreaUnderPointer(),
+                DisplayScale);
+            x = snap.Rect.Left;
+            y = snap.Rect.Top;
+            ApplySnapFrame(snap.IsSnapped);
+        }
+        else
+        {
+            _snapSession.Reset();
+            ApplySnapFrame(false);
+        }
+
+        AppWindow.Move(new PointInt32(x, y));
     }
 
     private void MaybeAutoEnterMini()

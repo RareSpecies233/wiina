@@ -93,16 +93,8 @@
             <CompositeTransform x:Name="SlideTransform" />
         </Grid.RenderTransform>
 
-        <!-- Live Gaussian blur of the frame behind the sidebar (video
-             included); the acrylic border below is collapsed when it works. -->
-        <Border x:Name="BackdropBlurHost" IsHitTestVisible="False" />
-        <Border x:Name="SidebarBlurTintLayer"
-                Background="{ThemeResource SidebarBlurTintBrush}"
-                Visibility="Collapsed"
-                IsHitTestVisible="False" />
-
         <Border x:Name="PanelBorder"
-                Background="{ThemeResource SidebarAcrylicBrush}"
+                Background="{ThemeResource ChromeSolidBrush}"
                 BorderBrush="{ThemeResource PanelBorderBrush}"
                 BorderThickness="1,0,0,0">
             <Grid>

@@ -1,6 +1,6 @@
 namespace Wiina.Core.Settings;
 
-/// <summary>The eleven pages of the Stage 7 settings window (spec §12.1 order).</summary>
+/// <summary>The twelve pages of the Stage 7 settings window (spec §12.1 order).</summary>
 public enum SettingsPageId
 {
     General,
@@ -12,6 +12,7 @@ public enum SettingsPageId
     Control,
     KeyBindings,
     Advanced,
+    Integration,
     Plugin,
     Utilities,
 }

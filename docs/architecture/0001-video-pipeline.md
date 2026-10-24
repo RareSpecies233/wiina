@@ -129,6 +129,9 @@ m11 = 1 / RasterizationScale, m22 = 1 / RasterizationScale
 - resize 时先把面板保持在 `_committed` 尺寸并用 `CompositeTransform` 缩放到 `_target`，等 mpv 完成新尺寸并呈现一帧后，
   再提交面板尺寸、复位 transform，避免黑闪；
 - `WM_ENTERSIZEMOVE` 期间不请求 resize，`WM_EXITSIZEMOVE` 后一次性提交。
+  > **实现校正（1.2.3 核查）**：代码里没有处理 `WM_ENTERSIZEMOVE`/`WM_EXITSIZEMOVE`；实际做法是
+  > 窗口尺寸变化后启动 80 ms 单次防抖定时器再 `ApplyVideoLayout()`（`MainWindow.xaml.cs` 的
+  > `_resizeTimer`），效果等价于“拖拽过程中不反复提交尺寸”。本节保留为设计意图记录。
 
 ### 4.3 宽高比与黑边
 

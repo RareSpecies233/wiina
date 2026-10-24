@@ -46,6 +46,11 @@ public sealed partial class MainWindow
         host.TabRequested += OnSidebarTabRequested;
         host.PageRequested += (_, page) =>
         {
+            // Quick-settings pages have no inline home of their own: they are
+            // always shown inside the settings slot. The host raises the type
+            // switch first; this guard also covers calls that request a page
+            // while another section is still on screen.
+            EnsureSettingsSlot(host);
             _settings.QuickSettingsPage = page;
             SyncQuickSettingsPage(page);
             ScheduleSettingsSave();
@@ -241,6 +246,26 @@ public sealed partial class MainWindow
                 host.CollapseInstant();
             }
         }
+    }
+
+    /// <summary>
+    /// Keeps quick-settings pages reachable: if a page request arrives while
+    /// playlist/chapters/plugins is the visible section, switch that slot to
+    /// settings instead of leaving the requested page hidden behind it.
+    /// </summary>
+    private void EnsureSettingsSlot(SidebarHost host)
+    {
+        if (host.Visibility != Visibility.Visible ||
+            _sidebar.TypeFor(host.Side) == SidebarType.Settings)
+        {
+            return;
+        }
+
+        _sidebar.Show(host.Side, SidebarType.Settings);
+        _settings.SidebarSide = host.Side;
+        _settings.SidebarType = SidebarType.Settings;
+        ApplySidebarState(animate: true);
+        SaveSidebarSettings();
     }
 
     /// <summary>Compact/menu path: drop both slots without animating.</summary>
@@ -501,6 +526,7 @@ public sealed partial class MainWindow
                 break;
             case QuickSettingKey.MpvStats:
                 _settings.ShowMpvStats = e.Flag;
+                ApplyStatsSettings();
                 break;
             case QuickSettingKey.OscPosition:
                 SetOscPosition((OscPosition)Math.Clamp((int)e.Number, 0, 2));

@@ -42,7 +42,7 @@ internal static class WindowShell
         TryUseMica(window);
         TrySetWindowIcon(window);
 
-        if (extendTitleBar)
+        if (extendTitleBar && AppWindowTitleBar.IsCustomizationSupported())
         {
             window.ExtendsContentIntoTitleBar = true;
             window.AppWindow.TitleBar.ExtendsContentIntoTitleBar = true;
@@ -62,6 +62,11 @@ internal static class WindowShell
 
     public static void ConfigureCaptionButtons(Window window, bool dark)
     {
+        if (!AppWindowTitleBar.IsCustomizationSupported())
+        {
+            return;
+        }
+
         AppWindowTitleBar bar = window.AppWindow.TitleBar;
         bar.BackgroundColor = Colors.Transparent;
         bar.InactiveBackgroundColor = Colors.Transparent;

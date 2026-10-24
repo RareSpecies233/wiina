@@ -95,6 +95,7 @@ public sealed partial class MainWindow
             _settings.FullscreenTitleEnabled);
         UpdateOsdPlacement();
         UpdateFullscreenStatus();
+        ApplyStatsSettings();
     }
 
     private void ShowOsd(OsdMessage message)

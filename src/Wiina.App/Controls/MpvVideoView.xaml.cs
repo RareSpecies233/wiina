@@ -53,10 +53,17 @@ public sealed partial class MpvVideoView : UserControl
     }
 
     /// <summary>
-    /// Sizes the panel to physical buffer pixels and applies the inverse DPI
-    /// transform (the composition driver rejects SetMatrixTransform).
+    /// Sizes the panel to the <em>layout</em> size of the video area (full
+    /// window, physical pixels) and applies the inverse DPI transform (the
+    /// composition driver rejects SetMatrixTransform).
+    ///
+    /// This is deliberately not the mpv render/composition size: mpv may render
+    /// into a capped buffer (see <c>PipGeometry.RenderSize</c>) which the
+    /// compositor upscales to this panel. Passing the capped buffer size here
+    /// used to shrink the XAML surface, leaving the window partly uncovered
+    /// (issue 3).
     /// </summary>
-    public void SetBufferSize(int pixelWidth, int pixelHeight, double rasterizationScale)
+    public void SetLayoutSize(int pixelWidth, int pixelHeight, double rasterizationScale)
     {
         int width = Math.Max(1, pixelWidth);
         int height = Math.Max(1, pixelHeight);

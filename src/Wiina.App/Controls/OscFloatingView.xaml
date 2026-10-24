@@ -9,17 +9,9 @@
     HorizontalAlignment="Left">
 
     <Grid>
-        <!-- Live Gaussian blur of the frame behind the floating OSC (video
-             included), clipped to the 8 DIP panel radius. -->
-        <Border x:Name="BackdropBlurHost" IsHitTestVisible="False" />
-        <Border x:Name="OscBlurTintLayer"
-                Background="{ThemeResource OscBlurTintBrush}"
-                CornerRadius="8"
-                Visibility="Collapsed"
-                IsHitTestVisible="False" />
         <Border x:Name="DragArea"
             Style="{StaticResource PanelBorderStyle}"
-            Background="{ThemeResource OscAcrylicBrush}"
+            Background="{ThemeResource ChromeSolidBrush}"
             MinHeight="64"
             Padding="12,6">
         <Grid>

@@ -6,9 +6,9 @@ namespace Wiina.Core.Tests;
 public sealed class SettingsSearchTests
 {
     [Fact]
-    public void CatalogHasElevenPagesInSpecOrder()
+    public void CatalogHasTwelvePagesInSpecOrder()
     {
-        Assert.Equal(11, SettingsCatalog.Pages.Count);
+        Assert.Equal(12, SettingsCatalog.Pages.Count);
         Assert.Equal(
             new[]
             {
@@ -21,6 +21,7 @@ public sealed class SettingsSearchTests
                 SettingsPageId.Control,
                 SettingsPageId.KeyBindings,
                 SettingsPageId.Advanced,
+                SettingsPageId.Integration,
                 SettingsPageId.Plugin,
                 SettingsPageId.Utilities,
             },

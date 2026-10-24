@@ -9,17 +9,170 @@ using Wiina.Core.Settings;
 
 namespace Wiina.App.Views;
 
+/// <summary>
+/// One selectable scaler option: the human-readable label shown in the ComboBox plus the
+/// exact raw mpv property value that is persisted in <see cref="VideoQualityProfile"/>.
+/// </summary>
+public sealed class ScalerOption
+{
+    public ScalerOption(string raw, string display, string tooltip)
+    {
+        Raw = raw;
+        Display = display;
+        Tooltip = tooltip;
+    }
+
+    /// <summary>Raw mpv key persisted in the profile JSON (e.g. "ewa_lanczos").</summary>
+    public string Raw { get; }
+
+    /// <summary>Human-readable label, e.g. "Lanczos — 锐利，通用".</summary>
+    public string Display { get; }
+
+    /// <summary>Hover text: the raw mpv key plus a one-line explanation.</summary>
+    public string Tooltip { get; }
+
+    public override string ToString() => Display;
+
+    /// <summary>Placeholder for a raw key Wiina does not know; the imported value is kept intact.</summary>
+    public static ScalerOption Unknown(string raw) => new(
+        raw,
+        $"{raw} — 未识别的缩放器（保留原值）",
+        $"mpv 原始键：{raw}\n该值不在 Wiina 的缩放器列表中（可能来自导入的 JSON）；会原样保存并交给 mpv，若 mpv 不接受则回退其默认值。");
+}
+
+/// <summary>One entry of the profile ComboBox: display text plus a "when to use" hint.</summary>
+public sealed class ProfileOption
+{
+    public ProfileOption(string display, string hint)
+    {
+        Display = display;
+        Hint = hint;
+    }
+
+    public string Display { get; }
+
+    public string Hint { get; }
+
+    public override string ToString() => Display;
+}
+
 /// <summary>Named mpv scaler/deband profiles with JSON import/export.</summary>
 public sealed partial class VideoQualityWindow : Window
 {
-    private static readonly string[] Scalers =
+    private const int BuiltInCount = 4;
+    private const string DefaultScaler = "bilinear";
+
+    /// <summary>One scaler in the mpv catalogue with per-purpose descriptions.</summary>
+    private sealed record ScalerSpec(
+        string Raw,
+        string Friendly,
+        string UpscaleRole,
+        string DownscaleRole,
+        string ChromaRole,
+        string Note);
+
+    private static readonly ScalerSpec[] ScalerSpecs =
     {
-        "bilinear", "bicubic", "lanczos", "ewa_lanczos", "ewa_lanczossharp",
-        "ewa_lanczos4sharpest", "spline36", "mitchell", "catmull_rom",
+        new("bilinear", "Bilinear",
+            "最快，仅建议弱 GPU", "最快，缩小略软", "默认，开销最低（推荐）",
+            "最省 GPU 的线性插值，画面偏软；弱 GPU、高帧率或 4K 高刷时选它。"),
+        new("bicubic", "Bicubic",
+            "平滑，开销低", "略锐，开销低", "色彩边缘更清晰",
+            "平滑且开销小，细节略软；日常缩小与色度缩放的稳妥选择。"),
+        new("lanczos", "Lanczos",
+            "锐利，通用", "锐利，缩小可能闪烁", "锐利，开销中等",
+            "经典 Lanczos：锐利、开销适中，不确定时可用。"),
+        new("ewa_lanczos", "EWA Lanczos",
+            "高质量缩放（推荐）", "高质量（开销大）", "高质量（开销大）",
+            "EWA Lanczos：锐利且抗锯齿，IINA 默认；适合大多数放大场景。"),
+        new("ewa_lanczossharp", "EWA Lanczos Sharp",
+            "更锐利，开销略高", "更锐利（重负载）", "更锐利（重负载）",
+            "在 EWA Lanczos 上加强锐度，细节更强、开销略高。"),
+        new("ewa_lanczos4sharpest", "EWA Lanczos 4 Sharpest",
+            "最锐利（重负载）", "最锐利（重负载）", "最锐利（重负载）",
+            "最锐利的 EWA 变体，开销最高；适合高端 GPU 与低分辨率片源。"),
+        new("spline36", "Spline36",
+            "锐利且稳定", "锐利，振铃少", "锐利，振铃少",
+            "Spline36：锐利、振铃少、开销中等，通用替代方案。"),
+        new("mitchell", "Mitchell",
+            "平滑，略软", "平滑，缩小首选（推荐）", "平滑，开销低",
+            "Mitchell-Netravali：平滑不易闪烁，缩小的常用默认。"),
+        new("catmull_rom", "Catmull-Rom",
+            "略锐，可能振铃", "略锐，可能振铃", "略锐，可能振铃",
+            "比 Mitchell 更锐，边缘可能出现轻微振铃。"),
+    };
+
+    // Display order: recommended first, then alternative quality picks, then the cheapest.
+    private static readonly string[] UpscaleOrder =
+    {
+        "ewa_lanczos", "lanczos", "spline36", "ewa_lanczossharp", "ewa_lanczos4sharpest",
+        "bicubic", "mitchell", "catmull_rom", "bilinear",
+    };
+
+    private static readonly string[] DownscaleOrder =
+    {
+        "mitchell", "bicubic", "bilinear", "lanczos", "spline36",
+        "catmull_rom", "ewa_lanczos", "ewa_lanczossharp", "ewa_lanczos4sharpest",
+    };
+
+    private static readonly string[] ChromaOrder =
+    {
+        "bilinear", "bicubic", "spline36", "lanczos", "mitchell",
+        "catmull_rom", "ewa_lanczos", "ewa_lanczossharp", "ewa_lanczos4sharpest",
+    };
+
+    private static readonly IReadOnlyList<ScalerOption> UpscaleOptions =
+        BuildOptions(UpscaleOrder, spec => spec.UpscaleRole);
+
+    private static readonly IReadOnlyList<ScalerOption> DownscaleOptions =
+        BuildOptions(DownscaleOrder, spec => spec.DownscaleRole);
+
+    private static readonly IReadOnlyList<ScalerOption> ChromaOptions =
+        BuildOptions(ChromaOrder, spec => spec.ChromaRole);
+
+    private static readonly (VideoQualityProfile Profile, string Hint)[] BuiltIns =
+    {
+        (new VideoQualityProfile
+            {
+                Name = "自动（IINA 默认）",
+                Scale = "ewa_lanczos",
+                Dscale = "mitchell",
+                Cscale = "bilinear",
+                Deband = true,
+            },
+            "对齐 IINA 默认：EWA Lanczos 放大 + Mitchell 缩小，清晰且开销适中，适合大多数片源。内置只读，点“应用”会另存为自定义副本。"),
+        (new VideoQualityProfile
+            {
+                Name = "均衡",
+                Scale = "ewa_lanczos",
+                Dscale = "bilinear",
+                Cscale = "bilinear",
+                Deband = true,
+            },
+            "EWA Lanczos 放大 + Bilinear 缩小：画质与性能折中，日常观影与老显卡都合适。内置只读，点“应用”会另存为自定义副本。"),
+        (new VideoQualityProfile
+            {
+                Name = "高质量",
+                Scale = "ewa_lanczossharp",
+                Dscale = "mitchell",
+                Cscale = "bilinear",
+                Deband = true,
+            },
+            "EWA LanczosSharp 放大 + Mitchell 缩小：细节最锐，适合 1080p→4K 等放大较多的片源与高端 GPU。内置只读，点“应用”会另存为自定义副本。"),
+        (new VideoQualityProfile
+            {
+                Name = "性能优先",
+                Scale = "bilinear",
+                Dscale = "bilinear",
+                Cscale = "bilinear",
+                Deband = false,
+            },
+            "全部使用 Bilinear 并关闭去色带：开销最低，适合弱 GPU、低功耗设备或高帧率片源。内置只读，点“应用”会另存为自定义副本。"),
     };
 
     private readonly AppSettings _settings = App.Settings;
     private List<VideoQualityProfile> _profiles = new();
+    private List<ProfileOption> _profileEntries = new();
     private VideoQualityProfile _editing = new();
     private bool _loading;
 
@@ -33,33 +186,52 @@ public sealed partial class VideoQualityWindow : Window
             ThemeMode.Light => ElementTheme.Light,
             _ => ElementTheme.Default,
         };
-        WindowShell.Prepare(this, 760, 520, resizable: true, dark: _settings.Theme != ThemeMode.Light,
+        WindowShell.Prepare(this, 780, 620, resizable: true, dark: _settings.Theme != ThemeMode.Light,
             minWidth: 620, minHeight: 420, extendTitleBar: true, titleBar: DragRegion);
-        ScaleBox.ItemsSource = Scalers;
-        DscaleBox.ItemsSource = Scalers;
-        CscaleBox.ItemsSource = Scalers;
         BuildProfiles();
         Closed += (_, _) => WindowShell.Detach(this);
     }
 
+    private static IReadOnlyList<ScalerOption> BuildOptions(
+        string[] order,
+        Func<ScalerSpec, string> role)
+    {
+        return order.Select(raw =>
+        {
+            ScalerSpec spec = ScalerSpecs.First(item =>
+                string.Equals(item.Raw, raw, StringComparison.Ordinal));
+            return new ScalerOption(
+                spec.Raw,
+                $"{spec.Friendly} — {role(spec)}",
+                $"{spec.Friendly}（mpv 键：{spec.Raw}）\n{spec.Note}");
+        }).ToArray();
+    }
+
+    private static string NormalizeRaw(string? raw) =>
+        string.IsNullOrWhiteSpace(raw) ? DefaultScaler : raw.Trim();
+
+    private static bool IsKnownScaler(string? raw) =>
+        string.IsNullOrWhiteSpace(raw) ||
+        ScalerSpecs.Any(spec => string.Equals(spec.Raw, raw.Trim(), StringComparison.OrdinalIgnoreCase));
+
     private void BuildProfiles()
     {
         _loading = true;
-        _profiles = new List<VideoQualityProfile>
-        {
-            new() { Name = "自动（IINA 默认）", Scale = "ewa_lanczos", Dscale = "mitchell", Cscale = "bilinear", Deband = true },
-            new() { Name = "均衡", Scale = "ewa_lanczos", Dscale = "bilinear", Cscale = "bilinear", Deband = true },
-            new() { Name = "高质量", Scale = "ewa_lanczossharp", Dscale = "mitchell", Cscale = "bilinear", Deband = true },
-            new() { Name = "性能优先", Scale = "bilinear", Dscale = "bilinear", Cscale = "bilinear", Deband = false },
-        };
+        _profiles = BuiltIns.Select(builtIn => Clone(builtIn.Profile)).ToList();
         _profiles.AddRange(_settings.UserQualityProfiles.Select(Clone));
-        ProfileBox.ItemsSource = _profiles.Select(profile => profile.Name).ToList();
+        _profileEntries = _profiles
+            .Select((profile, index) => index < BuiltInCount
+                ? new ProfileOption($"{profile.Name} · 内置", BuiltIns[index].Hint)
+                : new ProfileOption(profile.Name, "自定义预设：修改下方缩放器或去色带后点“应用”，保存并立即生效。"))
+            .ToList();
+        ProfileBox.ItemsSource = _profileEntries;
         string active = _settings.ActiveQualityProfile;
         int index = _profiles.FindIndex(profile =>
             string.Equals(profile.Name, active, StringComparison.OrdinalIgnoreCase));
         ProfileBox.SelectedIndex = index >= 0 ? index : 0;
         _loading = false;
-        LoadEditor(_profiles[ProfileBox.SelectedIndex]);
+        LoadEditor(_profiles[ProfileBox.SelectedIndex >= 0 ? ProfileBox.SelectedIndex : 0]);
+        UpdateProfileHint();
     }
 
     private static VideoQualityProfile Clone(VideoQualityProfile profile) => new()
@@ -73,16 +245,78 @@ public sealed partial class VideoQualityWindow : Window
 
     private void LoadEditor(VideoQualityProfile profile)
     {
-        _editing = Clone(profile);
-        ScaleBox.SelectedItem = Scalers.Contains(profile.Scale) ? profile.Scale : Scalers[0];
-        DscaleBox.SelectedItem = Scalers.Contains(profile.Dscale) ? profile.Dscale : Scalers[0];
-        CscaleBox.SelectedItem = Scalers.Contains(profile.Cscale) ? profile.Cscale : Scalers[0];
-        DebandSwitch.IsOn = profile.Deband;
+        bool previous = _loading;
+        _loading = true;
+        try
+        {
+            _editing = Clone(profile);
+            SelectScaler(ScaleBox, UpscaleOptions, profile.Scale);
+            SelectScaler(DscaleBox, DownscaleOptions, profile.Dscale);
+            SelectScaler(CscaleBox, ChromaOptions, profile.Cscale);
+            DebandSwitch.IsOn = profile.Deband;
+        }
+        finally
+        {
+            _loading = previous;
+        }
+
+        UpdateRawKeyLine();
     }
 
-    private bool IsBuiltIn(string name) => _profiles
-        .Take(4)
-        .Any(profile => string.Equals(profile.Name, name, StringComparison.Ordinal));
+    /// <summary>
+    /// Fills a ComboBox with the purpose-specific options and selects the option whose raw key
+    /// matches <paramref name="raw"/>. Unknown keys (e.g. from an imported JSON) get a placeholder
+    /// entry that keeps the original value instead of silently replacing it.
+    /// </summary>
+    private static void SelectScaler(ComboBox box, IReadOnlyList<ScalerOption> options, string? raw)
+    {
+        string value = NormalizeRaw(raw);
+        List<ScalerOption> items = options.ToList();
+        int index = items.FindIndex(option =>
+            string.Equals(option.Raw, value, StringComparison.OrdinalIgnoreCase));
+        if (index < 0)
+        {
+            items.Add(ScalerOption.Unknown(value));
+            index = items.Count - 1;
+        }
+
+        box.ItemsSource = items;
+        box.SelectedIndex = index;
+    }
+
+    private static string SelectedRaw(ComboBox box) =>
+        box.SelectedItem is ScalerOption option ? option.Raw : DefaultScaler;
+
+    private void UpdateRawKeyLine()
+    {
+        RawKeyText.Text =
+            $"mpv 原始键：scale={SelectedRaw(ScaleBox)} · dscale={SelectedRaw(DscaleBox)} · " +
+            $"cscale={SelectedRaw(CscaleBox)} · deband={(DebandSwitch.IsOn ? "yes" : "no")}（点“应用”后写入 mpv）";
+    }
+
+    private void UpdateProfileHint()
+    {
+        int index = ProfileBox.SelectedIndex;
+        ProfileHintText.Text = index >= 0 && index < _profileEntries.Count
+            ? _profileEntries[index].Hint
+            : string.Empty;
+    }
+
+    private void OnScalerChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (!_loading)
+        {
+            UpdateRawKeyLine();
+        }
+    }
+
+    private void OnDebandToggled(object sender, RoutedEventArgs e)
+    {
+        if (!_loading)
+        {
+            UpdateRawKeyLine();
+        }
+    }
 
     private void OnProfileSelected(object sender, SelectionChangedEventArgs e)
     {
@@ -92,6 +326,7 @@ public sealed partial class VideoQualityWindow : Window
         }
 
         LoadEditor(_profiles[ProfileBox.SelectedIndex]);
+        UpdateProfileHint();
     }
 
     private async void OnAddClick(object sender, RoutedEventArgs e)
@@ -106,9 +341,9 @@ public sealed partial class VideoQualityWindow : Window
         _settings.UserQualityProfiles.Add(new VideoQualityProfile
         {
             Name = name,
-            Scale = ScaleBox.SelectedItem as string ?? "bilinear",
-            Dscale = DscaleBox.SelectedItem as string ?? "bilinear",
-            Cscale = CscaleBox.SelectedItem as string ?? "bilinear",
+            Scale = SelectedRaw(ScaleBox),
+            Dscale = SelectedRaw(DscaleBox),
+            Cscale = SelectedRaw(CscaleBox),
             Deband = DebandSwitch.IsOn,
         });
         App.SaveSettings();
@@ -125,7 +360,7 @@ public sealed partial class VideoQualityWindow : Window
         }
 
         string oldName = _profiles[ProfileBox.SelectedIndex].Name;
-        if (IsBuiltIn(oldName))
+        if (ProfileBox.SelectedIndex < BuiltInCount)
         {
             StatusText.Text = "内置预设不能重命名，请先用“新建”保存一份。";
             return;
@@ -157,7 +392,7 @@ public sealed partial class VideoQualityWindow : Window
 
     private void OnDeleteClick(object sender, RoutedEventArgs e)
     {
-        if (ProfileBox.SelectedIndex < 0 || IsBuiltIn(_profiles[ProfileBox.SelectedIndex].Name))
+        if (ProfileBox.SelectedIndex < 0 || ProfileBox.SelectedIndex < BuiltInCount)
         {
             StatusText.Text = "内置预设不能删除。";
             return;
@@ -207,7 +442,13 @@ public sealed partial class VideoQualityWindow : Window
 
             App.SaveSettings();
             BuildProfiles();
-            StatusText.Text = $"已导入 {imported.Count} 个画质预设。";
+            int unknown = imported.Count(profile =>
+                !IsKnownScaler(profile.Scale) ||
+                !IsKnownScaler(profile.Dscale) ||
+                !IsKnownScaler(profile.Cscale));
+            StatusText.Text = unknown > 0
+                ? $"已导入 {imported.Count} 个画质预设；其中 {unknown} 个含未知缩放器，原始键已保留，可在下拉框中查看。"
+                : $"已导入 {imported.Count} 个画质预设。";
         }
         catch (Exception ex)
         {
@@ -229,7 +470,7 @@ public sealed partial class VideoQualityWindow : Window
                 return;
             }
 
-            List<VideoQualityProfile> userProfiles = _profiles.Skip(4).Select(Clone).ToList();
+            List<VideoQualityProfile> userProfiles = _profiles.Skip(BuiltInCount).Select(Clone).ToList();
             await FileIO.WriteTextAsync(file, JsonSerializer.Serialize(
                 userProfiles,
                 new JsonSerializerOptions { WriteIndented = true }));
@@ -253,13 +494,13 @@ public sealed partial class VideoQualityWindow : Window
         var value = new VideoQualityProfile
         {
             Name = name,
-            Scale = ScaleBox.SelectedItem as string ?? "bilinear",
-            Dscale = DscaleBox.SelectedItem as string ?? "bilinear",
-            Cscale = CscaleBox.SelectedItem as string ?? "bilinear",
+            Scale = SelectedRaw(ScaleBox),
+            Dscale = SelectedRaw(DscaleBox),
+            Cscale = SelectedRaw(CscaleBox),
             Deband = DebandSwitch.IsOn,
         };
 
-        if (IsBuiltIn(name))
+        if (ProfileBox.SelectedIndex < BuiltInCount)
         {
             name = $"{name}（自定义）";
             value.Name = name;
@@ -272,7 +513,13 @@ public sealed partial class VideoQualityWindow : Window
         _settings.VideoQualityPreset = VideoQualityPreset.Auto;
         App.SaveSettings();
         App.ActiveWindow?.ApplyCurrentQualityProfile();
-        StatusText.Text = $"已应用“{name}”。";
+        BuildProfiles();
+        bool unknown = !IsKnownScaler(value.Scale) ||
+                       !IsKnownScaler(value.Dscale) ||
+                       !IsKnownScaler(value.Cscale);
+        StatusText.Text = unknown
+            ? $"已应用“{name}”；其中包含未知缩放器，已按原始键保存。"
+            : $"已应用“{name}”。";
     }
 
     private void OnCloseClick(object sender, RoutedEventArgs e) => Close();

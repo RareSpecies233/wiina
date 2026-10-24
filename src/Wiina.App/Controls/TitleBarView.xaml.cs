@@ -1,14 +1,10 @@
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
-using Microsoft.UI.Xaml.Media;
-using Wiina.App.Interop;
 
 namespace Wiina.App.Controls;
 
 public sealed partial class TitleBarView : UserControl
 {
-    private ChromeBlurLayer? _blur;
-
     public TitleBarView()
     {
         InitializeComponent();
@@ -16,47 +12,6 @@ public sealed partial class TitleBarView : UserControl
         // document icon/title so it can fade with the rest of the chrome.
         ButtonPanel.Visibility = Visibility.Collapsed;
         SizeChanged += OnSizeChanged;
-        Loaded += OnLoaded;
-        Unloaded += OnUnloaded;
-    }
-
-    private void OnLoaded(object sender, RoutedEventArgs e)
-    {
-        // Early calls can arrive before the element is in a XamlRoot; retry
-        // once the layout pass has produced one.
-        if (_blur is not null || XamlRoot is null)
-        {
-            return;
-        }
-
-        // Real blurred frames of the video sitting behind the titlebar. Until
-        // the first frame arrives the acrylic borders stay in place.
-        if (!ChromeBlur.TryAttach(BackdropBlurHost, 0, out ChromeBlurLayer layer))
-        {
-            return;
-        }
-
-        _blur = layer;
-        _blur.FirstFrame += OnFirstBlurFrame;
-        _blur.RaiseFirstFrameIfReady();
-    }
-
-    private void OnFirstBlurFrame(object? sender, EventArgs e)
-    {
-        TranslucentBackground.Visibility = Visibility.Collapsed;
-        BlurTint.Visibility = Visibility.Visible;
-        TopOscAcrylicLayer.Visibility = Visibility.Collapsed;
-        TopOscBlurTintLayer.Visibility = Visibility.Visible;
-    }
-
-    private void OnUnloaded(object sender, RoutedEventArgs e)
-    {
-        if (_blur is not null)
-        {
-            _blur.FirstFrame -= OnFirstBlurFrame;
-        }
-
-        _blur = null;
     }
 
     private void OnSizeChanged(object sender, SizeChangedEventArgs e)
@@ -88,6 +43,18 @@ public sealed partial class TitleBarView : UserControl
     public event EventHandler? IconsClicked;
     public event EventHandler? WindowClicked;
     public event EventHandler? MoreClicked;
+
+    /// <summary>
+    /// Keeps the hand-drawn caption buttons only on platforms where the title
+    /// bar can be extended and recoloured. On Windows 10 the native caption
+    /// buttons stay, so the XAML copies are hidden.
+    /// </summary>
+    public bool ShowCustomCaptionButtons
+    {
+        get => WindowControlPanel.Visibility == Visibility.Visible;
+        set => WindowControlPanel.Visibility =
+            value ? Visibility.Visible : Visibility.Collapsed;
+    }
     public event EventHandler? MinimizeRequested;
     public event EventHandler? MaximizeRequested;
     public event EventHandler? CloseRequested;
@@ -108,8 +75,7 @@ public sealed partial class TitleBarView : UserControl
     }
 
     public bool IsPinned
-    {
-        set
+    {        set
         {
             PinButton.Content = value ? "\uE77A" : "\uE718";
             PinIndicator.Visibility = value ? Visibility.Visible : Visibility.Collapsed;

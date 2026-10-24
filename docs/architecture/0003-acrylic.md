@@ -1,5 +1,13 @@
 # Acrylic and video blur
 
+> **Status: superseded by [ADR-0004 — opaque accent-tinted chrome](0004-solid-chrome.md)
+> (v1.2.3).** The player chrome no longer samples or blurs the video: issue 2
+> replaced the capture pipeline below with an opaque panel colour plus a system
+> accent tint. Secondary windows still use `DesktopAcrylicBackdrop`. This
+> document is kept as the historical record of the 1.0.0–1.2.2 design (the code
+> it describes, `src/Wiina.App/Interop/ChromeBlur.cs` and
+> `src/Wiina.Core/Settings/ChromeBlurMode.cs`, was deleted in 1.2.3).
+
 Wiina has two blur stories:
 
 1. **Secondary windows** (Settings, Welcome, Key Bindings) use
