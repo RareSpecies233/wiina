@@ -8,16 +8,22 @@ namespace Wiina.Core.Release;
 public static class PackageManifest
 {
     /// <summary>Product version stamped into the archive name and SOURCE.txt.</summary>
-    public const string Version = "1.2.3";
+    public const string Version = "1.2.4";
 
     /// <summary>Runtime identifier of the self-contained payload.</summary>
     public const string RuntimeIdentifier = "win-x64";
 
     /// <summary>Name of the archive written under artifacts/.</summary>
-    public const string ArchiveFileName = "wiina-1.2.3-win-x64.zip";
+    public const string ArchiveFileName = "wiina-1.2.4-win-x64.zip";
 
     /// <summary>Executable entry point of the packaged player.</summary>
     public const string ExecutableFileName = "Wiina.exe";
+
+    /// <summary>
+    /// Portable uninstall entry point, shipped next to Wiina.exe. The
+    /// installer uses Inno's own uninstaller and excludes this file.
+    /// </summary>
+    public const string UninstallerFileName = "Uninstall Wiina.exe";
 
     /// <summary>The dynamically linked libmpv binaries; never committed.</summary>
     public const string LibMpvFileName = "libmpv-2.dll";
@@ -30,6 +36,7 @@ public static class PackageManifest
     public static IReadOnlyList<string> RequiredPayloadFiles { get; } = new[]
     {
         ExecutableFileName,
+        UninstallerFileName,
         LibMpvFileName,
         "LICENSE",
         "NOTICE",

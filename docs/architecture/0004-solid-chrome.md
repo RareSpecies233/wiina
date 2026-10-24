@@ -1,57 +1,55 @@
-# ADR-0004：不透明 accent 染色外框（移除取帧模糊）
+# ADR-0004：纯色模式（关闭毛玻璃）
 
-- 状态：**Accepted**（2026-10-24，v1.2.3；替代 [ADR-0003](0003-acrylic.md) 中“视频帧高斯模糊”的部分）
-- 相关：用户问题 2（纯色模式不应透出内容，并关闭抓帧/模糊渲染）、`ChromeSolidBrush`、`src/Wiina.App/Services/ChromeTint.cs`
+- 状态：**Accepted**（2026-10-24；v1.2.4 修订：毛玻璃已回归为可选功能，本 ADR 只定义四档中的
+  “关闭毛玻璃（纯色）”）
+- 相关：[ADR-0003](0003-acrylic.md)（取帧 + Win2D 高斯模糊，v1.2.4 起的当前主设计）、
+  `ChromeBlurMode.Solid`、`ChromeSolidBrush`、`src/Wiina.App/Services/ChromeTint.cs`
 
 ## 背景
 
-ADR-0003 的方案是每 125 ms 从 libmpv 取一帧真实视频帧（`screenshot-raw`，`bgr0`），在后台线程
-降采样到 320 px 宽，用 Win2D `GaussianBlurEffect` 模糊，再按控件在屏幕上的位置裁切分发给标题栏、
-底部/浮动 OSC、侧边栏与 OSD。
+1.2.3 曾经把取帧模糊整体删除，只保留不透明纯色外框。1.2.4 按维护者要求把毛玻璃恢复为**可选**的
+四档（固定 / 动态 / 始终 / 关闭毛玻璃），同时保留一个**零开销**的纯色档，用于低性能设备、A/B
+对比，以及“不希望外框透出任何画面”的场景。
 
-它能“看起来像毛玻璃”，但代价与缺陷都很明确：
-
-- **每帧一次全分辨率 GPU 回读**：1280×720 单帧约 45 ms、3.7 MB；720p 下占用大约三分之一个
-  CPU 核心，4K 更高。这是持续的、与播放无关的开销。
-- **滞后与失真**：外框最多落后视频一帧（125 ms）；320 px 重采样在窗口较大时明显更软。
-- 用户明确要求“纯色模式”**不要透出底下内容**，并且**关掉**为在 mpv 上叠 XAML 毛玻璃而引入的
-  抓帧/模糊渲染——性能优先。继续保留三档模糊模式无法满足该要求。
-- 管线还带来 Win2D 依赖、OSD 注入的 XAML hack、以及控件隐藏后仍保留最后一帧的“脏快照”。
+取帧模糊的代价是真实的：每 125 ms 一次 `screenshot-raw` 全帧回读，1280×720 单帧约 45 ms、
+3.7 MB，720p 下约占三分之一个 CPU 核心；4K 更高。纯色档存在的意义就是把这部分开销降为零。
 
 ## 决策
 
-- **删除** `src/Wiina.App/Interop/ChromeBlur.cs` 与 `src/Wiina.Core/Settings/ChromeBlurMode.cs`，
-  移除 Win2D 包引用与 `ui.blur-mode` 设置行（`settings.json` 里遗留的 `"ChromeBlurMode"` 键在反序列化时被忽略）。
-- 播放器外框（标题栏、顶部/底部/浮动 OSC、侧边栏、OSD）统一使用**不透明**主题画刷
-  `ChromeSolidBrush`：
-  - 深色 `#FF15171B`，浅色 `#FFF3F3F3`；
-  - 高对比度主题使用 `SystemColorWindowColor`。
-- 由 `ChromeTint`（`src/Wiina.App/Services/ChromeTint.cs`）把**系统 accent 以 16% 权重**混入
-  基色，并订阅 `UISettings.ColorValuesChanged`，在 UI 线程重算画刷；切换 accent 立即生效。
-- 外框不再采样视频，因此**没有透出、没有逐帧回读、没有 Win2D**；界面层级就是
-  “视频 swapchain → XAML 不透明外框”。
+- `ChromeBlurMode.Solid`（枚举值 3）下：
+  - **不启动取帧线程**，**不创建 Win2D `CanvasDevice`**，也丢弃任何在途帧；
+  - 每个外框表面只画不透明主题画刷 `ChromeSolidBrush`：
+    深色 `#FF15171B`、浅色 `#FFF3F3F3`、高对比度 `SystemColorWindowColor`；
+  - `ChromeTint` 把系统 accent 以 **16% 权重**混入基色，并订阅
+    `UISettings.ColorValuesChanged`，在 UI 线程重算画刷——切换 accent 立即生效。
+- 纯色档**不透出任何视频内容**：视觉层级就是“视频 swapchain → XAML 不透明外框”。
+- 回退路径同样使用纯色：`WIINA_BLUR_DISABLE=1` 让 `ChromeBlur.TryAttach` 直接失败；
+  取帧/设备/发布失败时表面保持纯色画刷。切换档位是实时的（`ChromeBlur.ModeChanged`）。
+- 1.2.3 写下的 `settings.json` 若含 `"ChromeBlurMode": "Solid"`，1.2.4 仍然按纯色加载；
+  枚举值与键名都没有变。
 
 ## 后果
 
-- 正面：外框渲染退化为一次纯色填充，CPU/GPU 回读与 Win2D 依赖整体消失；窗口尺寸、DPI、
-  主题切换都不再影响外框成本；不再有 125 ms 滞后或“软掉”的模糊。
-- 正面：OSD 不再需要注入外层 Grid 来做模糊裁切，XAML 树更简单，自动化树也不再包含这些注入层。
-- 负面：失去“真视频背景毛玻璃”的观感；外框永远不透明。这是维护者在问题 2 中明确选择的取舍。
+- 正面：纯色档没有任何回读、线程或 Win2D 依赖；窗口尺寸、DPI、主题切换都不影响外框成本。
+  它也是模糊不可用（驱动/DRM/旧系统）时的稳定落点。
+- 正面：低端设备有了明确、可解释的性能档位，而不是“模糊关不掉”。
+- 负面：纯色档没有“真视频背景毛玻璃”的观感，这是该档位的定义，不是缺陷。
 - 次要窗口（设置、欢迎、键位编辑）仍使用 `DesktopAcrylicBackdrop`，与本决策无关。
-- 用户无法再切回模糊模式；文档与设置中不再出现“玻璃性能模式”。
+- OSD 消息文本在所有档位下都保持不透明；Docked 布局下标题栏也保持不透明（视频在栏下方）。
 
 ## 备选方案
 
-- **保留模糊但默认关闭**：仍需打包 Win2D、保留取帧管线与 OSD 注入代码，且“纯色模式”下
-  用户仍会看到历史快照透出，不满足问题 2。
-- **只调低模糊刷新率**：降低但不消除回读成本，滞后更严重，未解决“透出内容”。
-- **Mica/Acrylic + 半透明覆盖**：SwapChainPanel 像素不参与 WinUI 合成，结果仍是平染色
-  （ADR-0003 已记录），且会让视频内容透出，与“纯色”矛盾。
+- **整体删除模糊（1.2.3 的做法）**：把“纯色”变成唯一选项。1.2.4 已推翻——维护者要求模糊回归，
+  同时保留纯色档。
+- **保留模糊并把默认设为纯色**：仍能兼顾，但会让“默认动态”的既有用户升级后看到变化；
+  当前默认仍是动态。
+- **半透明覆盖 + 系统 Mica/Acrylic**：`SwapChainPanel` 像素不参与 WinUI 合成（见 ADR-0003），
+  结果只会是平染色并透出内容，与纯色档语义矛盾。
 
 ## 迁移说明
 
-- 删除的设置键：`ChromeBlurMode`（对应设置行 id `ui.blur-mode`；旧 JSON 键被忽略，无需手动清理）。
-- 删除的文件：`Interop/ChromeBlur.cs`、`Settings/ChromeBlurMode.cs`；对应的验收记录保留为历史。
-- 新增/保留的主题键：`ChromeSolidBrush`（Dark/Light/HighContrast 三套 ThemeDictionaries）。
-- 若将来要恢复某种“背景材质”，应从真实的合成层能力出发（例如视频输出自身的特效），
-  而不是回到逐帧回读。
+- 设置键 `ChromeBlurMode` 继续有效，取值 `Fixed`/`Dynamic`/`Always`/`Solid`；未知值回退为
+  `Dynamic`。设置行 id 仍是 `ui.blur-mode`。
+- 1.2.3 期间删除的 `Interop/ChromeBlur.cs` 与 `Settings/ChromeBlurMode.cs` 已在 1.2.4 恢复；
+  1.2.3 的验收记录保留为历史，其中的“模糊已移除”结论不再代表当前版本。
+- 纯色档的画刷键仍是 `ChromeSolidBrush`（Dark/Light/HighContrast 三套 ThemeDictionaries）。

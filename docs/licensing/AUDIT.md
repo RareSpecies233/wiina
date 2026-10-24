@@ -1,10 +1,10 @@
-# 许可证与合规审计（v1.2.3）
+# 许可证与合规审计（v1.2.4）
 
 > 结论先行：**Wiina 以 GPL-3.0-only 发布**。不复制 IINA 的 Swift/AppKit 源码、图片资产、SF Symbols 或应用图标；
 > 不把 mpv/libmpv 二进制提交进 git；发布包附带 mpv 的许可证文本与源码获取方式。
 > 本文件不是法律意见；发布前建议做一次人工复核。
 
-本文件自 v0.1 起随版本更新。当前状态对应 **v1.2.3**：插件系统、在线字幕、yt-dlp 均未实现（Stage 9/10 按维护者要求跳过），
+本文件自 v0.1 起随版本更新。当前状态对应 **v1.2.4**：插件系统、在线字幕、yt-dlp 均未实现（Stage 9/10 按维护者要求跳过），
 因此本文件中所有“（v1）”字样的集成条目都已改为**未使用**，不再作为分发内容或义务来源。
 
 ---
@@ -22,13 +22,14 @@
 | Segoe UI Variable / Segoe Fluent Icons | Windows 系统字体 | Microsoft 系统字体许可 | 运行时使用 | **不重分发** | 不打包字体文件 |
 | SF Symbols | Apple | Apple 专有，仅限 Apple 平台 | **不使用** | 否 | — |
 | IINA 图标/`.xcassets` | IINA | GPL-3.0 + 商标 | **不使用** | 否 | — |
-| Win2D | 已移除（1.2.3） | — | 曾用于 ChromeBlur 的高斯模糊 | 否 | 1.2.3 删除取帧/模糊管线后不再引用，见 `docs/architecture/0004-solid-chrome.md` |
+| Win2D | 1.3.2（NuGet） | Microsoft 可再分发 | 毛玻璃三档的 `GaussianBlurEffect` | 随发布包（`Microsoft.Graphics.Canvas*.dll`） | 保留版权与许可文本；纯色档不加载/不创建设备，见 `docs/architecture/0003-acrylic.md` |
 | WebView2 | Microsoft Edge WebView2 Runtime | Microsoft 可再分发（专有） | **未使用**：插件系统跳过，无宿主 | 否 | 无（若将来实现插件 UI 需重新审计） |
 | yt-dlp | Unlicense（公共领域） | **未使用**：Stage 10 跳过，代码中无调用 | 否 | 无 |
 | OpenSubtitles API | 服务条款 + API 许可 | **未使用**：在线字幕跳过，无网络请求 | 否 | 无 |
+| Wiina.Uninstall | 本仓库源码 | GPL-3.0-only | 便携 zip 的卸载器；只调用 Win32 API | 随便携 zip | 无新增第三方依赖；安装版不含它（Inno 自带卸载器） |
 
 > 说明：v0.x 版本的本表曾列出 WebView2、yt-dlp、OpenSubtitles 并标注“（v1）”，那是当时计划的集成方式。
-> 这些功能最终未进入 v1，Wiina 1.2.3 不含它们的代码路径、设置入口或网络请求。
+> 这些功能最终未进入 v1，Wiina 1.2.4 不含它们的代码路径、设置入口或网络请求。
 
 ---
 
@@ -109,7 +110,7 @@
 3. 新字体：只允许系统字体或 OFL/Apache 字体；不得提交 Microsoft/Apple 专有字体。
 4. 新原生库：优先动态加载；记录版本、许可、SHA256、源码链接；不得提交无源码的二进制 blob（mpv 例外，按 §4 处理）。
 5. 代码来源：不复制 Stack Overflow/博客代码，除非许可明确且兼容；不复制 IINA/SF Symbols 资产。
-6. 移除依赖时同步更新本表与 `NOTICE`；v1.2.3 移除 Win2D 即按此条执行。
+6. 依赖变化时同步更新本表与 `NOTICE`；1.2.3 曾移除、1.2.4 又恢复 Win2D 即按此条执行。
 
 ---
 

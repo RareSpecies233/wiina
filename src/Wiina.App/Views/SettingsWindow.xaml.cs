@@ -126,19 +126,21 @@ public sealed partial class SettingsWindow : Window
                 Orientation = Orientation.Horizontal,
                 Spacing = 10,
             };
-            content.Children.Add(new FontIcon
+            var icon = new FontIcon
             {
                 Glyph = page.Glyph,
                 FontSize = 14,
                 FontFamily = new FontFamily("Segoe Fluent Icons"),
-            });
+            };
             string pageTitle = SettingsLocalization.PageTitle(page, Loc.CurrentLanguage);
-            content.Children.Add(new TextBlock
+            var label = new TextBlock
             {
                 Text = pageTitle,
                 FontSize = 13,
                 VerticalAlignment = VerticalAlignment.Center,
-            });
+            };
+            content.Children.Add(icon);
+            content.Children.Add(label);
 
             var button = new Button
             {
@@ -146,6 +148,13 @@ public sealed partial class SettingsWindow : Window
                 Content = content,
                 Style = (Style)RootGrid.Resources["SettingsNavButtonStyle"],
             };
+            // Bind glyph and text colour to the button's Foreground so rest,
+            // hover and selected stay in lockstep with the style setters
+            // (SecondaryTextBrush → PrimaryTextBrush). Relying on the icon/text
+            // theme defaults left a bright fallback colour that read as a hover
+            // highlight on the otherwise dim rail.
+            icon.SetBinding(FontIcon.ForegroundProperty, NavForegroundBinding(button));
+            label.SetBinding(TextBlock.ForegroundProperty, NavForegroundBinding(button));
             SettingsPageId id = page.Id;
             Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(button, pageTitle);
             button.Click += (_, _) => Navigate(id);
@@ -153,6 +162,14 @@ public sealed partial class SettingsWindow : Window
             _navButtons.Add((id, button));
         }
     }
+
+    /// <summary>One-way Foreground binding from a rail button to its icon/text.</summary>
+    private static Microsoft.UI.Xaml.Data.Binding NavForegroundBinding(Button button) => new()
+    {
+        Source = button,
+        Path = new PropertyPath("Foreground"),
+        Mode = Microsoft.UI.Xaml.Data.BindingMode.OneWay,
+    };
 
     private void Navigate(SettingsPageId page, string? rowId = null)
     {
@@ -711,7 +728,6 @@ public sealed partial class SettingsWindow : Window
             "video.quality-editor" =>
             Loc.T("settings.open"),
         "reset-equalizer" => Loc.T("settings.reset"),
-        "toggle-technical-osd" => Loc.T("settings.toggle"),
         _ => Loc.T("settings.run"),
     };
 
@@ -1006,10 +1022,6 @@ public sealed partial class SettingsWindow : Window
 
                 case "open-about":
                     App.ShowAboutWindow();
-                    break;
-
-                case "toggle-technical-osd":
-                    App.ActiveWindow?.ToggleTechnicalOsd();
                     break;
 
                 case "export-diagnostics":

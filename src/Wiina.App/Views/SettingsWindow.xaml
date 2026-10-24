@@ -14,9 +14,11 @@
             <!-- Left-rail navigation. The stock WinUI button template paints
                  its own pointer-over fill and text colour on top of the
                  transparent background, which made every unselected item flash
-                 bright on hover. The rail therefore owns its template: no
-                 hover state, so only the selected item stays tinted. Keyboard
-                 focus keeps the system focus visual. -->
+                 bright on hover. The rail therefore owns its template: rest and
+                 hover are pixel-identical, so only the selected item is tinted.
+                 The system focus visual is replaced by a template ring that
+                 only appears for keyboard focus, so clicking with the mouse
+                 leaves no "pending selection" frame behind. -->
             <Style x:Key="SettingsNavButtonStyle" TargetType="Button">
                 <Setter Property="Height" Value="34" />
                 <Setter Property="Padding" Value="10,0" />
@@ -28,8 +30,7 @@
                 <Setter Property="Foreground" Value="{ThemeResource SecondaryTextBrush}" />
                 <Setter Property="FontFamily" Value="{StaticResource AppFont}" />
                 <Setter Property="FontSize" Value="13" />
-                <Setter Property="UseSystemFocusVisuals" Value="True" />
-                <Setter Property="FocusVisualMargin" Value="-3" />
+                <Setter Property="UseSystemFocusVisuals" Value="False" />
                 <Setter Property="Template">
                     <Setter.Value>
                         <ControlTemplate TargetType="Button">
@@ -39,7 +40,7 @@
                                         <VisualState x:Name="Normal" />
                                         <!-- Deliberately empty: hovering an
                                              unselected rail item must not
-                                             brighten it. -->
+                                             brighten it or draw a fill. -->
                                         <VisualState x:Name="PointerOver" />
                                         <VisualState x:Name="Pressed">
                                             <VisualState.Setters>
@@ -49,6 +50,29 @@
                                         <VisualState x:Name="Disabled">
                                             <VisualState.Setters>
                                                 <Setter Target="NavPresenter.Opacity" Value="0.4" />
+                                            </VisualState.Setters>
+                                        </VisualState>
+                                    </VisualStateGroup>
+                                    <VisualStateGroup x:Name="FocusStates">
+                                        <!-- Keyboard focus only; PointerFocused
+                                             keeps mouse clicks frameless. Both
+                                             non-focused states explicitly clear
+                                             the ring, otherwise the last
+                                             keyboard-focused item would keep a
+                                             stray "pending selection" frame. -->
+                                        <VisualState x:Name="Focused">
+                                            <VisualState.Setters>
+                                                <Setter Target="NavFocusRing.Opacity" Value="1" />
+                                            </VisualState.Setters>
+                                        </VisualState>
+                                        <VisualState x:Name="Unfocused">
+                                            <VisualState.Setters>
+                                                <Setter Target="NavFocusRing.Opacity" Value="0" />
+                                            </VisualState.Setters>
+                                        </VisualState>
+                                        <VisualState x:Name="PointerFocused">
+                                            <VisualState.Setters>
+                                                <Setter Target="NavFocusRing.Opacity" Value="0" />
                                             </VisualState.Setters>
                                         </VisualState>
                                     </VisualStateGroup>
@@ -66,6 +90,12 @@
                                                       ContentTemplate="{TemplateBinding ContentTemplate}"
                                                       Foreground="{TemplateBinding Foreground}" />
                                 </Border>
+                                <Border x:Name="NavFocusRing"
+                                        BorderBrush="{ThemeResource AccentBrush}"
+                                        BorderThickness="2"
+                                        CornerRadius="{TemplateBinding CornerRadius}"
+                                        IsHitTestVisible="False"
+                                        Opacity="0" />
                             </Grid>
                         </ControlTemplate>
                     </Setter.Value>

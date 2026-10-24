@@ -59,7 +59,7 @@ public sealed class ProfileOption
 /// <summary>Named mpv scaler/deband profiles with JSON import/export.</summary>
 public sealed partial class VideoQualityWindow : Window
 {
-    private const int BuiltInCount = 4;
+    private const int BuiltInCount = 2;
     private const string DefaultScaler = "bilinear";
 
     /// <summary>One scaler in the mpv catalogue with per-purpose descriptions.</summary>
@@ -130,44 +130,27 @@ public sealed partial class VideoQualityWindow : Window
     private static readonly IReadOnlyList<ScalerOption> ChromaOptions =
         BuildOptions(ChromaOrder, spec => spec.ChromaRole);
 
+    // Two built-ins only (1.2.4): the default IINA/libmpv combination and the
+    // cheapest all-bilinear profile. Deband is an independent toggle on the
+    // Video settings page, so profiles no longer carry it at runtime.
     private static readonly (VideoQualityProfile Profile, string Hint)[] BuiltIns =
     {
         (new VideoQualityProfile
             {
-                Name = "自动（IINA 默认）",
+                Name = "默认",
                 Scale = "ewa_lanczos",
                 Dscale = "mitchell",
                 Cscale = "bilinear",
-                Deband = true,
             },
-            "对齐 IINA 默认：EWA Lanczos 放大 + Mitchell 缩小，清晰且开销适中，适合大多数片源。内置只读，点“应用”会另存为自定义副本。"),
-        (new VideoQualityProfile
-            {
-                Name = "均衡",
-                Scale = "ewa_lanczos",
-                Dscale = "bilinear",
-                Cscale = "bilinear",
-                Deband = true,
-            },
-            "EWA Lanczos 放大 + Bilinear 缩小：画质与性能折中，日常观影与老显卡都合适。内置只读，点“应用”会另存为自定义副本。"),
-        (new VideoQualityProfile
-            {
-                Name = "高质量",
-                Scale = "ewa_lanczossharp",
-                Dscale = "mitchell",
-                Cscale = "bilinear",
-                Deband = true,
-            },
-            "EWA LanczosSharp 放大 + Mitchell 缩小：细节最锐，适合 1080p→4K 等放大较多的片源与高端 GPU。内置只读，点“应用”会另存为自定义副本。"),
+            "对齐 IINA/libmpv 默认：EWA Lanczos 放大 + Mitchell 缩小，清晰且开销适中，适合大多数片源。内置只读，点“应用”会另存为自定义副本。"),
         (new VideoQualityProfile
             {
                 Name = "性能优先",
                 Scale = "bilinear",
                 Dscale = "bilinear",
                 Cscale = "bilinear",
-                Deband = false,
             },
-            "全部使用 Bilinear 并关闭去色带：开销最低，适合弱 GPU、低功耗设备或高帧率片源。内置只读，点“应用”会另存为自定义副本。"),
+            "全部使用 Bilinear：开销最低，适合弱 GPU、低功耗设备或高帧率片源。内置只读，点“应用”会另存为自定义副本。"),
     };
 
     private readonly AppSettings _settings = App.Settings;
@@ -222,7 +205,7 @@ public sealed partial class VideoQualityWindow : Window
         _profileEntries = _profiles
             .Select((profile, index) => index < BuiltInCount
                 ? new ProfileOption($"{profile.Name} · 内置", BuiltIns[index].Hint)
-                : new ProfileOption(profile.Name, "自定义预设：修改下方缩放器或去色带后点“应用”，保存并立即生效。"))
+                : new ProfileOption(profile.Name, "自定义预设：修改下方缩放器后点“应用”，保存并立即生效。"))
             .ToList();
         ProfileBox.ItemsSource = _profileEntries;
         string active = _settings.ActiveQualityProfile;
@@ -243,6 +226,19 @@ public sealed partial class VideoQualityWindow : Window
         Deband = profile.Deband,
     };
 
+    /// <summary>
+    /// Maps the names the 1.2.3 build used for its "automatic" preset onto the
+    /// 1.2.4 "默认" name, so old exported JSON keeps working after import.
+    /// </summary>
+    private static string NormalizeProfileName(string name)
+    {
+        string trimmed = name.Trim();
+        return trimmed is "自动（IINA 默认）" or "自动" or "IINA 默认" or "IINA默认"
+            or "Auto" or "Auto (IINA default)" or "IINA (default)"
+            ? "默认"
+            : trimmed;
+    }
+
     private void LoadEditor(VideoQualityProfile profile)
     {
         bool previous = _loading;
@@ -253,7 +249,6 @@ public sealed partial class VideoQualityWindow : Window
             SelectScaler(ScaleBox, UpscaleOptions, profile.Scale);
             SelectScaler(DscaleBox, DownscaleOptions, profile.Dscale);
             SelectScaler(CscaleBox, ChromaOptions, profile.Cscale);
-            DebandSwitch.IsOn = profile.Deband;
         }
         finally
         {
@@ -291,7 +286,7 @@ public sealed partial class VideoQualityWindow : Window
     {
         RawKeyText.Text =
             $"mpv 原始键：scale={SelectedRaw(ScaleBox)} · dscale={SelectedRaw(DscaleBox)} · " +
-            $"cscale={SelectedRaw(CscaleBox)} · deband={(DebandSwitch.IsOn ? "yes" : "no")}（点“应用”后写入 mpv）";
+            $"cscale={SelectedRaw(CscaleBox)}（点“应用”后写入 mpv）";
     }
 
     private void UpdateProfileHint()
@@ -303,14 +298,6 @@ public sealed partial class VideoQualityWindow : Window
     }
 
     private void OnScalerChanged(object sender, SelectionChangedEventArgs e)
-    {
-        if (!_loading)
-        {
-            UpdateRawKeyLine();
-        }
-    }
-
-    private void OnDebandToggled(object sender, RoutedEventArgs e)
     {
         if (!_loading)
         {
@@ -344,7 +331,9 @@ public sealed partial class VideoQualityWindow : Window
             Scale = SelectedRaw(ScaleBox),
             Dscale = SelectedRaw(DscaleBox),
             Cscale = SelectedRaw(CscaleBox),
-            Deband = DebandSwitch.IsOn,
+            // Kept false so exported JSON never claims to control deband;
+            // AppSettings.DebandEnabled is the single runtime source of truth.
+            Deband = false,
         });
         App.SaveSettings();
         BuildProfiles();
@@ -435,6 +424,16 @@ public sealed partial class VideoQualityWindow : Window
 
             foreach (VideoQualityProfile profile in imported.Where(profile => !string.IsNullOrWhiteSpace(profile.Name)))
             {
+                // Pre-1.2.4 exports may still use the old names of the built-in
+                // profiles; map them onto the current two so "apply" keeps
+                // working, and avoid shadowing a built-in display name.
+                profile.Name = NormalizeProfileName(profile.Name);
+                if (BuiltIns.Any(builtIn => string.Equals(
+                        builtIn.Profile.Name, profile.Name, StringComparison.OrdinalIgnoreCase)))
+                {
+                    profile.Name = $"{profile.Name}（导入）";
+                }
+
                 _settings.UserQualityProfiles.RemoveAll(existing =>
                     string.Equals(existing.Name, profile.Name, StringComparison.OrdinalIgnoreCase));
                 _settings.UserQualityProfiles.Add(Clone(profile));
@@ -497,7 +496,10 @@ public sealed partial class VideoQualityWindow : Window
             Scale = SelectedRaw(ScaleBox),
             Dscale = SelectedRaw(DscaleBox),
             Cscale = SelectedRaw(CscaleBox),
-            Deband = DebandSwitch.IsOn,
+            // Preserve the flag an old JSON profile carried so a re-export
+            // still round-trips, but never apply it from here: deband is the
+            // independent Video-page toggle now.
+            Deband = _editing.Deband,
         };
 
         if (ProfileBox.SelectedIndex < BuiltInCount)

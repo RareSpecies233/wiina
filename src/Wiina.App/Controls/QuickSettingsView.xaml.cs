@@ -25,7 +25,6 @@ public enum QuickSettingKey
     OsdPosition,
     OsdSize,
     OsdDuration,
-    OsdPersistent,
     FullscreenClock,
     FullscreenBattery,
     FullscreenTitle,
@@ -198,7 +197,6 @@ public sealed partial class QuickSettingsView : UserControl
             OsdPositionBox.SelectedIndex = OsdPositions.ToIndex(settings.OsdPosition);
             OsdSizeSlider.Value = OsdSettings.ClampSize(settings.OsdSizePercent);
             OsdDurationBox.Value = OsdSettings.ClampDuration(settings.OsdDurationSeconds);
-            OsdPersistentSwitch.IsOn = settings.OsdPersistent;
             FullscreenClockSwitch.IsOn = settings.FullscreenClockEnabled;
             FullscreenBatterySwitch.IsOn = settings.FullscreenBatteryEnabled;
             FullscreenTitleSwitch.IsOn = settings.FullscreenTitleEnabled;
@@ -782,9 +780,6 @@ public sealed partial class QuickSettingsView : UserControl
                 break;
             case nameof(OsdEnabledSwitch):
                 Raise(QuickSettingKey.OsdEnabled, flag: OsdEnabledSwitch.IsOn);
-                break;
-            case nameof(OsdPersistentSwitch):
-                Raise(QuickSettingKey.OsdPersistent, flag: OsdPersistentSwitch.IsOn);
                 break;
             case nameof(FullscreenClockSwitch):
                 Raise(QuickSettingKey.FullscreenClock, flag: FullscreenClockSwitch.IsOn);

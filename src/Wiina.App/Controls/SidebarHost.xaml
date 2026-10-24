@@ -93,6 +93,12 @@
             <CompositeTransform x:Name="SlideTransform" />
         </Grid.RenderTransform>
 
+        <Border x:Name="BackdropBlurHost" IsHitTestVisible="False" />
+        <Border x:Name="SidebarBlurTintLayer"
+                Background="{ThemeResource SidebarBlurTintBrush}"
+                Visibility="Collapsed"
+                IsHitTestVisible="False" />
+
         <Border x:Name="PanelBorder"
                 Background="{ThemeResource ChromeSolidBrush}"
                 BorderBrush="{ThemeResource PanelBorderBrush}"

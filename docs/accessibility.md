@@ -1,6 +1,6 @@
 # Accessibility, localization, DPI and motion
 
-This document records what Wiina v1.2.3 implements, how it was checked, and
+This document records what Wiina v1.2.4 implements, how it was checked, and
 what is intentionally limited. It is a summary, not a certification.
 
 ## 1. Keyboard and focus
@@ -19,11 +19,13 @@ what is intentionally limited. It is a summary, not a certification.
 - Focus visuals come from the Fluent control templates (`TitleBarButtonStyle`,
   `SettingsNavButtonStyle`, `OscIconButtonStyle`), not from a custom-drawn
   focus rectangle.
-- Settings rail pointer rule (1.2.3): unselected items stay dim on hover and
-  press; only the selected item is highlighted, and the focus rectangle is
-  still drawn when the rail has keyboard focus. The rail uses a custom
-  `ControlTemplate` with no hover/pressed brightening states, so the list does
-  not flash as the pointer moves.
+- Settings rail pointer rule (1.2.3, tightened in 1.2.4): unselected items
+  are pixel-identical at rest and on hover (dim `SecondaryTextBrush`, no fill,
+  no border); only the selected item is tinted. Keyboard focus is a 2 px accent
+  ring (`UseSystemFocusVisuals=False` plus a custom visual). The rail uses a
+  custom `ControlTemplate` whose `PointerOver`/`Pressed` states are empty, and
+  the icon/label `Foreground` is bound to the button so no theme fallback colour
+  can read as a hover highlight.
 
 ## 2. Automation names
 
@@ -54,10 +56,12 @@ pressed, sliders, sidebar rows) resolve to Windows system colors:
   selection
 - `SystemColorButtonFaceColor` / `SystemColorButtonTextColor` for pressed state
 
-The sidebar and the chrome over the video use the opaque `ChromeSolidBrush`,
-which falls back to `SystemColorWindowColor` in high contrast (the 1.0.0–1.2.2
-capture/blur pipeline was removed in 1.2.3; see
-[ADR-0004](architecture/0004-solid-chrome.md)). Standard WinUI controls
+The chrome over the video is either a Win2D blur of the video (固定 / 动态 /
+始终, whose tint brushes map to `SystemColorWindowColor` in high contrast) or
+the opaque `ChromeSolidBrush` (关闭毛玻璃 and every capture-failure fallback),
+which also maps to `SystemColorWindowColor`. See
+[ADR-0003](architecture/0003-acrylic.md) for the blur pipeline and
+[ADR-0004](architecture/0004-solid-chrome.md) for Solid mode. Standard WinUI controls
 (ComboBox, ToggleSwitch, ScrollBar, ContentDialog) use the system high-contrast
 templates automatically.
 
@@ -111,7 +115,7 @@ generic text containers mirror.
 
 ## 7. Localization coverage
 
-- Runtime catalog: 549 keys in `UiStringCatalog.cs`, each with a non-empty
+- Runtime catalog: 544 keys in `UiStringCatalog.cs`, each with a non-empty
   zh-Hans and English string. Coverage includes the title bar, OSC, OSD, menus,
   sidebars, quick settings, all 12 settings pages (titles, summaries, section
   headers, row titles/descriptions/choices), welcome/about/log/inspector/open-URL
@@ -151,3 +155,5 @@ value. It also verifies the menu, OSD builders, and search-hit localization.
   glyph itself is not exposed as text.
 - The key-binding recorder's status text is not announced automatically.
 - No Arabic/Hebrew UI translation in v1 (see RTL above).
+- The settings rail deliberately does not brighten on pointer hover; rest and
+  hover are identical (see §1).

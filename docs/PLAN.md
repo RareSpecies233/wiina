@@ -3,7 +3,7 @@
 > **状态：历史文档，不再是当前计划。** 这是 v1 开工前的规划与范围草案；实际发布以
 > README 与 `docs/acceptance/` 为准。下列条目已被实现推翻或补齐，阅读时请以标注为准：
 >
-> | 计划中的说法 | 实际（v1.2.3） |
+> | 计划中的说法 | 实际（v1.2.4） |
 > |---|---|
 > | 设置窗口 600×480、“严格按规格” | 默认 **760×600 DIP**，最小 600×440 |
 > | 设置 11 页 | **12 页**（新增「文件关联」） |
@@ -11,6 +11,9 @@
 > | 设置用 `NavigationView` 左栏 | 自定义 `SettingsWindow` 侧栏（`SettingsNavButtonStyle`），未用 NavigationView |
 > | `Wiina.sln` | `Wiina.slnx`（解决方案文件） |
 > | 文件关联“首次启动询问” | 1.2.3 起在设置 → 文件关联按用户注册，不弹首次启动询问 |
+> | 玻璃/模糊：三档、默认动态 | 四档：固定 / 动态（默认）/ 始终 / 关闭毛玻璃（纯色）；纯色档零取帧开销 |
+> | 小窗 640×360 渲染上限 | 1.2.4 取消，PiP 按整窗物理像素渲染，仅靠简化 UI 省开销 |
+> | 安装包“可选 Inno Setup” | 1.2.4 起提供按用户 `Wiina-Setup-<version>-x64.exe`，便携 zip 附 `Uninstall Wiina.exe` |
 > | 插件/在线字幕/yt-dlp 进 v1 | Stage 9/10 按维护者要求**跳过**，入口可见但禁用 |
 > | 迷你播放器 72+ 控件等规格数字 | `MiniPlayerLayout`：默认 400×297，最小 320×260 |
 >
@@ -384,7 +387,7 @@ XAML 内容（标题栏/OSC/侧栏/OSD/预览）绘制在 SwapChainPanel 之上
 | OSC 三种位置 / 自动隐藏 / 拖动吸附 | ✅ | |
 | 侧栏：四页快速设置 + 播放列表/章节 | ✅ | |
 | 侧栏：插件页 | ❌ | Stage 9 跳过；无 WebView2 宿主，入口禁用 |
-| OSD / 持久 OSD / 时间预览 / 缩略图 | ✅ | |
+| OSD / 持久 OSD / 时间预览 / 缩略图 | ✅ | 持久 OSD 已于 1.2.4 移除，只保留统计卡片与普通 OSD |
 | 全屏 / 置顶 / 迷你 / 音乐模式 / PiP | ✅ | 自绘 PiP；系统 PiP 放 v2 |
 | 设置 12 页 + 搜索 + 分区指示 | ✅ | 含按键编辑、插件管理（禁用）、文件关联、网络、工具、高级 |
 | 欢迎 / 最近文件 / 继续播放 | ✅ | |
@@ -392,7 +395,7 @@ XAML 内容（标题栏/OSC/侧栏/OSD/预览）绘制在 SwapChainPanel 之上
 | 菜单树（含动态子菜单） | ✅ | 规格 §14 |
 | 插件系统（WebView2） | ❌ | Stage 9 按维护者要求跳过；无插件宿主/API/WebView2 |
 | 10 段均衡器 / 视频·音频滤镜 UI | ✅ | mpv `af`/`vf` + 预设；滤镜编辑窗口 |
-| 安装器 / 文件关联 / winget | ✅ 基础 | zip + 可选 Inno Setup；**文件关联 1.2.3 起按用户注册**；winget 可后补 |
+| 安装器 / 文件关联 / winget | ✅ 基础 | zip + **1.2.4 起按用户 Inno Setup 安装包**；**文件关联 1.2.3 起按用户注册**；winget 可后补 |
 | 杜比视界 / 系统 PiP / 插件商店 | v2 | |
 | Touch Bar / Force Touch / SF Symbols / Services | ❌ | 平台不存在或授权不允许 |
 | iina-cli / 浏览器扩展 | ❌ | 可另立项目 |
@@ -543,7 +546,7 @@ XAML 内容（标题栏/OSC/侧栏/OSD/预览）绘制在 SwapChainPanel 之上
 交付：
 - 动画曲线统一、减少动态、RTL、高对比度、键盘导航、AutomationProperties、屏幕阅读器抽查。
 - DPI 100/125/150/200、多显示器、休眠唤醒、HDR 基础、性能（启动/4K/内存）。
-- i18n zh-Hans/en 完整；日志/崩溃；安装包（zip + 可选 Inno Setup/MSIX）与 GPL 合规包（LICENSE/NOTICE/mpv/yt-dlp/WebView2 条款、源码链接）。
+- i18n zh-Hans/en 完整；日志/崩溃；安装包（1.2.4 起按用户 Inno Setup；无 MSIX）与 GPL 合规包（LICENSE/NOTICE/mpv/yt-dlp/WebView2 条款、源码链接）。
 - 发布文档、已知问题、贡献指南、插件开发文档。
 
 验收：规格 §19.2 全部；性能目标；许可证合规检查清单全绿；插件/在线服务合规复核。

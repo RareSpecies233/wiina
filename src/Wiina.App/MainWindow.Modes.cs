@@ -400,8 +400,9 @@ public sealed partial class MainWindow
 
     /// <summary>
     /// PiP reports the <em>layout</em> pixel size of its video surface (full
-    /// window). The mpv composition buffer is capped separately so the panel
-    /// keeps covering the window (issue 3).
+    /// window). The mpv composition buffer uses exactly the same size so the
+    /// mini window stays as sharp as the main window instead of being upscaled
+    /// by the compositor (issue 7).
     /// </summary>
     private void OnPipBufferSizeChanged(int pixelWidth, int pixelHeight, double scale)
     {
@@ -612,7 +613,8 @@ public sealed partial class MainWindow
             EdgeSnapResult snap = _snapSession.Apply(
                 new WindowRect(x, y, x + size.Width, y + size.Height),
                 WorkAreaUnderPointer(),
-                DisplayScale);
+                DisplayScale,
+                margins: SnapMargins());
             x = snap.Rect.Left;
             y = snap.Rect.Top;
             ApplySnapFrame(snap.IsSnapped);

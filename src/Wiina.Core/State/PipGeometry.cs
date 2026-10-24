@@ -20,22 +20,12 @@ public static class PipGeometry
     public const double AspectRatio = 16.0 / 9.0;
 
     /// <summary>
-    /// Upper bound for the mpv composition buffer in mini/PiP mode. The XAML
-    /// surface always keeps the full window size; only the source that the
-    /// compositor upscales is capped (see <see cref="RenderSize"/>).
-    /// </summary>
-    public const int MaxRenderWidth = 640;
-
-    public const int MaxRenderHeight = 360;
-
-    /// <summary>
     /// mpv render/composition size for a window of
     /// <paramref name="pixelWidth"/>×<paramref name="pixelHeight"/> physical
-    /// pixels. Small windows render 1:1; larger ones are capped at 640×360
-    /// while keeping the window's aspect ratio, which is the closest safe
-    /// equivalent of CanvasSwapChain.SourceSize without replacing mpv's render
-    /// path (small-window reference doc §3). This value must never be used as
-    /// the XAML layout size — that stays the full window size (issue 3).
+    /// pixels. This is the full, unscaled window pixel size: the mini/PiP window
+    /// must look exactly as sharp as the main window and only saves cost by
+    /// dropping the heavy UI chrome, never by rendering into a low-resolution
+    /// buffer that the compositor then upscales (issue 7).
     /// </summary>
     public static (int Width, int Height) RenderSize(int pixelWidth, int pixelHeight)
     {
@@ -44,17 +34,7 @@ public static class PipGeometry
             return (1, 1);
         }
 
-        if (pixelWidth <= MaxRenderWidth && pixelHeight <= MaxRenderHeight)
-        {
-            return (pixelWidth, pixelHeight);
-        }
-
-        double factor = Math.Min(
-            MaxRenderWidth / (double)pixelWidth,
-            MaxRenderHeight / (double)pixelHeight);
-        return (
-            Math.Max(1, (int)Math.Round(pixelWidth * factor)),
-            Math.Max(1, (int)Math.Round(pixelHeight * factor)));
+        return (pixelWidth, pixelHeight);
     }
 
     /// <summary>Height implied by a 16:9 width.</summary>

@@ -9,6 +9,32 @@
     mc:Ignorable="d"
     IsTabStop="False">
 
+    <UserControl.Resources>
+        <!-- Row text brushes must come from ThemeResource so they resolve
+             against this card's ActualTheme. The card is nested under
+             RootGrid's element-level RequestedTheme, which can differ from the
+             application theme; Application.Current.Resources[*TextBrush]
+             resolved the light dictionary there and painted black text on the
+             dark card (issue 6). HighContrast inherits the system colour
+             mappings from Themes/Tokens.xaml. -->
+        <Style x:Key="StatGroupTextStyle" TargetType="TextBlock">
+            <Setter Property="FontFamily" Value="{StaticResource AppFont}" />
+            <Setter Property="FontSize" Value="11" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Foreground" Value="{ThemeResource SecondaryTextBrush}" />
+        </Style>
+        <Style x:Key="StatLabelTextStyle" TargetType="TextBlock">
+            <Setter Property="FontFamily" Value="{StaticResource AppFont}" />
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="Foreground" Value="{ThemeResource SecondaryTextBrush}" />
+        </Style>
+        <Style x:Key="StatValueTextStyle" TargetType="TextBlock">
+            <Setter Property="FontFamily" Value="{StaticResource AppFont}" />
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="Foreground" Value="{ThemeResource PrimaryTextBrush}" />
+        </Style>
+    </UserControl.Resources>
+
     <!-- A plain XAML card on top of the video swapchain: no acrylic, no blur,
          no capture. Opaque by design so it stays readable over any frame and
          costs nothing while the panel is closed. -->
@@ -33,11 +59,13 @@
 
                 <StackPanel Spacing="1" VerticalAlignment="Center">
                     <TextBlock loc:Loc.Text="stats.title"
+                               FontFamily="{StaticResource AppFont}"
                                FontSize="14"
                                FontWeight="SemiBold"
                                Foreground="{ThemeResource PrimaryTextBrush}" />
                     <TextBlock x:Name="SubtitleText"
                                loc:Loc.Text="stats.subtitle"
+                               FontFamily="{StaticResource AppFont}"
                                FontSize="11"
                                Foreground="{ThemeResource SecondaryTextBrush}"
                                TextTrimming="CharacterEllipsis" />

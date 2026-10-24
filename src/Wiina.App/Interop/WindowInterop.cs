@@ -22,6 +22,7 @@ internal static class WindowInterop
     // monitor edge (no 1 px border line, no rounded corner gap).
     private const int DWMWA_WINDOW_CORNER_PREFERENCE = 33;
     private const int DWMWA_BORDER_COLOR = 34;
+    private const int DWMWA_EXTENDED_FRAME_BOUNDS = 9;
     private const int DWMWCP_DONOTROUND = 1;
     private const int DWMWCP_ROUND = 2;
     private const int DWMWA_COLOR_DEFAULT = unchecked((int)0xFFFFFFFF);
@@ -62,6 +63,9 @@ internal static class WindowInterop
     [DllImport("dwmapi.dll")]
     private static extern int DwmSetWindowAttribute(nint hWnd, int attribute, ref int value, int size);
 
+    [DllImport("dwmapi.dll")]
+    private static extern int DwmGetWindowAttribute(nint hWnd, int attribute, out RECT value, int size);
+
     public static void SetImmersiveDarkMode(Window window, bool dark)
     {
         nint hwnd = Microsoft.UI.Win32Interop.GetWindowFromWindowId(window.AppWindow.Id);
@@ -91,6 +95,80 @@ internal static class WindowInterop
             // Cosmetic only; never let it break dragging.
         }
     }
+
+    // Frame margins are measured from DWM once per DPI (and re-measured at the
+    // start of every drag gesture), so WM_MOVING does not pay for two extra
+    // P/Invokes per pointer move.
+    private static readonly Dictionary<nint, CachedFrameMargins> FrameMarginsByWindow = new();
+
+    private readonly record struct CachedFrameMargins(uint Dpi, FrameMargins Margins);
+
+    /// <summary>
+    /// Visible-frame margins for a window (see <see cref="FrameMargins"/>): the
+    /// distance between the outer window rect and the frame DWM actually paints.
+    /// Snapping must happen in visible-frame space, otherwise the invisible
+    /// resize borders (≈8 px at 100% on left/right/bottom) leave a visible gap
+    /// on three edges while the top edge looks flush (issue 2).
+    ///
+    /// The result is cached per HWND and DPI. Call
+    /// <see cref="InvalidateFrameMargins(nint)"/> after anything that can change
+    /// the frame (drag start, presenter/fullscreen change); on failure the
+    /// zero margins are returned so callers degrade to the old outer-rect
+    /// behaviour instead of losing snapping.
+    /// </summary>
+    public static bool TryGetFrameMargins(Window window, out FrameMargins margins)
+    {
+        try
+        {
+            nint hwnd = Microsoft.UI.Win32Interop.GetWindowFromWindowId(window.AppWindow.Id);
+            return TryGetFrameMargins(hwnd, out margins);
+        }
+        catch
+        {
+            margins = FrameMargins.None;
+            return false;
+        }
+    }
+
+    /// <inheritdoc cref="TryGetFrameMargins(Window, out FrameMargins)"/>
+    public static bool TryGetFrameMargins(nint hwnd, out FrameMargins margins)
+    {
+        margins = FrameMargins.None;
+        if (hwnd == 0)
+        {
+            return false;
+        }
+
+        try
+        {
+            uint dpi = GetDpiForWindow(hwnd);
+            if (FrameMarginsByWindow.TryGetValue(hwnd, out CachedFrameMargins cached) && cached.Dpi == dpi)
+            {
+                margins = cached.Margins;
+                return true;
+            }
+
+            if (!GetWindowRect(hwnd, out RECT outer) ||
+                DwmGetWindowAttribute(hwnd, DWMWA_EXTENDED_FRAME_BOUNDS, out RECT visible, Marshal.SizeOf<RECT>()) != 0)
+            {
+                return false;
+            }
+
+            margins = FrameMargins.FromRects(
+                new WindowRect(outer.Left, outer.Top, outer.Right, outer.Bottom),
+                new WindowRect(visible.Left, visible.Top, visible.Right, visible.Bottom));
+            FrameMarginsByWindow[hwnd] = new CachedFrameMargins(dpi, margins);
+            return true;
+        }
+        catch
+        {
+            margins = FrameMargins.None;
+            return false;
+        }
+    }
+
+    /// <summary>Drops the cached frame margins for a window.</summary>
+    public static void InvalidateFrameMargins(nint hwnd) => FrameMarginsByWindow.Remove(hwnd);
 
     [DllImport("user32.dll", SetLastError = true)]
     private static extern bool GetWindowRect(nint hWnd, out RECT rect);
@@ -338,7 +416,9 @@ internal static class WindowInterop
             if (msg == WM_ENTERSIZEMOVE)
             {
                 // A new drag/resize gesture starts; edge-snap state must not leak
-                // across gestures (the window may have been snapped elsewhere).
+                // across gestures (the window may have been snapped elsewhere),
+                // and the frame margins are re-measured once for this gesture.
+                InvalidateFrameMargins(hWnd);
                 _windowMoveStarted?.Invoke();
             }
 

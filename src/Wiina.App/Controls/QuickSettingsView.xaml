@@ -237,18 +237,6 @@
                                     <ColumnDefinition Width="*" />
                                     <ColumnDefinition Width="Auto" />
                                 </Grid.ColumnDefinitions>
-                                <TextBlock loc:Loc.Text="ui.persistentOsd" Style="{StaticResource BodyTextStyle}" />
-                                <ToggleSwitch x:Name="OsdPersistentSwitch"
-                                              Grid.Column="1"
-                                              MinWidth="0"
-                                              Toggled="OnToggleChanged" />
-                            </Grid>
-
-                            <Grid ColumnSpacing="12">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*" />
-                                    <ColumnDefinition Width="Auto" />
-                                </Grid.ColumnDefinitions>
                                 <TextBlock loc:Loc.Text="ui.fullscreenClock" Style="{StaticResource BodyTextStyle}" />
                                 <ToggleSwitch x:Name="FullscreenClockSwitch"
                                               Grid.Column="1"

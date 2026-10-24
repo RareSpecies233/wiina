@@ -36,8 +36,6 @@ public sealed partial class MainWindow
         _keyMap = KeyBindings.BuildKeyMap(_settings.KeyBindings, _settings.KeyBindingProfile);
     }
 
-    public void ToggleTechnicalOsd() => TogglePersistentOsd();
-
     public void ClearThumbnailCache()
     {
         try
@@ -102,6 +100,12 @@ public sealed partial class MainWindow
                 _oscState.AutoHideEnabled = _settings.OscAutoHide;
                 ResetAutoHideTimer();
                 break;
+            case "ui.blur-mode":
+                // Live-switchable: controls react through ChromeBlur.ModeChanged
+                // so the blurred frame, the opaque fallback and the capture
+                // thread all follow without a restart.
+                ChromeBlur.SetMode(_settings.ChromeBlurMode);
+                break;
             case "ui.osd-enabled":
             case "ui.osd-position":
             case "ui.osd-size":
@@ -112,17 +116,6 @@ public sealed partial class MainWindow
                 ApplyStage5Settings();
                 UpdateOsdPlacement();
                 UpdateFullscreenStatus();
-                break;
-            case "ui.osd-persistent":
-                if (_settings.OsdPersistent)
-                {
-                    ShowPersistentOsd();
-                }
-                else
-                {
-                    ClosePersistentOsd();
-                }
-
                 break;
             case "ui.thumbnail-preview":
                 if (!_settings.ThumbnailPreviewEnabled)
@@ -143,6 +136,9 @@ public sealed partial class MainWindow
                 ApplyVideoFilters();
                 break;
             case "video.quality":
+            // Deband is now its own row; both funnel through the same apply so
+            // scale/dscale/cscale and deband never fight each other.
+            case "video.deband":
                 ApplyQualityPreset();
                 break;
             case "video.tone-mapping":

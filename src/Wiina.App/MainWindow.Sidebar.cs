@@ -553,17 +553,6 @@ public sealed partial class MainWindow
                 _settings.OsdDurationSeconds = OsdSettings.ClampDuration(e.Number);
                 Osd.SetDuration(OsdSettings.Duration(_settings.OsdDurationSeconds));
                 break;
-            case QuickSettingKey.OsdPersistent:
-                if (e.Flag)
-                {
-                    ShowPersistentOsd();
-                }
-                else
-                {
-                    ClosePersistentOsd();
-                }
-
-                break;
             case QuickSettingKey.FullscreenClock:
                 _settings.FullscreenClockEnabled = e.Flag;
                 ApplyStage5Settings();
@@ -788,7 +777,6 @@ public sealed partial class MainWindow
                 _settings.FullscreenBatteryEnabled = true;
                 _settings.FullscreenTitleEnabled = false;
                 _settings.ThumbnailPreviewEnabled = true;
-                ClosePersistentOsd();
                 ApplyStage5Settings();
                 break;
             case "sidebar":
@@ -871,24 +859,27 @@ public sealed partial class MainWindow
 
     private void ApplyQualityPreset()
     {
+        // Debanding left the preset manager in 1.2.4; it is an independent
+        // toggle on the Video settings page, so profiles only keep the flag
+        // for JSON round-trip with older exports.
+        string deband = _settings.DebandEnabled ? "yes" : "no";
         VideoQualityProfile? custom = _settings.UserQualityProfiles.FirstOrDefault(profile =>
             string.Equals(profile.Name, _settings.ActiveQualityProfile, StringComparison.OrdinalIgnoreCase));
-        (string Scale, string Downscale, string Chroma, string Deband) preset = custom is not null
-            ? (custom.Scale, custom.Dscale, custom.Cscale, custom.Deband ? "yes" : "no")
+        (string Scale, string Downscale, string Chroma) preset = custom is not null
+            ? (custom.Scale, custom.Dscale, custom.Cscale)
             : _settings.VideoQualityPreset switch
             {
-                VideoQualityPreset.HighQuality =>
-                    ("ewa_lanczossharp", "mitchell", "bilinear", "yes"),
-                VideoQualityPreset.Balanced =>
-                    ("ewa_lanczos", "bilinear", "bilinear", "yes"),
+                // Legacy Balanced/HighQuality values are kept only so old
+                // settings.json files still deserialize; both behave like the
+                // default built-in profile.
                 VideoQualityPreset.Performance =>
-                    ("bilinear", "bilinear", "bilinear", "no"),
-                _ => ("ewa_lanczos", "mitchell", "bilinear", "yes"),
+                    ("bilinear", "bilinear", "bilinear"),
+                _ => ("ewa_lanczos", "mitchell", "bilinear"),
             };
         ApplyMpvString("scale", preset.Scale);
         ApplyMpvString("dscale", preset.Downscale);
         ApplyMpvString("cscale", preset.Chroma);
-        ApplyMpvString("deband", preset.Deband);
+        ApplyMpvString("deband", deband);
     }
 
     private void ApplyMpvString(string name, string value)

@@ -60,20 +60,25 @@ public sealed partial class MainWindow
             flyout.Items.Add(top);
         }
 
-        // Quick picture-quality switch without leaving the OSC overflow.
+        // Quick picture-quality switch without leaving the OSC overflow. Only the
+        // two built-in profiles are offered; custom profiles live in the
+        // dedicated preset window (video.quality-editor).
         var quality = new MenuFlyoutSubItem { Text = Loc.T("ui.qualityPreset") };
         foreach ((VideoQualityPreset preset, string labelKey) in new[]
                  {
                      (VideoQualityPreset.Auto, "ui.qualityAuto"),
-                     (VideoQualityPreset.Balanced, "ui.qualityBalanced"),
-                     (VideoQualityPreset.HighQuality, "ui.qualityHigh"),
                      (VideoQualityPreset.Performance, "ui.qualityPerformance"),
                  })
         {
             var option = new ToggleMenuFlyoutItem
             {
                 Text = Loc.T(labelKey),
-                IsChecked = _settings.VideoQualityPreset == preset,
+                // Legacy Balanced/HighQuality values (kept only for JSON
+                // compatibility) render as the default profile being active.
+                IsChecked = preset == VideoQualityPreset.Auto
+                    ? _settings.VideoQualityPreset is VideoQualityPreset.Auto
+                        or VideoQualityPreset.Balanced or VideoQualityPreset.HighQuality
+                    : _settings.VideoQualityPreset == preset,
             };
             option.Click += (_, _) =>
             {

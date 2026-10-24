@@ -1922,13 +1922,6 @@ public sealed partial class MainWindow
             return;
         }
 
-        if (e.Key == VirtualKey.Escape && Osd.IsPersistentShowing)
-        {
-            ClosePersistentOsd();
-            e.Handled = true;
-            return;
-        }
-
         Trace($"key down {e.Key}");
         KeyModifiers modifiers = KeyModifiers.None;
         if (WindowInterop.IsKeyDown(VirtualKey.Control))
@@ -1950,15 +1943,6 @@ public sealed partial class MainWindow
             WindowInterop.IsKeyDown(VirtualKey.RightWindows))
         {
             modifiers |= KeyModifiers.Windows;
-        }
-
-        if (e.Key == VirtualKey.I &&
-            (modifiers == KeyModifiers.None ||
-             modifiers == (KeyModifiers.Control | KeyModifiers.Alt)))
-        {
-            TogglePersistentOsd();
-            e.Handled = true;
-            return;
         }
 
         if (!KeyChordMapper.TryMap(e.Key, modifiers, out KeyChord chord) ||
@@ -2284,7 +2268,8 @@ public sealed partial class MainWindow
                 EdgeSnapResult snap = _snapSession.Apply(
                     new WindowRect(x, y, x + size.Width, y + size.Height),
                     WorkAreaUnderPointer(),
-                    DisplayScale);
+                    DisplayScale,
+                    margins: SnapMargins());
                 x = snap.Rect.Left;
                 y = snap.Rect.Top;
                 ApplySnapFrame(snap.IsSnapped);

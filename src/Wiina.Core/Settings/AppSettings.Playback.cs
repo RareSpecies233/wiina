@@ -31,11 +31,17 @@ public sealed partial class AppSettings
     /// </summary>
     public AutoPlaylistMode AutoPlaylistMode { get; set; } = AutoPlaylistMode.SameFolder;
 
-    /// <summary>mpv scaling/deband profile; Auto keeps mpv/IINA defaults.</summary>
+    /// <summary>
+    /// mpv scaling preset; <see cref="VideoQualityPreset.Auto"/> is the
+    /// "默认" built-in (IINA/libmpv defaults).
+    /// </summary>
     public VideoQualityPreset VideoQualityPreset { get; set; } = VideoQualityPreset.Auto;
 
-    /// <summary>Selected named quality profile (built-in or user).</summary>
-    public string ActiveQualityProfile { get; set; } = "Auto";
+    /// <summary>
+    /// Selected named quality profile. Built-ins are "默认" and "性能优先";
+    /// anything else is looked up in <see cref="UserQualityProfiles"/>.
+    /// </summary>
+    public string ActiveQualityProfile { get; set; } = "默认";
 
     /// <summary>User-created quality profiles imported or edited in the quality editor.</summary>
     public List<VideoQualityProfile> UserQualityProfiles { get; set; } = new();
