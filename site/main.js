@@ -7,23 +7,30 @@
   const year = document.getElementById('year');
 
   // Theme: follow the OS until the user picks one.
+  const meta = document.querySelector('meta[name="theme-color"]');
+  const THEME_COLORS = { dark: '#090a0c', light: '#f6f6f7' };
+  const applyTheme = (theme) => {
+    root.dataset.theme = theme;
+    if (meta) meta.setAttribute('content', THEME_COLORS[theme] || THEME_COLORS.dark);
+  };
+
   const stored = localStorage.getItem('wiina-theme');
   const queryTheme = new URLSearchParams(location.search).get('theme');
   const prefersLight = window.matchMedia('(prefers-color-scheme: light)');
   const initial = (queryTheme === 'light' || queryTheme === 'dark')
     ? queryTheme
     : (stored || (prefersLight.matches ? 'light' : 'dark'));
-  root.dataset.theme = initial;
+  applyTheme(initial);
 
   themeBtn?.addEventListener('click', () => {
     const next = root.dataset.theme === 'dark' ? 'light' : 'dark';
-    root.dataset.theme = next;
+    applyTheme(next);
     localStorage.setItem('wiina-theme', next);
   });
 
   prefersLight.addEventListener('change', (event) => {
     if (localStorage.getItem('wiina-theme')) return;
-    root.dataset.theme = event.matches ? 'light' : 'dark';
+    applyTheme(event.matches ? 'light' : 'dark');
   });
 
   // Sticky nav border

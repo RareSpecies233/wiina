@@ -4,13 +4,28 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Wiina — 把 IINA 的体验，带到 Windows</title>
-  <meta name="description" content="Wiina 是 Windows 上的 WinUI 3 原生播放器，内核交给 libmpv。自带运行库、100 MB 安装包、开箱即用，复刻 IINA 的浮动 OSC、毛玻璃界面与流畅手感。">
+  <meta name="description" content="Wiina 是 Windows 上的 WinUI 3 原生播放器，内核交给 libmpv。自带运行库、100 MB 安装包、开箱即用，复刻 IINA 的浮动 OSC、亚克力界面与流畅手感。">
   <meta property="og:title" content="Wiina — 把 IINA 的体验，带到 Windows">
   <meta property="og:description" content="WinUI 3 原生界面 + libmpv 内核。自带运行库、硬件加速、免解码器，安装即用。">
   <meta property="og:type" content="website">
   <meta property="og:image" content="https://rarespecies233.github.io/wiina/assets/og.png">
   <link rel="icon" href="assets/icon.webp">
+  <meta name="theme-color" content="#090a0c">
   <link rel="stylesheet" href="styles.css">
+  <script>
+    // Resolve the theme before first paint so there is no flash of the wrong mode.
+    (function () {
+      try {
+        var query = new URLSearchParams(location.search).get('theme');
+        var stored = localStorage.getItem('wiina-theme');
+        var theme = (query === 'light' || query === 'dark') ? query
+          : (stored || (window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark'));
+        document.documentElement.dataset.theme = theme;
+        var meta = document.querySelector('meta[name="theme-color"]');
+        if (meta) meta.setAttribute('content', theme === 'dark' ? '#090a0c' : '#f6f6f7');
+      } catch (error) { /* private mode / disabled storage: keep the default */ }
+    })();
+  </script>
 </head>
 <body>
 <a class="skip" href="#main">跳到正文</a>
@@ -18,9 +33,9 @@
 <header class="nav" id="nav">
   <div class="wrap nav-inner">
     <a class="brand" href="#top" aria-label="Wiina 首页">
-      <img src="assets/icon.webp" alt="" width="28" height="28">
+      <img src="assets/icon.webp" alt="" width="26" height="26">
       <span>Wiina</span>
-      <em>v1.3.9</em>
+      <em> 适合人类使用的播放器</em>
     </a>
     <nav class="links" aria-label="主导航">
       <a href="#why">为什么</a>
@@ -46,44 +61,32 @@
   <section class="hero" id="top">
     <div class="wrap hero-grid">
       <div class="hero-copy">
-        <span class="pill"><span class="dot"></span> v1.3.9 · Windows 10 2004+ / 11 · x64</span>
+        <span class="pill"><span class="dot"></span>Windows 10 2004+ / 11 · x64</span>
         <h1>把 IINA 的体验，<br><span class="grad">带到 Windows。</span></h1>
         <p class="lead">Wiina 是一个 <b>WinUI 3 原生</b>的播放器外壳，内核交给 <b>libmpv</b>。自带运行库与解码能力，安装包约 100 MB，装完就能播——不用再找解码器，也不用折腾配置。</p>
         <div class="cta">
           <a class="btn primary" href="https://github.com/RareSpecies233/wiina/releases/latest">下载最新版 <span aria-hidden="true">↓</span></a>
           <a class="btn" href="https://github.com/RareSpecies233/wiina" target="_blank" rel="noopener">浏览源码</a>
         </div>
-        <ul class="checks">
-          <li>免安装 zip / 安装包</li>
-          <li>免 .NET 运行时</li>
-          <li>原生硬件加速</li>
-          <li>GPL-3.0</li>
-        </ul>
+
       </div>
       <figure class="hero-shot">
         <img src="assets/hero.webp" width="1600" height="900" alt="Wiina 播放 1080p HEVC 视频，浮动 OSC 位于画面底部" fetchpriority="high">
-        <figcaption>libmpv 硬解 · 浮动 OSC · 可选覆盖在视频上的毛玻璃标题栏</figcaption>
+        <figcaption>libmpv 硬解 · 浮动 OSC · WinUI3设计</figcaption>
       </figure>
-    </div>
-    <div class="wrap facts">
-      <span><b>100 MB</b> 安装包</span>
-      <span><b>WinUI 3</b> 原生界面</span>
-      <span><b>d3d11va</b> 硬件解码</span>
-      <span><b>943</b> 项自动化测试</span>
-      <span><b>10/11</b> x64 免安装运行</span>
     </div>
   </section>
 
   <section class="section" id="why">
     <div class="wrap">
-      <p class="eyebrow">WHY ANOTHER PLAYER?</p>
-      <h2>Windows 上，一直缺一个「顺手」的播放器</h2>
-      <p class="sub">不是缺解码能力，而是缺一层为桌面、为字幕、为小窗、为高 DPI 认真做过的界面。</p>
+      <p class="eyebrow">为什么选择Wiina？</p>
+      <h2>Windows 上，一直缺一个「正常」的播放器</h2>
+      <p class="sub">potplayer默认画质差？想要配置好太麻烦？mpv UI不好看？使用不方便？</p>
       <div class="cards four">
         <article class="card">
           <div class="ico"><svg viewBox="0 0 24 24"><rect x="2.5" y="4" width="19" height="13" rx="2"/><path d="M8 21h8M12 17v4"/></svg></div>
           <h3>IINA 只在 macOS</h3>
-          <p>它的交互是很多人的白月光，但 Windows 用户只能看截图。Wiina 把同一套界面逻辑按 Fluent 规范重写。</p>
+          <p>IINA的交互逻辑、UI一直是桌面平台的佼佼者，但Windows平台一直没有可对标IINA的播放器。</p>
         </article>
         <article class="card">
           <div class="ico"><svg viewBox="0 0 24 24"><rect x="2.5" y="5" width="19" height="14" rx="2.5"/><path d="M6.5 9h.01M10 9h.01M13.5 9h.01M17 9h.01M6.5 12.5h.01M10 12.5h.01M13.5 12.5h.01M17 12.5h.01M8 16h8"/></svg></div>
@@ -93,12 +96,12 @@
         <article class="card">
           <div class="ico"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M12 3v18M3 12h18"/></svg></div>
           <h3>主流播放器停在十年前</h3>
-          <p>高 DPI 发虚、界面堆广告、画中画割裂。Windows 11 的 Mica、圆角、深浅主题基本没用上。</p>
+          <p>高 DPI 发虚、界面堆广告、画中画割裂。Windows 11 的 Acrylic、圆角、深浅主题基本没用上。</p>
         </article>
         <article class="card">
           <div class="ico"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2.5"/><path d="M7 10h10M7 14h6"/></svg></div>
-          <h3>字幕与预览总是差点意思</h3>
-          <p>ASS 特效、字体、双字幕、同集多版本、进度缩略图——每一样都能凑合，但很少一起顺手。</p>
+          <h3>功能设计总是不人性化</h3>
+          <p>字幕音轨没有智能加载，晦涩难懂的菜单，不人性化的UI设计一直是其他播放器令人诟病的。</p>
         </article>
       </div>
     </div>
@@ -106,27 +109,27 @@
 
   <section class="section" id="features">
     <div class="wrap">
-      <p class="eyebrow">WHAT YOU GET</p>
-      <h2>该有的都有，而且按桌面习惯排好</h2>
-      <p class="sub">开箱即用是底线，不是卖点。下面这些，是每天都会碰到的细节。</p>
+      <p class="eyebrow">人性化的功能设计</p>
+      <h2>该有的都有，按你的直观感受排好</h2>
+      <p class="sub">开箱即用是底线，不是卖点。规矩立住了，用起来才能不烧心。</p>
 
       <div class="feature-grid">
         <article class="feature">
           <div class="feature-copy">
             <span class="kicker">01 · 开箱即用</span>
             <h3>自带运行库，装完就能播</h3>
-            <p>安装包约 100 MB，自带 .NET 运行时、Windows App Runtime 与 libmpv，不依赖系统解码器，也不用另装插件。首次打开就能硬件解码 1080p HEVC。</p>
+            <p>安装包约 100 MB，自带 .NET 运行时、Windows App Runtime 与 libmpv，不依赖系统解码器，也不用另装插件。首次打开就能硬件解码，跳过繁琐配置。</p>
             <ul class="ticks">
               <li>d3d11va 硬解，GPU 不支持时自动回退软解</li>
-              <li>免安装 zip 与安装包任选，数据都在本机</li>
-              <li>安装包支持就地升级，卸载时恢复安装前的文件关联</li>
+              <li>免安装 zip 与安装包任选，满足你的习惯</li>
+              <li>卸载时无残留，恢复安装前的文件关联，放心试用</li>
             </ul>
           </div>
           <div class="feature-art stats-tiles">
             <div class="tile"><b>≈100 MB</b><span>完整安装包</span></div>
             <div class="tile"><b>0</b><span>额外解码器</span></div>
             <div class="tile"><b>d3d11va</b><span>默认硬解</span></div>
-            <div class="tile"><b>1.3.9</b><span>当前版本</span></div>
+            <div class="tile"><b>0</b><span>卸载残留</span></div>
           </div>
         </article>
 
@@ -134,11 +137,11 @@
           <div class="feature-copy">
             <span class="kicker">02 · 浮动 OSC</span>
             <h3>对齐 IINA 的悬浮控制条</h3>
-            <p>OSC 不再横贯整个画面底部：它浮在视频上，靠边停靠、可拖动、可记忆位置。鼠标静止一会儿自动隐去，真正离开窗口或失焦时立刻收起。</p>
+            <p>OSC 不再横贯整个画面底部：它浮在视频上，鼠标可移动，尽可能的减少对于画面的遮挡。鼠标静止时候自动隐去。带有章节与缩略图功能。OMG，字幕终于不会被挡住了！</p>
             <ul class="ticks">
-              <li>播放/暂停、音量、进度、截图、全屏、画中画一屏可达</li>
-              <li>悬停进度条显示精确缩略图预览</li>
-              <li>5 px 内抖动不唤醒，真实移动才显示</li>
+              <li>播放/暂停、音量、进度、全屏、画中画、快速面板一屏可达</li>
+              <li>5 px 内抖动不唤醒，高敏用户狂喜！</li>
+              <li>保留传统上下OSC，喜欢上下OSC的用户也可切换</li>
             </ul>
           </div>
           <figure class="feature-shot">
@@ -150,34 +153,34 @@
         <article class="feature">
           <div class="feature-copy">
             <span class="kicker">03 · WinUI 3</span>
-            <h3>原生 WinUI 3，不是套壳网页</h3>
-            <p>整层界面用 WinUI 3 重写：Mica 窗口、圆角、Fluent 动画、深浅色跟随系统，并用 Windows 重点色给控件着色。</p>
+            <h3>原生 WinUI 3，接近Windows自带App的体验</h3>
+            <p>整层界面用 WinUI 3 构建：Acrylic 窗口、圆角、Fluent 动画、深浅色跟随系统，并用 Windows 重点色给控件着色。</p>
             <ul class="ticks">
               <li>深色 / 浅色 / 跟随系统，切换即时生效</li>
               <li>标题栏、OSC、侧栏、OSD 共用一套设计令牌</li>
-              <li>键盘焦点、屏幕阅读器名称与 High Contrast 都做了适配</li>
+              <li>卧槽，有这么好看的ui你怎么不早点告诉我！</li>
             </ul>
           </div>
           <figure class="feature-shot">
             <img src="assets/settings.webp" width="1000" height="1012" loading="lazy" alt="Wiina 设置窗口，半透明亚克力背景上显示界面设置">
-            <figcaption>亚克力设置窗口 · 视频画面透出为模糊底色</figcaption>
+            <figcaption>亚克力设置窗口</figcaption>
           </figure>
         </article>
 
         <article class="feature flip">
           <div class="feature-copy">
-            <span class="kicker">04 · 两套质感</span>
-            <h3>毛玻璃与纯色，各取所需</h3>
-            <p>OSC 与 OSD 可以在「毛玻璃」和「纯色」之间切换：毛玻璃把视频帧模糊后垫在控件下面，纯色则只有一块不透明底色加重点色染色，最省性能。</p>
+            <span class="kicker">04 · 质感与性能</span>
+            <h3>亚克力与纯色，各取所需</h3>
+            <p>OSC 与 OSD 可以在「亚克力」和「纯色」之间切换：亚克力把视频帧模糊后垫在控件下面，纯色则只有一块不透明底色加重点色染色，最省性能。</p>
             <ul class="ticks">
-              <li>固定 / 动态 / 始终 / 纯色四种档位</li>
+              <li>带有亚克力覆盖的WinUI3+mpv目前仅此一家，让他们永远追不上！</li>
+              <li>大笨蛋微软没有暴露Acrylic模糊给非XAML使用，实现方法见文档</li>
               <li>纯色档零抓帧、零 GPU 模糊，低配友好</li>
-              <li>在 WinUI 3 里把 mpv 画面模糊成控件背景，目前仅此一家</li>
             </ul>
           </div>
           <figure class="feature-shot">
             <img src="assets/osc.webp" width="1600" height="900" loading="lazy" alt="Wiina 视频页快速设置侧栏，背景为模糊的视频画面">
-            <figcaption>快速设置侧栏 · 视频画面被模糊后作为背景</figcaption>
+            <figcaption>osc快速设置侧栏 · 视频画面被模糊后作为背景</figcaption>
           </figure>
         </article>
 
@@ -185,11 +188,11 @@
           <div class="feature-copy">
             <span class="kicker">05 · 记忆播放</span>
             <h3>看到哪里，下次就从哪里继续</h3>
-            <p>欢迎窗口直接列出最近播放与上次进度，点一下回到原位。不用再为了记住时间点把文件发到微信传输助手。</p>
+            <p>打开软件后显示欢迎窗口，直接列出最近播放与上次进度，点一下回到进度，不用二级菜单疯狂找。不用再为了记住时间点给微信文件传输助手发消息。</p>
             <ul class="ticks">
               <li>每个文件独立记录播放位置</li>
               <li>最近播放一键续播，支持清除记录</li>
-              <li>打开文件 / 打开 URL 就在手边</li>
+              <li>直接打开文件时也有记忆功能</li>
             </ul>
           </div>
           <figure class="feature-shot small">
@@ -200,26 +203,26 @@
 
         <article class="feature flip">
           <div class="feature-copy">
-            <span class="kicker">06 · 设置</span>
-            <h3>不用再到处找选项</h3>
-            <p>11 个设置页按使用场景分组，每项都有说明与即时预览；顶部搜索支持中英文与关键词，输「字幕」就能直接跳到字号、颜色、边框。</p>
+            <span class="kicker">06 · 适合人类使用的设置</span>
+            <h3>不用疯狂翻找选项</h3>
+            <p>11 个设置页按使用场景分组，每项都有建议说明，不用再去问豆包；模糊搜索，输「缩放」就能直接找到各个界面下与缩放相关的所有设置，从没使用过也能找到设置项。</p>
             <ul class="ticks">
-              <li>模糊搜索 + 分组导航，符合桌面直觉</li>
+              <li>模糊搜索 + 搜索后高亮显示结果 + 分组导航，高效、符合直觉</li>
               <li>改完即时生效，不需要重启播放器</li>
-              <li>数字输入防抖保存，关窗也不丢</li>
+              <li>各个设置页的子项在最上方有快速导航，鼠标滚轮失灵回滚也不怕</li>
             </ul>
           </div>
           <figure class="feature-shot">
             <img src="assets/settings-search.webp" width="1000" height="1012" loading="lazy" alt="Wiina 设置搜索，输入字幕显示相关设置项">
-            <figcaption>设置搜索 · 输入「字幕」直接定位相关项</figcaption>
+            <figcaption>设置搜索 · 输入「缩放」直接定位所有相关项</figcaption>
           </figure>
         </article>
 
         <article class="feature">
           <div class="feature-copy">
             <span class="kicker">07 · 快捷键</span>
-            <h3>IINA 的习惯，原样带过来</h3>
-            <p>内置 Wiina（基于 IINA 习惯）与 mpv 两套方案，也可以自己录制。编辑器支持搜索、分类、冲突检查、导入导出与重置。</p>
+            <h3>IINA 的习惯，最快迁移</h3>
+            <p>内置精心设置的 Wiina（基于 IINA，但改善了windows由于super键不适合做软件快捷键的问题）与 mpv原生 两套方案，习惯IINA快捷键的用户极快可适应Wiina。也可以自定义所有快捷键，满足你的习惯</p>
             <ul class="ticks">
               <li>默认 79 个常用键位，覆盖播放、跳转、字幕、截图</li>
               <li>每个动作都能改键，支持 mpv 原生命令</li>
@@ -234,9 +237,9 @@
 
         <article class="feature flip">
           <div class="feature-copy">
-            <span class="kicker">08 · 画质</span>
+            <span class="kicker">08 · 不用浪费精力的画质</span>
             <h3>默认就很好，想调也调得动</h3>
-            <p>默认档对齐 mpv / IINA 的原生默认值：Lanczos 放大、Hermite 缩小、Bilinear 色度。需要折腾时，23 项 mpv 参数在图形界面里按组排好，每项都标注作用与原始键名。</p>
+            <p>默认档对齐 mpv / IINA 的原生默认值，无需更改即可享受高画质；性能优先档给较低性能设备使用，尽可能减少设备负载与丢帧。需要折腾时，23 项 mpv 参数在图形界面里按组排好，每项都标注作用与原始键名，方便你自定义。</p>
             <ul class="ticks">
               <li>缩放 / 色度 / 抖动 / 去色带 / 插帧 / 同步 / 其他</li>
               <li>两个内置档 + 自定义档案，支持 JSON 导入导出</li>
@@ -252,7 +255,7 @@
     </div>
   </section>
 
-  <section class="section tight">
+  <section class="section band">
     <div class="wrap">
       <div class="cards four compact">
         <article class="card">
@@ -262,8 +265,8 @@
         </article>
         <article class="card">
           <div class="ico"><svg viewBox="0 0 24 24"><path d="M4 5h16v11H4z"/><path d="M8 20h8M12 16v4"/><path d="M7 8h5"/></svg></div>
-          <h3>精确缩略图</h3>
-          <p>预生成与即时预览两种模式。23 分钟的视频约 30 秒建立全片索引，之后指哪打哪；也可切换成只解码当前帧。</p>
+          <h3>指哪打哪的缩略图</h3>
+          <p>预生成与即时预览两种模式。默认启用硬件加速生成缩略图。预生成模式下，30s建立23min索引，即可享受指哪打哪的预览图。低性能设备提供了仅用B帧生成预览图与只用单CPU线程</p>
         </article>
         <article class="card">
           <div class="ico"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c3 3 3 15 0 18M12 3c-3 3-3 15 0 18"/></svg></div>
@@ -293,7 +296,7 @@
         </figure>
         <figure>
           <img src="assets/osc.webp" width="1600" height="900" loading="lazy" alt="打开快速设置侧栏，视频作为模糊背景">
-          <figcaption>快速设置 · 毛玻璃侧栏</figcaption>
+          <figcaption>快速设置 · 亚克力侧栏</figcaption>
         </figure>
         <figure>
           <img src="assets/stats.webp" width="1400" height="788" loading="lazy" alt="播放统计面板，按文件、视频、音频、播放、渲染分组">
@@ -305,15 +308,15 @@
 
   <section class="section" id="docs">
     <div class="wrap">
-      <p class="eyebrow">DOCS</p>
+      <p class="eyebrow">开发相关</p>
       <h2>文档和代码放在一起</h2>
-      <p class="sub">每个版本都有验收记录；架构决策、UI 规格与性能数据都能追溯到文件。</p>
+      <p class="sub">原料过程全部告诉你！明厨亮灶</p>
       <div class="cards three docs">
         <a class="card" href="https://github.com/RareSpecies233/wiina/blob/main/docs/architecture/0001-video-pipeline.md">
           <span class="tag">架构</span><h3>播放管线</h3><p>mpv → swapchain → WinUI 合成器的边界与取舍。</p>
         </a>
         <a class="card" href="https://github.com/RareSpecies233/wiina/blob/main/docs/architecture/0003-acrylic.md">
-          <span class="tag">架构</span><h3>毛玻璃与纯色档</h3><p>抓帧、模糊、染色、性能模式，以及为什么两种都要有。</p>
+          <span class="tag">架构</span><h3>亚克力与纯色档</h3><p>抓帧、模糊、染色、性能模式，以及为什么两种都要有。</p>
         </a>
         <a class="card" href="https://github.com/RareSpecies233/wiina/blob/main/docs/reference/thumbnails.md">
           <span class="tag">参考</span><h3>缩略图逻辑</h3><p>预生成、即时预览、磁盘/内存缓存与全部开关。</p>
@@ -334,32 +337,32 @@
   <section class="section download" id="download">
     <div class="wrap download-grid">
       <div>
-        <p class="eyebrow">DOWNLOAD</p>
-        <h2>装上，然后忘掉播放器</h2>
-        <p class="sub">Windows 10 2004+ / Windows 11 · x64 · 自带 .NET 与 Windows App Runtime · 解压即用。</p>
+        <p class="eyebrow">下载</p>
+        <h2>饭埋在肉里，更多细节，用了才知道</h2>
+        <p class="sub">符合直觉的美观UI设计，无需复杂设置的高画质</p>
         <div class="cta">
           <a class="btn primary" href="https://github.com/RareSpecies233/wiina/releases/latest">前往 GitHub Releases <span aria-hidden="true">↗</span></a>
         </div>
         <div class="assets">
           <a class="asset" href="https://github.com/RareSpecies233/wiina/releases/latest/download/wiina-1.3.9-win-x64.zip">
-            <b>便携版 .zip</b><span>解压即用 · 约 145 MB</span>
+            <b>便携版 .zip</b><span>解压即用</span>
           </a>
           <a class="asset" href="https://github.com/RareSpecies233/wiina/releases/latest/download/Wiina-Setup-1.3.9-x64.exe">
-            <b>安装包 .exe</b><span>写入开始菜单 · 支持卸载</span>
+            <b>安装包 .exe</b><span>写入开始菜单 · 支持搜索启动</span>
           </a>
         </div>
-        <p class="fine">没有代码签名。首次运行可能看到 SmartScreen（Windows 已阻止的弹窗），点「更多信息」→「仍要运行」即可；发布页附有 SHA-256，可对照校验。</p>
+        <p class="fine">由于没有代码签名。首次运行可能看到 SmartScreen（Windows 已阻止的弹窗），点「更多信息」→「仍要运行」即可；发布页附有 SHA-256，可对照校验。</p>
       </div>
       <aside class="dl-card">
-        <img src="assets/icon.webp" alt="" width="44" height="44">
-        <h3>Wiina 1.3.9</h3>
+        <img src="assets/icon.webp" alt="" width="40" height="40">
+        <h3>Wiina - 适合人类使用的播放器</h3>
         <ul>
-          <li>WinUI 3 · .NET 10 · libmpv 0.41</li>
+          <li>WinUI 3 · .NET 10 · libmpv</li>
           <li>免安装 / 安装版双形态</li>
           <li>安装版升级保留配置与关联</li>
           <li>GPL-3.0，可自行审计</li>
         </ul>
-        <p class="star">喜欢的话，去仓库点个 Star。</p>
+        <p class="star">想要仔细研究？先去仓库点个star！</p>
       </aside>
     </div>
   </section>
@@ -367,7 +370,7 @@
 
 <footer class="footer">
   <div class="wrap footer-inner">
-    <div class="brand small"><img src="assets/icon.webp" alt="" width="22" height="22"><span>Wiina</span></div>
+    <div class="brand small"><img src="assets/icon.webp" alt="" width="20" height="20"><span>Wiina</span></div>
     <p>以 GPL-3.0 发布 · 非官方项目，与 IINA / mpv 无隶属关系。</p>
     <nav><a href="https://github.com/RareSpecies233/wiina">GitHub</a><a href="https://github.com/RareSpecies233/wiina/releases">Releases</a><a href="https://github.com/RareSpecies233/wiina/blob/main/LICENSE">License</a></nav>
   </div>
