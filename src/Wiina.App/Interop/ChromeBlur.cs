@@ -54,6 +54,8 @@ internal sealed class ChromeBlur
     private volatile bool _running;
     private int _failureLogged;
     private int _geometryDumped;
+    private int[]? _extendMap;
+    private string? _extendSignature;
     private WriteableBitmap? _bitmap;
     private byte[]? _pending;
     private int _pendingWidth;
@@ -404,7 +406,8 @@ internal sealed class ChromeBlur
         double MarginLeft,
         double MarginTop,
         double MarginRight,
-        double MarginBottom)
+        double MarginBottom,
+        bool Extended = false)
     {
         public bool IsValid => Width > 0 && Height > 0;
     }
@@ -416,6 +419,35 @@ internal sealed class ChromeBlur
             1,
             (int)Math.Round((double)shot.Height * width / shot.Width));
         byte[] small = Downscale(shot, width, height);
+
+        // With mpv's real video rectangle the frame is edge-extended to the whole
+        // widget (letterbox/pillarbox included) so the chrome never shows an
+        // unpainted seam at the video boundary. Without it the frame is published
+        // as-is and the layer still maps it onto the fitted video rectangle.
+        bool extended = geometry.IsValid;
+        if (extended)
+        {
+            double windowWidth = geometry.Width + geometry.MarginLeft + geometry.MarginRight;
+            double windowHeight = geometry.Height + geometry.MarginTop + geometry.MarginBottom;
+            (int destWidth, int destHeight) = VideoDisplayRect.ExtendedSize(width, windowWidth, windowHeight);
+            var display = new DisplayRect(
+                geometry.MarginLeft,
+                geometry.MarginTop,
+                geometry.Width,
+                geometry.Height);
+            small = ExtendEdges(
+                small,
+                width,
+                height,
+                destWidth,
+                destHeight,
+                display,
+                windowWidth,
+                windowHeight);
+            width = destWidth;
+            height = destHeight;
+        }
+
         CanvasDevice? device = EnsureDevice();
         if (device is null)
         {
@@ -441,7 +473,94 @@ internal sealed class ChromeBlur
             session.Clear(Color.FromArgb(255, 0, 0, 0));
             session.DrawImage(blur);
         }
-        Publish(target.GetPixelBytes(), width, height, geometry);
+        Publish(target.GetPixelBytes(), width, height, geometry with { Extended = extended });
+    }
+
+    /// <summary>
+    /// Copies the frame into a bitmap that covers the whole widget, replicating
+    /// the border pixels outwards across the letterbox/pillarbox bars. The centre
+    /// keeps the exact proportional mapping of <paramref name="display"/>, and the
+    /// replicated border starts on the same edge pixels, so the boundary is
+    /// continuous instead of a straight seam.
+    /// </summary>
+    private byte[] ExtendEdges(
+        byte[] source,
+        int sourceWidth,
+        int sourceHeight,
+        int destWidth,
+        int destHeight,
+        DisplayRect display,
+        double widgetWidth,
+        double widgetHeight)
+    {
+        int[] map = GetExtendMap(
+            sourceWidth,
+            sourceHeight,
+            destWidth,
+            destHeight,
+            display,
+            widgetWidth,
+            widgetHeight);
+        var dest = new byte[destWidth * destHeight * 4];
+        for (int i = 0; i < map.Length; i++)
+        {
+            int src = map[i];
+            int dst = i * 4;
+            dest[dst] = source[src];
+            dest[dst + 1] = source[src + 1];
+            dest[dst + 2] = source[src + 2];
+            dest[dst + 3] = 255;
+        }
+        return dest;
+    }
+
+    /// <summary>
+    /// Source byte offset for every pixel of the extended bitmap. Cached because
+    /// the geometry only changes when the window, the video or the surface changes,
+    /// not on every frame.
+    /// </summary>
+    private int[] GetExtendMap(
+        int sourceWidth,
+        int sourceHeight,
+        int destWidth,
+        int destHeight,
+        DisplayRect display,
+        double widgetWidth,
+        double widgetHeight)
+    {
+        string signature =
+            $"{sourceWidth}x{sourceHeight}>{destWidth}x{destHeight}" +
+            $"|{display.X:0.##},{display.Y:0.##},{display.Width:0.##},{display.Height:0.##}" +
+            $"|{widgetWidth:0.##}x{widgetHeight:0.##}";
+        if (_extendMap is not null && _extendSignature == signature)
+        {
+            return _extendMap;
+        }
+
+        var map = new int[destWidth * destHeight];
+        for (int y = 0; y < destHeight; y++)
+        {
+            for (int x = 0; x < destWidth; x++)
+            {
+                map[(y * destWidth) + x] = VideoDisplayRect.TryMapExtended(
+                    x,
+                    y,
+                    destWidth,
+                    destHeight,
+                    display,
+                    widgetWidth,
+                    widgetHeight,
+                    sourceWidth,
+                    sourceHeight,
+                    out int sourceX,
+                    out int sourceY)
+                    ? ((sourceY * sourceWidth) + sourceX) * 4
+                    : 0;
+            }
+        }
+        _extendMap = map;
+        _extendSignature = signature;
+        return map;
     }
     /// <summary>
     /// Box-filters one raw mpv frame (bgr0/bgra, possibly bottom-up) down to a
@@ -721,14 +840,20 @@ public sealed class ChromeBlurLayer : Canvas
             return;
         }
 
-        // The widget embraces the letterbox/pillarbox bars; mpv paints the frame
-        // centred inside it. Map the bitmap onto that inner rectangle instead of
-        // stretching it over the whole widget, which used to shift the blur up
-        // whenever the video and window aspect ratios differed.
+        // The widget embraces the letterbox/pillarbox bars. When mpv reported the
+        // frame's real rectangle the worker already edge-extended the bitmap over
+        // the whole widget, so it maps uniformly; otherwise map the frame onto the
+        // fitted video rectangle only (bars keep the tint underneath).
         double scale = XamlRoot?.RasterizationScale ?? 1.0;
         DisplayRect display = default;
         bool fromMpv = false;
-        if (geometry.IsValid)
+        bool extended = geometry.Extended;
+        if (extended)
+        {
+            display = new DisplayRect(0, 0, source.Width, source.Height);
+            fromMpv = true;
+        }
+        else if (geometry.IsValid)
         {
             fromMpv = VideoDisplayRect.TryFromOsd(
                 source.Width,
@@ -763,7 +888,7 @@ public sealed class ChromeBlurLayer : Canvas
         // switch support needs to confirm the video rect on a user's machine.
         string signature = $"{surface.Width:0.#}x{surface.Height:0.#}@{surface.X:0.#},{surface.Y:0.#}|" +
             $"{source.Width:0.#}x{source.Height:0.#}|{display.X:0.#},{display.Y:0.#},{display.Width:0.#},{display.Height:0.#}|" +
-            $"{fromMpv}|{scale:0.##}|{geometry.Width:0.#}x{geometry.Height:0.#}";
+            $"{fromMpv}|{extended}|{scale:0.##}|{geometry.Width:0.#}x{geometry.Height:0.#}";
         if (Environment.GetEnvironmentVariable("WIINA_BLUR_LOG") == "1" && signature != _diagSignature)
         {
             _diagSignature = signature;
@@ -776,7 +901,7 @@ public sealed class ChromeBlurLayer : Canvas
                     $"dpi={scale:0.##} osd={(geometry.IsValid ? $"{geometry.Width:0.#}x{geometry.Height:0.#} " +
                         $"m={geometry.MarginLeft:0.#},{geometry.MarginTop:0.#},{geometry.MarginRight:0.#},{geometry.MarginBottom:0.#}" : "n/a")} " +
                     $"display={display.Width:0.#}x{display.Height:0.#} at {display.X:0.#},{display.Y:0.#} " +
-                    $"fromMpv={fromMpv} bitmap={bitmap.PixelWidth}x{bitmap.PixelHeight} " +
+                    $"fromMpv={fromMpv} extended={extended} bitmap={bitmap.PixelWidth}x{bitmap.PixelHeight} " +
                     $"k={scaleX:0.###},{scaleY:0.###}\n");
             }
             catch

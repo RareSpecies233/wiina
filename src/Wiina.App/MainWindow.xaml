@@ -33,7 +33,7 @@
                  window, so the main window keeps a compact restore surface. -->
             <Grid x:Name="PipPlaceholder"
                   Visibility="Collapsed"
-                  Background="#F208090A">
+                  Background="{ThemeResource AppBackgroundBrush}">
                 <StackPanel HorizontalAlignment="Center"
                             VerticalAlignment="Center"
                             Spacing="10">
@@ -44,6 +44,7 @@
                                loc:Loc.Text="ui.inPip"
                                FontSize="20"
                                FontWeight="SemiBold"
+                               Foreground="{ThemeResource PrimaryTextBrush}"
                                HorizontalAlignment="Center" />
                     <TextBlock x:Name="PipPlaceholderSubtitle"
                                loc:Loc.Text="ui.pipPlaying"
@@ -53,6 +54,7 @@
                     <Button loc:Loc.Content="ui.restore"
                             Click="OnPipRestoreClick"
                             HorizontalAlignment="Center"
+                            Style="{StaticResource AccentButtonStyle}"
                             loc:Loc.AutomationName="ui.restorePip" />
                 </StackPanel>
             </Grid>

@@ -1,7 +1,17 @@
-# Known issues — Wiina v1.3.5
+# Known issues — Wiina v1.3.6
 
-Nothing here is hidden; these are known limitations of the v1.3.5 build. The full decision list (with fix cost and checkboxes) lives in [../reports/known-issues-1.3.1.md](../reports/known-issues-1.3.1.md).
+Nothing here is hidden; these are known limitations of the v1.3.6 build. The full decision list (with fix cost and checkboxes) lives in [../reports/known-issues-1.3.1.md](../reports/known-issues-1.3.1.md).
 
+## What changed in 1.3.6
+
+- The chrome blur now extends over the whole chrome band by repeating the video
+  edge pixels, so windows whose aspect does not match the video no longer show
+  unstretched tint bands. PiP and non-100 % DPI were not re-measured.
+- Timeline thumbnails gained a "preview while generating" switch, default off.
+  While the background pass runs, hover previews are suppressed unless it is
+  enabled; `Instant` mode ignores it.
+- The PiP placeholder text now follows the theme (light / dark / high contrast).
+- Cursor hiding did **not** change in 1.3.6 and remains unsolved.
 ## What changed in 1.3.5
 
 - The chrome blur follows the actual video rectangle now (letterbox/pillarbox

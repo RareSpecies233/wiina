@@ -58,8 +58,11 @@ public sealed class ThumbnailService : IDisposable
     private volatile bool _previewEnabled = true;
     private volatile bool _instantMode;
     private volatile int _hoverDelayMs = ThumbnailPolicy.DefaultHoverDelayMilliseconds;
+    private volatile bool _previewWhileGenerating;
+    private readonly ThumbnailPreGenerationTracker _pregen = new();
     private bool _restartPlayer;
     private bool _loggedDecodePath;
+    private bool _loggedHoverGate;
     private bool _disposed;
 
     public ThumbnailService(
@@ -136,6 +139,10 @@ public sealed class ThumbnailService : IDisposable
         if (sourceChanged)
         {
             _cache.Clear();
+            // A new file has new buckets: progress from the previous pass must
+            // never count towards it (that would unlock previews too early).
+            _pregen.Reset();
+            _loggedHoverGate = false;
         }
 
         _cache.Resize(frames);
@@ -239,6 +246,46 @@ public sealed class ThumbnailService : IDisposable
 
     /// <summary>Live-apply entry point used by the settings window.</summary>
     public void SetPreviewEnabled(bool enabled) => PreviewEnabled = enabled;
+
+    /// <summary>
+    /// Pre-generation mode only: whether hovering may show a frame (or trigger
+    /// an extraction) before the background pass covered the whole file. Off by
+    /// default so a hover during pre-generation stays silent instead of decoding
+    /// the same file twice; <see cref="GetAsync"/> consults it on every request,
+    /// so the switch applies live without reopening the file.
+    /// </summary>
+    public bool PreviewWhileGenerating
+    {
+        get => _previewWhileGenerating;
+        set
+        {
+            if (_previewWhileGenerating == value)
+            {
+                return;
+            }
+
+            _previewWhileGenerating = value;
+            _loggedHoverGate = false;
+            Log?.Invoke(
+                value
+                    ? "thumbnail preview while generating: on"
+                    : "thumbnail preview while generating: off (hover waits for pre-generation)");
+        }
+    }
+
+    /// <summary>Live-apply entry point used by the settings window.</summary>
+    public void SetPreviewWhileGenerating(bool enabled) => PreviewWhileGenerating = enabled;
+
+    /// <summary>
+    /// True when the background pass covered every bucket of the current source.
+    /// Reset when another file is opened, so a stale completion never unlocks
+    /// previews for a fresh file.
+    /// </summary>
+    public bool IsPreGenerationComplete => _pregen.IsComplete;
+
+    /// <summary>True when the pass for exactly <paramref name="mediaPath"/> is finished.</summary>
+    public bool IsPreGenerationCompleteFor(string? mediaPath) =>
+        _pregen.IsCompleteFor(mediaPath);
 
     /// <summary>
     /// Fails every queued job instead of letting it start an extraction after
@@ -428,6 +475,29 @@ public sealed class ThumbnailService : IDisposable
             _lastInteractionUtc = DateTime.UtcNow;
         }
 
+        // Pre-generation mode hides previews until the pass finished (IINA's
+        // thumbnailsReady behaviour) unless the user opted into previewing while
+        // the file is still being walked. Returning null here also keeps the
+        // hover path from reading the disk cache or queueing an extraction, so a
+        // fresh file is never decoded twice at once. Background jobs are the
+        // pass itself and must never be blocked.
+        if (!background
+            && !ThumbnailPolicy.AllowsHoverPreview(
+                Mode,
+                _previewWhileGenerating,
+                _pregen.IsPendingFor(mediaPath)))
+        {
+            if (!_loggedHoverGate)
+            {
+                _loggedHoverGate = true;
+                Log?.Invoke(
+                    "thumbnail hover waiting for pre-generation to finish: " +
+                    mediaPath);
+            }
+
+            return null;
+        }
+
         // Hover requests can arrive before (or without) a pre-generation pass;
         // track the source here too so another file's frames never show up.
         if (!string.Equals(_sourcePath, mediaPath, StringComparison.OrdinalIgnoreCase))
@@ -577,10 +647,16 @@ public sealed class ThumbnailService : IDisposable
         // disabled) so hovering still fills a cache that covers the whole file.
         SetSource(mediaPath, durationSeconds);
 
+        // Only a pass that really walks the timeline may hold hover previews
+        // back; every branch that skips the walk marks the source complete so
+        // the timeline never waits for work that will not happen.
+        _pregen.Begin(mediaPath, BucketCount(durationSeconds));
+
         if (_slowMode)
         {
             // Slow mode never walks the timeline up front; frames are extracted
             // on demand while the user hovers.
+            _pregen.MarkComplete(mediaPath);
             return;
         }
 
@@ -590,6 +666,7 @@ public sealed class ThumbnailService : IDisposable
             || !double.IsFinite(durationSeconds)
             || durationSeconds <= 0)
         {
+            _pregen.MarkComplete(mediaPath);
             return;
         }
 
@@ -662,6 +739,7 @@ public sealed class ThumbnailService : IDisposable
                 if (_cache.TryGet(seconds, out _))
                 {
                     reused++;
+                    _pregen.MarkCompleted(path);
                     continue;
                 }
 
@@ -673,6 +751,7 @@ public sealed class ThumbnailService : IDisposable
                         _cache.Put(seconds, cached);
                     }
                     reused++;
+                    _pregen.MarkCompleted(path);
                     continue;
                 }
 
@@ -687,6 +766,10 @@ public sealed class ThumbnailService : IDisposable
                 {
                     extracted++;
                 }
+
+                // A failed extraction still counts: waiting forever for a frame
+                // the decoder cannot produce would hide previews for this file.
+                _pregen.MarkCompleted(path);
             }
         }
         catch (OperationCanceledException)
@@ -1296,6 +1379,21 @@ public sealed class ThumbnailService : IDisposable
     }
 
     private static int ClampHeight(int height) => Math.Clamp(height, 24, 240);
+
+    /// <summary>
+    /// Number of bucket positions <see cref="PreGenerateAsync"/> walks for a file
+    /// (inclusive of both ends, matching its <c>bucket &lt;= floor(duration/bucket)</c>
+    /// loop). Non-finite or non-positive durations have nothing to walk.
+    /// </summary>
+    private int BucketCount(double durationSeconds)
+    {
+        if (!double.IsFinite(durationSeconds) || durationSeconds <= 0)
+        {
+            return 0;
+        }
+
+        return (int)Math.Floor(durationSeconds / _bucketSeconds) + 1;
+    }
 
     private static string JobId(string path, double seconds, int height) =>
         (ThumbnailDiskCache.NormalizePath(path)

@@ -1,11 +1,55 @@
 # Wiina release notes
 
-Release date (1.3.5): 2026-10-25
+Release date (1.3.6): 2026-10-25
 
 Windows-native, IINA-inspired mpv front end built with WinUI 3, Windows App
 SDK 2.5, and libmpv.
 
-## What's new in 1.3.5
+## What's new in 1.3.6
+
+### The blurred chrome now covers the whole chrome band
+
+1.3.5 clipped the blur to the real video rectangle, which left unstretched tint
+bands whenever the window aspect did not match the video. 1.3.6 adds
+`VideoDisplayRect.ExtendedSize` / `TryMapExtended`
+(`src/Wiina.Core/Playback/VideoDisplayRect.cs:137` / `:155`): the blur target
+grows to the whole chrome band and the letterbox pixels repeat the nearest video
+edge (`ChromeBlur` edge-extend path, `src/Wiina.App/Interop/ChromeBlur.cs:415`,
+`:486`, mapping cache `:518-545`, draw branch `:844-880`). Measured on a 490×984
+portrait window and a 1384×422 ultra-wide window with no seam in the brightness
+profile. Without `osd-dimensions` margins it falls back to the 1.3.5
+video-rectangle behaviour.
+
+### "Preview while generating" for timeline thumbnails
+
+New row `video.thumbnail-preview-while-generating` (Settings → Video →
+Thumbnails, right after the hover delay; `SettingsCatalog.cs:267-273`), default
+**off**, matching IINA's wait-for-`thumbnailsReady` behaviour. Off: while the
+background pass is incomplete, hover returns nothing and does not touch the disk
+or queue a decode. On: previews appear as buckets are produced. `Instant` mode
+always previews and ignores the switch. The gate is
+`ThumbnailPolicy.AllowsHoverPreview` (`ThumbnailPolicy.cs:70-77`) plus
+`ThumbnailPreGenerationTracker`, applied at `ThumbnailService.cs:478-499`;
+background pre-generation requests are not blocked. Applies live
+(`MainWindow.Settings.cs:183-189`).
+
+### Picture-in-Picture placeholder follows the theme
+
+`PipPlaceholder` (`MainWindow.xaml:34-60`) now uses `AppBackgroundBrush`,
+`PrimaryTextBrush` / `SecondaryTextBrush` and `AccentButtonStyle`, so the
+placeholder is readable in light, dark and high-contrast themes.
+
+### A reference for the thumbnail pipeline
+
+New [docs/reference/thumbnails.md](../reference/thumbnails.md) documents both
+modes, the extraction chain, the three cache layers, every switch, the new gate,
+performance numbers and known limits.
+
+### Counts
+
+Settings 11 pages / 132 rows / 581 keys; tests 876. Cursor hiding is still
+unsolved and unchanged in 1.3.6.
+## 1.3.5 — previous release
 
 ### The chrome blur now follows the real video rectangle
 

@@ -92,4 +92,31 @@ public sealed class ThumbnailPolicyTests
     {
         Assert.InRange(ThumbnailPolicy.SlowModeCooldownMilliseconds, 50, 2_000);
     }
+
+    [Theory]
+    // Pre-generation, switch off: hover stays silent until the pass finished.
+    [InlineData(ThumbnailMode.PreGenerate, false, true, false)]
+    [InlineData(ThumbnailMode.PreGenerate, false, false, true)]
+    // Pre-generation, switch on: partial results are allowed while generating.
+    [InlineData(ThumbnailMode.PreGenerate, true, true, true)]
+    [InlineData(ThumbnailMode.PreGenerate, true, false, true)]
+    // Instant mode has no pass at all, so the switch never blocks it.
+    [InlineData(ThumbnailMode.Instant, false, true, true)]
+    [InlineData(ThumbnailMode.Instant, false, false, true)]
+    public void HoverPreviewPolicyMatchesTheIinaRule(
+        ThumbnailMode mode,
+        bool previewWhileGenerating,
+        bool preGenerationPending,
+        bool expected)
+    {
+        Assert.Equal(
+            expected,
+            ThumbnailPolicy.AllowsHoverPreview(mode, previewWhileGenerating, preGenerationPending));
+    }
+
+    [Fact]
+    public void PreviewWhileGeneratingRowDefaultsOff()
+    {
+        Assert.False(new AppSettings().ThumbnailPreviewWhileGenerating);
+    }
 }

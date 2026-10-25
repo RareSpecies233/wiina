@@ -281,6 +281,34 @@ public sealed class SettingsSearchTests
     }
 
     [Fact]
+    public void PreviewWhileGeneratingRowDefaultsOffAndRoundTrips()
+    {
+        SettingsRowDefinition row = Assert.Single(
+            SettingsCatalog.Rows,
+            row => row.Id == "video.thumbnail-preview-while-generating");
+        Assert.Equal(SettingsPageId.Video, row.Page);
+        Assert.Equal("缩略图", row.Section);
+        Assert.Equal(SettingsRowKind.Toggle, row.Kind);
+        Assert.Contains("IINA", row.Description);
+
+        var settings = new AppSettings();
+        Assert.False(settings.ThumbnailPreviewWhileGenerating);
+        Assert.False((bool)row.Value(settings)!);
+
+        row.Apply(settings, true);
+        Assert.True(settings.ThumbnailPreviewWhileGenerating);
+        Assert.True((bool)row.Value(settings)!);
+
+        row.Apply(settings, false);
+        Assert.False(settings.ThumbnailPreviewWhileGenerating);
+
+        // The label must be searchable, otherwise the new switch is hard to find.
+        Assert.Contains(
+            SettingsCatalog.SearchIndex.Search("生成完成前", 20),
+            hit => hit.RowId == "video.thumbnail-preview-while-generating");
+    }
+
+    [Fact]
     public void MediaKeysRowIsAToggleThatDefaultsToOn()
     {
         SettingsRowDefinition row = Assert.Single(

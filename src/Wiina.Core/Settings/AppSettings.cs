@@ -97,6 +97,15 @@ public sealed partial class AppSettings
     /// </summary>
     public int ThumbnailHoverDelayMs { get; set; } = 250;
 
+    /// <summary>
+    /// Pre-generation mode only: allow hovering to show a ready frame (or extract
+    /// one on demand) while the background pass still walks the file. Off by
+    /// default — matching IINA, previews stay hidden until the pass finished,
+    /// which keeps a weak machine from decoding on two fronts at once. Instant
+    /// mode ignores this flag because it has no background pass.
+    /// </summary>
+    public bool ThumbnailPreviewWhileGenerating { get; set; }
+
     // ---- Quick settings: video (persisted and re-applied on startup) ----
 
     public string VideoAspect { get; set; } = "no";

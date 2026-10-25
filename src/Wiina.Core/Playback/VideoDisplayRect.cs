@@ -128,5 +128,67 @@ public static class VideoDisplayRect
         return width <= 0 || height <= 0 ? default : new DisplayRect(x, y, width, height);
     }
 
+    /// <summary>
+    /// Size of the edge-extended bitmap that covers the whole widget. The width
+    /// is the requested bitmap width and the height follows the widget aspect, so
+    /// the extended frame can be stretched uniformly over the widget (no
+    /// non-uniform scaling, no seam at the letterbox boundary).
+    /// </summary>
+    public static (int Width, int Height) ExtendedSize(int width, double widgetWidth, double widgetHeight)
+    {
+        int w = Math.Max(1, width);
+        if (!IsFinite(widgetWidth) || !IsFinite(widgetHeight) || widgetWidth <= 0 || widgetHeight <= 0)
+        {
+            return (w, w);
+        }
+        int h = Math.Max(1, (int)Math.Round(w * widgetHeight / widgetWidth));
+        return (w, h);
+    }
+
+    /// <summary>
+    /// Maps a pixel of the edge-extended bitmap back onto the source frame.
+    /// Pixels inside <paramref name="display"/> keep the exact proportional
+    /// mapping; letterbox/pillarbox pixels clamp to the nearest frame edge, which
+    /// replicates the border colours outwards (continuous with the centre, so no
+    /// visible seam at the boundary).
+    /// </summary>
+    public static bool TryMapExtended(
+        int x,
+        int y,
+        int destWidth,
+        int destHeight,
+        DisplayRect display,
+        double widgetWidth,
+        double widgetHeight,
+        int sourceWidth,
+        int sourceHeight,
+        out int sourceX,
+        out int sourceY)
+    {
+        sourceX = 0;
+        sourceY = 0;
+        if (display.IsEmpty || destWidth <= 0 || destHeight <= 0 ||
+            sourceWidth <= 0 || sourceHeight <= 0 ||
+            !IsFinite(widgetWidth) || !IsFinite(widgetHeight) ||
+            widgetWidth <= 0 || widgetHeight <= 0)
+        {
+            return false;
+        }
+        if (x < 0 || y < 0 || x >= destWidth || y >= destHeight)
+        {
+            return false;
+        }
+
+        double widgetX = (x + 0.5) * widgetWidth / destWidth;
+        double widgetY = (y + 0.5) * widgetHeight / destHeight;
+        double u = (widgetX - display.X) / display.Width;
+        double v = (widgetY - display.Y) / display.Height;
+        double sx = u <= 0 ? 0 : u >= 1 ? sourceWidth - 1 : u * (sourceWidth - 1);
+        double sy = v <= 0 ? 0 : v >= 1 ? sourceHeight - 1 : v * (sourceHeight - 1);
+        sourceX = Math.Clamp((int)Math.Round(sx), 0, sourceWidth - 1);
+        sourceY = Math.Clamp((int)Math.Round(sy), 0, sourceHeight - 1);
+        return true;
+    }
+
     private static bool IsFinite(double value) => !double.IsNaN(value) && !double.IsInfinity(value);
 }

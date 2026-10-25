@@ -1,12 +1,15 @@
 # Accessibility, localization, DPI and motion
 
-This document records what Wiina v1.3.5 implements, how it was checked, and
+This document records what Wiina v1.3.6 implements, how it was checked, and
 what is intentionally limited. It is a summary, not a certification.
 
 ## 1. Keyboard and focus
 
 - Thumbnail `Instant` mode and its hover-delay NumberBox are ordinary keyboard
   reachable settings; the delay only affects hover previews, never playback.
+- The thumbnail "preview while generating" switch is a normal keyboard-reachable toggle;
+  while it is off, hover previews simply do not appear, and enabling it takes effect
+  immediately without a restart.
 
 - Picture-in-Picture keeps its transport buttons out of the Tab order and
   handles the keys at the window root: Space play/pause, Enter fullscreen,
@@ -161,9 +164,9 @@ generic text containers mirror.
 
 ## 7. Localization coverage
 
-- Runtime catalog: 571 keys in `UiStringCatalog.cs`, each with a non-empty
+- Runtime catalog: 581 keys in `UiStringCatalog.cs`, each with a non-empty
   zh-Hans and English string. Coverage includes the title bar, OSC, OSD, menus,
-  sidebars, quick settings, all settings pages (11 pages, 131 rows;
+  sidebars, quick settings, all settings pages (11 pages, 132 rows;
   page titles, summaries, section headers, row titles/descriptions/choices), welcome/about/log/inspector/open-URL
   dialogs, filter/equalizer windows, playlist/chapters, mini player, PiP badge,
   the 1.2.6 audio-device labels (auto/refresh/unavailable), the 1.2.7 thumbnail-cache and administrator-association labels, the 1.3.1

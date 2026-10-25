@@ -55,4 +55,23 @@ public static class ThumbnailPolicy
     /// </summary>
     public static bool RequiresHoverDelay(ThumbnailMode mode) =>
         mode == ThumbnailMode.Instant;
+
+    /// <summary>
+    /// True when hovering may show a frame while the background pass is still
+    /// running. Instant mode has no background pass, so it is always allowed and
+    /// ignores the switch; in pre-generation mode the "生成完成前允许预览" switch
+    /// decides between IINA's wait-for-ready behaviour (default) and previewing
+    /// partial results while the file is still being walked.
+    /// </summary>
+    /// <param name="preGenerationPending">
+    /// True while a pass over the hovered file has not covered every bucket yet.
+    /// An idle tracker (no pass started for the file) is not pending.
+    /// </param>
+    public static bool AllowsHoverPreview(
+        ThumbnailMode mode,
+        bool previewWhileGenerating,
+        bool preGenerationPending) =>
+        mode == ThumbnailMode.Instant
+        || previewWhileGenerating
+        || !preGenerationPending;
 }

@@ -1,8 +1,8 @@
-# Performance measurements (v1.3.5)
+# Performance measurements (v1.3.6)
 
 Measured on the development machine on 2026-10-19 (Asia/Hong_Kong), at v1.0.0.
 The numbers below are the historical baseline; they were **not** re-measured
-for 1.2.4 through 1.3.5 (see the per-version notes below for
+for 1.2.4 through 1.3.6 (see the per-version notes below for
 the known deltas). Numbers are what
 this machine produced; they are not universal guarantees.
 
@@ -70,6 +70,18 @@ scenarios (peak 265.7 MB at 4K). Private bytes exceed 300 MB at 4K because the
 GPU/driver surfaces and the video swapchain are charged to the process; this is
 reported honestly rather than trimmed by a smaller measurement window.
 
+## What changed in 1.3.6
+
+- Chrome blur: the blur target may now be the whole chrome band (edge-extended
+  bitmap plus a cached source-pixel map). The per-frame Gaussian cost is
+  unchanged; the extra work is scaling a source map of at most 2× the target
+  size, only while the chrome is visible.
+- Thumbnails: "preview while generating" never adds background work. When it is
+  off, hover returns immediately instead of queueing a decode while a pass is
+  incomplete, so a partially generated file does less work than before.
+- The PiP placeholder is static XAML with theme resources; no measurable cost.
+- Counts: 11 pages / 132 rows / 581 keys; 876 tests. Startup, memory and the
+  blur cost were not re-measured for 1.3.6.
 ## What changed in 1.3.5
 
 - The blur readback now covers only the video rectangle. In a tall window with

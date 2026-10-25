@@ -264,6 +264,13 @@ public static class SettingsCatalog
             (settings, value) => settings.ThumbnailHoverDelayMs =
                 ThumbnailPolicy.ClampHoverDelayMilliseconds((int)Math.Round(value)),
             "thumbnail hover delay instant 缩略图 悬停 延迟 毫秒 即时"));
+        rows.Add(BoolRow(
+            "video.thumbnail-preview-while-generating", SettingsPageId.Video, "缩略图",
+            "生成完成前允许预览",
+            "关闭（默认，与 IINA 一致）：整片缩略图生成完成前，悬停进度条不显示预览，也不会按需解码；打开：预生成过程中就允许边生成边预览。即时预览模式没有整片生成过程，不受此开关影响。",
+            settings => settings.ThumbnailPreviewWhileGenerating,
+            (settings, value) => settings.ThumbnailPreviewWhileGenerating = value,
+            "thumbnail preview while generating iina ready partial 缩略图 生成 完成 前 允许 预览 边生成 边预览"));
         rows.Add(NumberRow(
             "video.thumbnail-width", SettingsPageId.Video, "缩略图",
             "缩略图宽度", "80–320 DIP；高度按视频比例计算。",

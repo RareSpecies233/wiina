@@ -105,4 +105,81 @@ public class VideoDisplayRectTests
         Assert.True(VideoDisplayRect.Clamp(new DisplayRect(0, 0, 0, 0), 1000, 500).IsEmpty);
         Assert.True(VideoDisplayRect.Clamp(new DisplayRect(1000, 0, 10, 10), 1000, 500).IsEmpty);
     }
+
+    [Fact]
+    public void ExtendedSizeFollowsWidgetAspect()
+    {
+        // Tall widget (506x993): the extended bitmap must be as tall as the
+        // widget so it can be stretched uniformly instead of distorted.
+        (int width, int height) = VideoDisplayRect.ExtendedSize(320, 506, 993);
+        Assert.Equal(320, width);
+        Assert.Equal(628, height);
+
+        (int wideWidth, int wideHeight) = VideoDisplayRect.ExtendedSize(320, 1000, 500);
+        Assert.Equal(320, wideWidth);
+        Assert.Equal(160, wideHeight);
+    }
+
+    [Fact]
+    public void ExtendedSizeFallsBackToSquareForInvalidWidget()
+    {
+        Assert.Equal((320, 320), VideoDisplayRect.ExtendedSize(320, 0, 500));
+        Assert.Equal((320, 320), VideoDisplayRect.ExtendedSize(320, double.NaN, 500));
+        Assert.Equal((1, 2), VideoDisplayRect.ExtendedSize(0, 506, 993));
+    }
+
+    [Fact]
+    public void ExtendedMapKeepsCentreProportional()
+    {
+        // 16:9 frame inside a tall widget: the centre pixel of the extended
+        // bitmap must still land on the centre of the frame.
+        var display = new DisplayRect(0, 354, 506, 285);
+        Assert.True(VideoDisplayRect.TryMapExtended(
+            160, 314, 320, 628, display, 506, 993, 320, 180,
+            out int x, out int y));
+        Assert.InRange(x, 158, 161);
+        Assert.InRange(y, 88, 91);
+    }
+
+    [Fact]
+    public void ExtendedMapClampsLetterboxBarsToFrameEdge()
+    {
+        var display = new DisplayRect(0, 354, 506, 285);
+        // Top bar (y=20) and bottom bar (y=600) both replicate the frame edges.
+        Assert.True(VideoDisplayRect.TryMapExtended(
+            160, 20, 320, 628, display, 506, 993, 320, 180, out _, out int topY));
+        Assert.Equal(0, topY);
+        Assert.True(VideoDisplayRect.TryMapExtended(
+            160, 600, 320, 628, display, 506, 993, 320, 180, out _, out int bottomY));
+        Assert.Equal(179, bottomY);
+    }
+
+    [Fact]
+    public void ExtendedMapClampsPillarboxSidesAndCorners()
+    {
+        // Wide widget (1000x500) with a 4:3 frame in the middle: the left edge is
+        // outside the frame on the x axis, the bottom-right corner clamps both.
+        var display = new DisplayRect(312.5, 0, 375, 500);
+        Assert.True(VideoDisplayRect.TryMapExtended(
+            5, 80, 320, 160, display, 1000, 500, 320, 240, out int leftX, out _));
+        Assert.Equal(0, leftX);
+        Assert.True(VideoDisplayRect.TryMapExtended(
+            319, 159, 320, 160, display, 1000, 500, 320, 240, out int cornerX, out int cornerY));
+        Assert.Equal(319, cornerX);
+        Assert.Equal(238, cornerY);
+    }
+
+    [Fact]
+    public void ExtendedMapRejectsInvalidInput()
+    {
+        var display = new DisplayRect(0, 0, 100, 100);
+        Assert.False(VideoDisplayRect.TryMapExtended(
+            -1, 0, 320, 160, display, 100, 100, 320, 180, out _, out _));
+        Assert.False(VideoDisplayRect.TryMapExtended(
+            0, 0, 320, 160, default, 100, 100, 320, 180, out _, out _));
+        Assert.False(VideoDisplayRect.TryMapExtended(
+            0, 0, 0, 160, display, 100, 100, 320, 180, out _, out _));
+        Assert.False(VideoDisplayRect.TryMapExtended(
+            0, 0, 320, 160, display, 100, 100, 0, 180, out _, out _));
+    }
 }

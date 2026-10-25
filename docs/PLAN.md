@@ -3,7 +3,7 @@
 > **状态：历史文档，不再是当前计划。** 这是 v1 开工前的规划与范围草案；实际发布以
 > README 与 `docs/acceptance/` 为准。下列条目已被实现推翻或补齐，阅读时请以标注为准：
 >
-> | 计划中的说法 | 实际（v1.3.5） |
+> | 计划中的说法 | 实际（v1.3.6） |
 > |---|---|
 > | 设置窗口 600×480、“严格按规格” | 默认 **760×600 DIP**，最小 600×440 |
 > | 设置 11 页 | 1.2.3 起 12 页（新增「文件关联」）；1.3.0 起回到 **11 页**（工具页并入高级） |
@@ -67,6 +67,10 @@
 | OSC 按钮会吃掉 Space/Enter | 1.3.2 起媒体 chrome 退出 Tab 顺序与点击聚焦，小窗/全屏 Tab 回到 RootGrid |
 | 测试 780 项 | 1.3.2 为 **827 项**（新增截图命名与设备丢失分类测试） |
 | 光标隐藏 1.3.1 仍不稳定 | 1.3.2 起真正修复（进程内 IAT hook，实测 `hCursor=0`），1.3.0/1.3.1 的历史结论见 `docs/reports/known-issues-1.3.1.md` |
+| 1.3.6 计数 | 11 页 / 132 行 / 581 键、876 项测试；光标隐藏仍未解决 |
+| 毛玻璃只覆盖视频矩形，黑边留色带 | 1.3.6 起边缘外扩铺满 chrome（`VideoDisplayRect.ExtendedSize` / `TryMapExtended`），黑边区复制画面边缘；无 `osd-dimensions` 边距时回退 1.3.5 行为 |
+| 缩略图未生成完无法预览 | 1.3.6 新增「生成完成前允许预览」（默认关，`video.thumbnail-preview-while-generating`）；即时模式恒允许、不受影响 |
+| PiP 占位文字不跟随主题 | 1.3.6 起 `PipPlaceholder` 使用 `AppBackgroundBrush` / `PrimaryTextBrush` / `SecondaryTextBrush` / `AccentButtonStyle` |
 >
 > 原始确认记录保留如下，仅作历史。
 

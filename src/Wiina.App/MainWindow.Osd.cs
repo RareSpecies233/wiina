@@ -584,6 +584,8 @@ public sealed partial class MainWindow
             _thumbnailService.SetPreviewEnabled(_settings.ThumbnailPreviewEnabled);
             _thumbnailService.SetMode(_settings.ThumbnailMode);
             _thumbnailService.SetHoverDelayMilliseconds(_settings.ThumbnailHoverDelayMs);
+            _thumbnailService.SetPreviewWhileGenerating(
+                _settings.ThumbnailPreviewWhileGenerating);
         }
 
         return _thumbnailService;

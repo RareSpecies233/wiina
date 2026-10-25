@@ -180,6 +180,13 @@ public sealed partial class MainWindow
                 _thumbnailService?.SetHoverDelayMilliseconds(
                     _settings.ThumbnailHoverDelayMs);
                 break;
+            case "video.thumbnail-preview-while-generating":
+                // Live apply: the service re-reads the flag on every hover, so
+                // turning it on shows partial results immediately and turning it
+                // back off re-hides previews until the current pass finishes.
+                _thumbnailService?.SetPreviewWhileGenerating(
+                    _settings.ThumbnailPreviewWhileGenerating);
+                break;
             case "video.thumbnail-slow":
                 // Live apply: slow mode turns off whole-file pre-generation and                // throttles the single extraction worker; hover still reads the
                 // memory/disk caches, so nothing reloads.
