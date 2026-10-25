@@ -274,6 +274,8 @@ flowchart TD
 
 ## 14. 相关文档
 
+- [缩略图 v1.3.8 改造方案](../reports/thumbnails-v1.3.8-plan.md) — 本轮**只出方案，未改代码**：慢速模式三套语义的根因、有效模式与磁盘缓存策略、关键帧 seek 开关（`video.thumbnail-keyframe-seek`，默认关，尚未进入设置）、即时模式 UX 状态机（`ThumbnailOutcome`，无 spinner、保留上一帧）、macOS 与本机 30–50 s 差距拆解（2.85× 帧数、疑似 hwdec 回退、20 ms 轮询地板）与分阶段实施顺序。
+
 - [缩略图性能优化可行性（v1.3.7，仅报告）](../reports/thumbnails-optimization-1.3.7.md)
 
 - [性能测量](../performance.md) — 缩略图各档耗时与占用。

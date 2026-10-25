@@ -1,8 +1,8 @@
-# Performance measurements (v1.3.7)
+# Performance measurements (v1.3.8)
 
 Measured on the development machine on 2026-10-19 (Asia/Hong_Kong), at v1.0.0.
 The numbers below are the historical baseline; they were **not** re-measured
-for 1.2.4 through 1.3.7 (see the per-version notes below for
+for 1.2.4 through 1.3.8 (see the per-version notes below for
 the known deltas). Numbers are what
 this machine produced; they are not universal guarantees.
 
@@ -70,6 +70,18 @@ scenarios (peak 265.7 MB at 4K). Private bytes exceed 300 MB at 4K because the
 GPU/driver surfaces and the video swapchain are charged to the process; this is
 reported honestly rather than trimmed by a smaller measurement window.
 
+## What changed in 1.3.8
+
+- No runtime performance change: the three fixes are focus/activation logic. The
+  settings-window fix avoids re-navigation work on a repeated open, and the two
+  input fixes remove a redundant focus push (if anything, slightly less work per
+  click).
+- The thumbnail plan is analysis only. Its numbers (2.85x frame count vs IINA,
+  the suspected hwdec fallback, the 20 ms poll floor, the projected 5-7 s saving)
+  come from the existing measurements and static code reading; nothing was
+  measured this round.
+- Counts: 11 pages / 132 rows / 581 keys; 909 tests. Startup, memory, blur and
+  thumbnail timings were not re-measured for 1.3.8.
 ## What changed in 1.3.7
 
 - Thumbnail budget analysis (report only, no code change): a 23:40 file takes

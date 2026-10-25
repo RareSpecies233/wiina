@@ -1,7 +1,24 @@
-# Known issues — Wiina v1.3.7
+# Known issues — Wiina v1.3.8
 
-Nothing here is hidden; these are known limitations of the v1.3.7 build. The full decision list (with fix cost and checkboxes) lives in [../reports/known-issues-1.3.1.md](../reports/known-issues-1.3.1.md).
+Nothing here is hidden; these are known limitations of the v1.3.8 build. The full decision list (with fix cost and checkboxes) lives in [../reports/known-issues-1.3.1.md](../reports/known-issues-1.3.1.md).
 
+## What changed in 1.3.8
+
+- Opening Settings while it is already open no longer resets the page: a plain
+  request only activates the window; explicit page/row requests still navigate.
+  Scroll position is preserved while the window stays open, but is not persisted
+  across close/reopen.
+- The fullscreen sidebar dead zone was a real mouse bug, not just a mechanism
+  issue: the 1.3.7 focus guard stole focus on pointer press and WinUI cancelled
+  the click. Pointer focus is now left alone; keyboard Tab is still intercepted.
+  Verified on a single 2560x1325 @ 100% DPI monitor only.
+- The PiP placeholder's restore button works: the video drag handler no longer
+  runs in PiP. Same single-monitor limit.
+- The mini player's sidebar was not re-run separately (same focus guard).
+- Thumbnails: 1.3.8 ships a plan only (`../reports/thumbnails-v1.3.8-plan.md`);
+  slow-mode rework, the keyframe switch, the instant-mode UX and the 20 ms poll
+  floor are not implemented.
+- Cursor hiding is still unsolved and unchanged in 1.3.8.
 ## What changed in 1.3.7
 
 - The fullscreen sidebar dead zone was fixed at the mechanism level (caption
@@ -162,7 +179,7 @@ a unit test rejects ASS markup. The statistics panel remains the detailed view.
 
 ## Cursor hiding (still not solved)
 
-Status: **not solved.** The 1.3.2 hook below is the last attempt; it still loses to the WinUI input stack in some configurations, and 1.3.4 / 1.3.5 / 1.3.6 / 1.3.7 changed nothing here. Treat the measurements as historical evidence for the technique, not as a fix.
+Status: **not solved.** The 1.3.2 hook below is the last attempt; it still loses to the WinUI input stack in some configurations, and 1.3.4 - 1.3.8 changed nothing here. Treat the measurements as historical evidence for the technique, not as a fix.
 
 The desktop pointer over a WinUI 3 client area is driven by the input thread
 inside Microsoft.UI.Input.dll / Microsoft.InputStateManager.dll /

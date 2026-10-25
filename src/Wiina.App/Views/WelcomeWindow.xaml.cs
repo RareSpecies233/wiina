@@ -162,7 +162,8 @@ public sealed partial class WelcomeWindow : Window
     private void OnAboutClick(object sender, RoutedEventArgs e) => App.ShowAboutWindow();
 
     private void OnSettingsClick(object sender, RoutedEventArgs e) =>
-        App.ShowSettingsWindow(SettingsPageId.General, null);
+        // Plain open: keep the page an already-open settings window is showing.
+        App.ShowSettingsWindow();
 
     private void OnOpenDataFolderClick(object sender, RoutedEventArgs e) =>
         App.OpenFolder(App.DataFolder);

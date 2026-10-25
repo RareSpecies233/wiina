@@ -56,9 +56,12 @@ public sealed partial class SettingsWindow : Window
     private int _titleDragCursorStartY;
 
     public SettingsWindow()
-        : this(ParsePage(App.Settings.SettingsPage), null)
+        : this(SettingsNavigation.ParsePage(App.Settings.SettingsPage), null)
     {
     }
+
+    /// <summary>Page currently shown; used by row-only deep links so they keep it.</summary>
+    public SettingsPageId CurrentPage => _currentPage;
 
     public SettingsWindow(SettingsPageId page, string? rowId)
     {
@@ -131,11 +134,6 @@ public sealed partial class SettingsWindow : Window
         Navigate(page, rowId);
         Activate();
     }
-
-    private static SettingsPageId ParsePage(string? value) =>
-        Enum.TryParse(value, ignoreCase: true, out SettingsPageId page)
-            ? page
-            : SettingsPageId.General;
 
     // ------------------------------------------------------------- navigation
 

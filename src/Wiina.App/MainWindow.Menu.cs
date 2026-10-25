@@ -1058,7 +1058,9 @@ public sealed partial class MainWindow
                     App.ShowLogViewerWindow();
                     break;
                 case MenuCommands.Settings:
-                    App.ShowSettingsWindow(SettingsPageId.General, null);
+                    // Plain open: activate an existing window on its current page
+                    // instead of resetting it to 通用.
+                    App.ShowSettingsWindow();
                     break;
 
                 case MenuCommands.Welcome:

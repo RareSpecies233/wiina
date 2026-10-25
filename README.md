@@ -19,12 +19,12 @@ Wiina 的发布包**没有代码签名**（个人项目无法承担可信证书�
   不驻留后台、不静默修改系统设置（文件关联只在设置页手动触发）；源码公开可审查：
   <https://github.com/RareSpecies233/wiina>。
 
-**校验下载是否完整、是否被替换**（推荐）：查看 [docs/acceptance/v1.3.7.md](docs/acceptance/v1.3.7.md)
+**校验下载是否完整、是否被替换**（推荐）：查看 [docs/acceptance/v1.3.8.md](docs/acceptance/v1.3.8.md)
 中 zip 与 setup 的 SHA-256，然后在本机对比：
 
 ```powershell
-Get-FileHash .\wiina-1.3.7-win-x64.zip    -Algorithm SHA256
-Get-FileHash .\Wiina-Setup-1.3.7-x64.exe  -Algorithm SHA256
+Get-FileHash .\wiina-1.3.8-win-x64.zip    -Algorithm SHA256
+Get-FileHash .\Wiina-Setup-1.3.8-x64.exe  -Algorithm SHA256
 ```
 
 两个哈希都与发布记录一致，就说明文件未被篡改或损坏。提示来自“未知发布者”，并不代表检测到病毒；
@@ -32,10 +32,10 @@ Wiina 不是恶意软件。
 
 > **English**: The binaries are unsigned, so SmartScreen may show “Windows protected your PC”.
 > Click **More info → Run anyway** for both the portable zip and the setup. Verify the SHA-256
-> against `docs/acceptance/v1.3.7.md` before running; the source is public at
+> against `docs/acceptance/v1.3.8.md` before running; the source is public at
 > <https://github.com/RareSpecies233/wiina>.
 
-## 状态（v1.3.7）
+## 状态（v1.3.8）
 
 - **Stage 0–8 已验收。** 播放管线、WinUI 标题栏、OSC、播放/轨道/字幕/章节/播放列表/历史、侧边栏与快速设置、
   OSD/缩略图、全屏/PiP/迷你模式/多窗口、11 页设置（含文件关联）/搜索/快捷键/菜单/欢迎与辅助窗口、
@@ -51,6 +51,15 @@ Wiina 不是恶意软件。
   [5](docs/acceptance/stage-5.md) · [6](docs/acceptance/stage-6.md) · [7](docs/acceptance/stage-7.md) ·
   [8](docs/acceptance/stage-8.md)。
 
+### v1.3.8：设置页保持、全屏侧栏点击与 PiP 恢复
+
+- **设置窗口不再被“再点一次设置”重置**：根因是 `App.ShowSettingsWindow` 的页参数默认 `General`，每次调用都被当成深链。新增 `src/Wiina.Core/Settings/SettingsNavigation.cs`（`ActivateExisting` / `NavigateThenActivate`），`App.xaml.cs:548-579` 改为 `ShowSettingsWindow(SettingsPageId? page = null, string? rowId = null)`：已打开且没有页/行参数时只前置，保留页面、滚动位置与展开状态；显式页或行才导航，行级深链保留当前页；首次打开按“请求页 → 上次页”。菜单与欢迎页改为无参调用。新增 8 个 `SettingsNavigationTests`。
+- **全屏侧栏/快速菜单点不动（真鼠标复现）**：v1.3.7 的 `OnRootGotFocus` 守卫在 pointer press 时把焦点抢回 `RootGrid`，WinUI 因此取消按钮 `Click`。现在 `MainWindow.Playback.cs:2177-2187` 在 `FocusState.Pointer` 时直接返回：页签、开关、ComboBox 弹层、滑杆恢复，键盘 Tab 仍被拦截。证据 `artifacts/v138-bugA-*.png`。
+- **PiP「恢复画中画」按钮无反应（真鼠标复现）**：`VideoFrame` 的 `OnVideoPointerPressed`（`handledEventsToo`）在 PiP 下抢走 pointer capture，按钮 `Click` 不触发。`MainWindow.Playback.cs:2546-2556` 增加 `if (InPipMode) return;`；实测 2 窗变 1 窗、主窗恢复 1920×1080。证据 `artifacts/v138-bugB-*.png`。
+- **缩略图改造：本轮只有方案报告**：新增 [缩略图 v1.3.8 改造方案](docs/reports/thumbnails-v1.3.8-plan.md)（360 行）——慢速模式三套语义的根因、有效模式/磁盘缓存策略、关键帧 seek 开关（`video.thumbnail-keyframe-seek`，默认关）、即时模式 UX 状态机、macOS 与本机 30–50 s 差距拆解与实施顺序。未改代码。
+- 诚实标注：全屏与 PiP 两项只在**单屏 2560×1325 @ 100% DPI** 真鼠标验证，迷你播放器侧栏未单独回归；光标隐藏仍未解决。
+- 计数 **11 页 / 132 行 / 581 键**；测试 **909** 项通过；产物 `wiina-1.3.8-win-x64.zip` / `Wiina-Setup-1.3.8-x64.exe`（大小与 SHA-256 待构建后写入验收页）。
+- 文档同步：[v1.3.8 验收](docs/acceptance/v1.3.8.md)。
 ### v1.3.7：全屏侧栏输入、小窗恢复、数字即时保存与播放列表顺序
 
 - **全屏下 OSC 快速菜单与侧栏可以点了**：根因是 chrome 淡入淡出时标题栏的 caption drag region 被 WinUI 重新注册，全屏时侧栏页签条正好落在标题栏条内，点击被当成拖动窗口。现在 `ApplyLayout` 每次布局调用 `SyncFullscreenInputLayers`（`src/Wiina.App/MainWindow.xaml.cs:1984` 调用，方法在 `:2001-2022`）：全屏时清空 caption region，并重新断言两个侧栏 `IsHitTestVisible = true`；两个 `SidebarHost` 同时加 `Canvas.ZIndex="2"`（`MainWindow.xaml:84`、`:89`）避免被遮挡。证据 `artifacts/v137-fullscreen-sidebar.png`（真全屏 0,0,2560,1325，侧栏切页与开关可用）。**诚实说明**：开发机没有复现用户报告的死点，这属于机制性修复；若仍遇到，下一嫌疑是 DPI/island 命中偏移。
@@ -414,9 +423,9 @@ Wiina 不是恶意软件。
 
 发布包有两种形式，都不需要单独安装 .NET 或 Windows App Runtime：
 
-1. **便携 zip**：获取 `artifacts/wiina-1.3.7-win-x64.zip`，解压到任意可写目录，运行 `Wiina.exe`；
+1. **便携 zip**：获取 `artifacts/wiina-1.3.8-win-x64.zip`，解压到任意可写目录，运行 `Wiina.exe`；
    卸载时运行同目录的 `Uninstall Wiina.exe`（可保留配置）。
-2. **安装包**：获取 `artifacts/Wiina-Setup-1.3.7-x64.exe`，按当前用户安装（默认
+2. **安装包**：获取 `artifacts/Wiina-Setup-1.3.8-x64.exe`，按当前用户安装（默认
    `%LOCALAPPDATA%\Programs\Wiina`，无需管理员），从“设置 → 应用”卸载；卸载器启动时请求
    管理员（清理 HKLM 关联），随后只询问「是否保留配置文件？」，默认保留。
 
@@ -459,16 +468,16 @@ powershell -ExecutionPolicy Bypass -File tools/fetch-libmpv.ps1
 测试覆盖设置/搜索/菜单规则、快捷键、OSC/OSD、播放列表/历史、滤镜/EQ、窗口布局/几何、边缘吸附、
 文件关联注册计划，以及 Stage 11 的本地化目录完整性、语言解析/持久化取值、打包清单与无障碍元数据契约；
 1.2.4 起还包括 DWM 可见边框换算（`FrameMarginsTests`）、画质预设归一化（`QualitySettingsTests`）与
-小窗渲染尺寸（`RenderSizeTests`）；1.2.5 扩展了画质 profile 的序列化/默认值测试；1.2.6 增加 OSC 可见性状态机测试（`OscVisibilityControllerTests`）。1.2.7 增加缩略图磁盘缓存（`ThumbnailDiskCacheTests`）与按视频尺寸缩放（`WindowSizingScaledSizeTests`）；1.3.0 增加快捷键配置测试（`KeyBindingProfileTests`/`WiinaInputDefaultsTests`）、缩略图策略（`ThumbnailPolicyTests`）、丢帧检测（`FrameDropDetectorTests`）与恢复窗口位置（`WindowSizingRestoreTests`）；1.3.1 增加缩略图缓存容量（`ThumbnailCacheSizingTests`）、快捷键配置迁移与菜单去重（`KeyBindingProfileTests`、`WiinaInputDefaultsTests`、`MenuRulesTests`）、截图字幕（`PlaybackSettingsTests`）等测试。1.3.2 增加光标隐藏（`CursorHider` 导入表钩子，需实机验证）、截图命名（`ScreenshotNamingTests`）与设备丢失分类（`DeviceLossTests`）测试；1.3.3 更新快捷键（`Ctrl+Shift+P` 画中画绑定、音乐模式动作移除）与菜单规则断言；1.3.4 增加丢帧提示文案/禁止 ASS 断言（`FrameDropNoticeTests`）、迷你入口搜索唯一性（`SettingsSearchTests`）与 PiP 键盘转发；1.3.5 增加视频显示矩形换算（`VideoDisplayRectTests`）；1.3.6 增加毛玻璃边缘外扩（`VideoDisplayRectTests` 扩展）、缩略图预生成进度（`ThumbnailPreGenerationTrackerTests`）与生成闸门（`ThumbnailPolicyTests`）测试；1.3.7 增加数字输入解析/合并（`NumberInputTests`）与自动播放列表自然排序（`PlaylistOrderingTests`）测试。当前 901 项测试在 Release 下全部通过。
+小窗渲染尺寸（`RenderSizeTests`）；1.2.5 扩展了画质 profile 的序列化/默认值测试；1.2.6 增加 OSC 可见性状态机测试（`OscVisibilityControllerTests`）。1.2.7 增加缩略图磁盘缓存（`ThumbnailDiskCacheTests`）与按视频尺寸缩放（`WindowSizingScaledSizeTests`）；1.3.0 增加快捷键配置测试（`KeyBindingProfileTests`/`WiinaInputDefaultsTests`）、缩略图策略（`ThumbnailPolicyTests`）、丢帧检测（`FrameDropDetectorTests`）与恢复窗口位置（`WindowSizingRestoreTests`）；1.3.1 增加缩略图缓存容量（`ThumbnailCacheSizingTests`）、快捷键配置迁移与菜单去重（`KeyBindingProfileTests`、`WiinaInputDefaultsTests`、`MenuRulesTests`）、截图字幕（`PlaybackSettingsTests`）等测试。1.3.2 增加光标隐藏（`CursorHider` 导入表钩子，需实机验证）、截图命名（`ScreenshotNamingTests`）与设备丢失分类（`DeviceLossTests`）测试；1.3.3 更新快捷键（`Ctrl+Shift+P` 画中画绑定、音乐模式动作移除）与菜单规则断言；1.3.4 增加丢帧提示文案/禁止 ASS 断言（`FrameDropNoticeTests`）、迷你入口搜索唯一性（`SettingsSearchTests`）与 PiP 键盘转发；1.3.5 增加视频显示矩形换算（`VideoDisplayRectTests`）；1.3.6 增加毛玻璃边缘外扩（`VideoDisplayRectTests` 扩展）、缩略图预生成进度（`ThumbnailPreGenerationTrackerTests`）与生成闸门（`ThumbnailPolicyTests`）测试；1.3.7 增加数字输入解析/合并（`NumberInputTests`）与自动播放列表自然排序（`PlaylistOrderingTests`）测试；1.3.8 增加设置打开语义（`SettingsNavigationTests`）。当前 909 项测试在 Release 下全部通过。
 
 ## 打包（可复现）
 
 ```powershell
 # 便携 zip（先构建 src/Wiina.Uninstall，再打包并校验卸载器与 Wiina.dll 版本）
-pwsh -File scripts/package.ps1 -Version 1.3.7
+pwsh -File scripts/package.ps1 -Version 1.3.8
 
 # 安装包（在便携 zip 之后；需要 Inno Setup 6 的 ISCC.exe）
-pwsh -File scripts/release.ps1 -Version 1.3.7
+pwsh -File scripts/release.ps1 -Version 1.3.8
 ```
 
 `package.ps1` 会：用 `dotnet build -c Release -r win-x64 --self-contained -p:Platform=x64 -t:Rebuild`
@@ -476,11 +485,11 @@ pwsh -File scripts/release.ps1 -Version 1.3.7
 应用出现 XBF parse 失败）→ 单独发布 `src/Wiina.Uninstall` 并把 `Uninstall Wiina.exe` 放进载荷 →
 复制构建输出、`third_party/libmpv/libmpv-2.dll`、`LICENSE`、`NOTICE`、`README.md` 并生成
 `SOURCE.txt`（源码地址 + 提交 + 构建时间）→ 校验必需文件与**待打包 `Wiina.dll` 的版本** →
-生成 `artifacts/wiina-1.3.7-win-x64.zip`。
+生成 `artifacts/wiina-1.3.8-win-x64.zip`。
 
 `release.ps1` 在便携 zip 之后解压同一份载荷到 `artifacts/publish`，用
 `%LOCALAPPDATA%\Programs\Inno Setup 6\ISCC.exe`（或 PATH / Program Files 中的 ISCC）编译
-`installer/wiina.iss`，输出 `artifacts/Wiina-Setup-1.3.7-x64.exe`，并打印两个产物的
+`installer/wiina.iss`，输出 `artifacts/Wiina-Setup-1.3.8-x64.exe`，并打印两个产物的
 大小与 SHA-256。`artifacts/` 与 `third_party/libmpv/` 均被 gitignore，仓库不提交二进制。
 缺少任一必需文件、卸载器或版本不匹配时脚本直接失败。
 
@@ -505,6 +514,7 @@ pwsh -File scripts/release.ps1 -Version 1.3.7
 ## 文档
 
 - [实施计划（历史，v1 前）](docs/PLAN.md) — 阶段、范围、验收标准；当前行为以本 README 与验收页为准
+- [v1.3.8 验收](docs/acceptance/v1.3.8.md) — 设置页保持、全屏侧栏点击、PiP 恢复与缩略图方案报告的验证清单
 - [v1.3.7 验收](docs/acceptance/v1.3.7.md) — 全屏侧栏输入、小窗恢复按钮、数字即时保存、播放列表顺序与缩略图报告的验证清单
 - [v1.3.6 验收](docs/acceptance/v1.3.6.md) — 毛玻璃满幅、生成完成前预览、占位主题与缩略图参考文档的验证清单
 - [v1.3.5 验收](docs/acceptance/v1.3.5.md) — 毛玻璃对齐、缩略图去字幕、即时预览、小窗深色与吸附抖动的验证清单
@@ -521,8 +531,9 @@ pwsh -File scripts/release.ps1 -Version 1.3.7
 - [Stage 11 验收](docs/acceptance/stage-11.md) — §19.2 清单与结果
 - [无障碍与本地化说明](docs/accessibility.md)
 - [性能测量](docs/performance.md)
-- [设置界面快照](docs/reference/settings-layout.md) — 11 页 / 132 行的完整设置清单与窗口动作（1.3.7 快照）
+- [设置界面快照](docs/reference/settings-layout.md) — 11 页 / 132 行的完整设置清单与窗口动作（1.3.8 快照）
 - [缩略图完整逻辑](docs/reference/thumbnails.md) — 两种生成模式、截取链路、内存/磁盘/预生成三级缓存、开关行为与限制（1.3.6；优化可行性见下）
+- [缩略图 v1.3.8 改造方案](docs/reports/thumbnails-v1.3.8-plan.md) — 仅方案未实施：慢速模式重构、关键帧 seek 开关、即时模式 UX、macOS 差距拆解与实施顺序
 - [缩略图优化可行性报告](docs/reports/thumbnails-optimization-1.3.7.md) — 仅调研未实施：20 ms seek 轮询地板、缩放前置、关键帧 seek、慢速模式重定义与 P0/P1/P2 路线
 - [已知问题决策清单](docs/reports/known-issues-1.3.1.md) — 30 条 P0/P1/P2，含根因、绕法与修法成本，可勾选下一轮范围
 - [IINA 缩略图调研](docs/reference/iina-thumbnails.md) — 上游实现、Wiina 现状与 1.2.7 对齐实现；1.3.1 起可选 GPU 生成与全片内存缓存

@@ -539,18 +539,32 @@ public partial class App : Application
 
     public static string CrashLogPath => Path.Combine(DataFolder, "crash.log");
 
+    /// <summary>
+    /// Opens the settings window. Pass a page (and optionally a row) only for a real
+    /// deep link; a plain call such as the main-menu 设置… item must not reset an
+    /// already-open window to 通用 — it only brings the window forward so the user
+    /// keeps their page, scroll offset and expanded sections.
+    /// </summary>
     public static void ShowSettingsWindow(
-        SettingsPageId page = SettingsPageId.General,
+        SettingsPageId? page = null,
         string? rowId = null)
     {
         if (_settingsWindow is { } existing)
         {
-            existing.NavigateTo(page, rowId);
+            if (SettingsNavigation.Decide(windowOpen: true, page, rowId) ==
+                SettingsOpenAction.NavigateThenActivate)
+            {
+                // A row-only deep link keeps the page the user is already on.
+                existing.NavigateTo(page ?? existing.CurrentPage, rowId);
+            }
+
             WindowShell.BringToForeground(existing);
             return;
         }
 
-        var window = new SettingsWindow(page, rowId);
+        var window = new SettingsWindow(
+            SettingsNavigation.InitialPage(page, Settings.SettingsPage),
+            rowId);
         _settingsWindow = window;
         window.Closed += (_, _) =>
         {

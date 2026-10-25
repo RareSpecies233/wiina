@@ -2174,6 +2174,18 @@ public sealed partial class MainWindow
             return;
         }
 
+        if (control.FocusState == FocusState.Pointer)
+        {
+            // The user just clicked this control. WinUI focuses a button on the
+            // pointer press and cancels the click when focus moves away before
+            // the release, so "guarding" pointer focus broke every clickable
+            // control that is not declared AllowFocusOnInteraction=false (the
+            // sidebar tabs, toggles, combos, ...). Keyboard focus is still
+            // intercepted by OnRootPreviewKeyDown, which is what this guard is
+            // actually for.
+            return;
+        }
+
         Trace($"focus guard: {DescribeFocusedElement()} -> RootGrid");
         RootGrid.Focus(FocusState.Programmatic);
     }
@@ -2522,6 +2534,16 @@ public sealed partial class MainWindow
     {
         var point = e.GetCurrentPoint(VideoFrame);
         if (!point.Properties.IsLeftButtonPressed)
+        {
+            return;
+        }
+
+        // PiP mode: the main window is a placeholder, not a video surface.
+        // This handler runs with handledEventsToo:true, so without this guard a
+        // press on the placeholder's restore button also starts a drag gesture
+        // and focuses RootGrid, which cancels the button's pointer capture and
+        // the Click never fires (issue 8).
+        if (InPipMode)
         {
             return;
         }

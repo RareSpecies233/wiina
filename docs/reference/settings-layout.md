@@ -1,12 +1,12 @@
-# Wiina 设置布局快照（1.3.7）
+# Wiina 设置布局快照（1.3.8）
 
-> **快照版本（1.3.7）**：本文是 v1.3.7 工作树的设置界面完整快照：**11 页 / 132 行 / 40 个页面-分节对（35 个不同分节名）/ 581 个本地化键**。
+> **快照版本（1.3.8）**：本文是 v1.3.8 工作树的设置界面完整快照：**11 页 / 132 行 / 40 个页面-分节对（35 个不同分节名）/ 581 个本地化键**。
 > 与 1.2.7（12 页 / 125 行）相比：缩略图 8 项从「界面」迁到「视频 → 缩略图」，「工具」页并入「高级 → 工具」，
 > 字体设置页与 `utilities.font` 移除，`utilities.open-url` 移到「通用 → 播放与历史」，
 > `general.screenshot-folder` 移到「视频 → 截图」，新增 `control.media-keys`。完整增删移清单见 §6.4。
 
 > **用途**：设置菜单重排的对照基线。这是一份**静态快照**（非运行时截图）；所有数字与行内容都从源码统计，
-> 日期 **2026-10-25**（Asia/Hong_Kong），分支 **`feat/v1.3.7`**。
+> 日期 **2026-10-25**（Asia/Hong_Kong），分支 **`feat/v1.3.8`**。
 >
 > **覆盖范围**：设置窗口的 11 个页面 / 132 行 / 控件与保存管线、设置能打开的全部窗口与对话框、
 > 主窗口快速设置侧栏（含重复入口）、以及仍未解决的布局问题与重构契约。
@@ -15,7 +15,7 @@
 >
 > **如何重新生成**：以 `src/Wiina.Core/Settings/SettingsCatalog.cs` 的 `BuildRows()` 为准（`rows.Add(` 共 132 处），
 > 配合 `SettingsLocalization.cs` 的英文覆盖、`AppSettings*.cs` 的默认值、`SettingsWindow.xaml.cs` 的
-> `RunActionAsync` 分支、`MainWindow.Sidebar.cs` 的 `OnQuickSettingChanged` 分支统计。行号均指 1.3.7 工作树（以 id 为准；新增行会使后续行号顺延）。
+> `RunActionAsync` 分支、`MainWindow.Sidebar.cs` 的 `OnQuickSettingChanged` 分支统计。行号均指 1.3.8 工作树（以 id 为准；新增行会使后续行号顺延）。
 
 ## 0. 关键数字
 
@@ -686,6 +686,17 @@ English：Plugins — Not implemented yet (Stage 9): placeholder and folder entr
 | 变化 | 行 id | 说明 |
 |---|---|---|
 | 无 | — | 1.3.7 不增删设置行；数字即时保存、全屏侧栏输入、小窗恢复按钮与自动播放列表排序都不涉及设置目录 |
+
+### 6.12 1.3.7 → 1.3.8 增删移清单
+
+**设置行没有变化**：仍是 11 页 / 132 行 / 40 个页面-分节对（35 个不同分节名）/ 581 个本地化键，动作行 31，英文覆盖 132 / 132，快速设置 51 个 `QuickSettingKey` → 47 个属性。
+
+1.3.8 变的是**打开语义与输入行为**，不是目录：
+
+- 菜单 / 欢迎页的“设置”改为无参 `App.ShowSettingsWindow()`：窗口已打开时只前置，不回到“通用”。显式页/行仍导航（`src/Wiina.Core/Settings/SettingsNavigation.cs`）。
+- 全屏下侧栏/快速设置的指针点击不再被 `OnRootGotFocus` 抢焦点取消（`MainWindow.Playback.cs:2177-2187` 对 `FocusState.Pointer` 直接返回）；键盘 Tab 仍被拦截。
+- PiP 下视频区的 pointer press 不再抢 capture，占位页“恢复画中画”按钮可点击（`MainWindow.Playback.cs:2546-2556`）。
+- 缩略图设置行未动；1.3.8 只新增调研报告 `docs/reports/thumbnails-v1.3.8-plan.md`，计划中的 `video.thumbnail-keyframe-seek` 行**尚未加入目录**，不要写进本快照的表格。
 
 ## 7. 附录 A：全部行 id（按字母序）
 

@@ -1,11 +1,63 @@
 # Wiina release notes
 
-Release date (1.3.7): 2026-10-25
+Release date (1.3.8): 2026-10-25
 
 Windows-native, IINA-inspired mpv front end built with WinUI 3, Windows App
 SDK 2.5, and libmpv.
 
-## What's new in 1.3.7
+## What's new in 1.3.8
+
+### Opening Settings again keeps your place
+
+`App.ShowSettingsWindow` used to default its page argument to `General`, so every
+"Settings..." click counted as a deep link and reset an open window. A new
+`src/Wiina.Core/Settings/SettingsNavigation.cs` classifies the request as
+`ActivateExisting` (no page/row: only bring the window forward, keeping the page,
+scroll offset and expanded sections) or `NavigateThenActivate` (explicit page or
+row). `App.xaml.cs:548-579` now takes `SettingsPageId? page = null`; the menu and
+the welcome window pass no arguments, row-only deep links keep the current page,
+and a first open uses the requested page or the last one. Eight
+`SettingsNavigationTests` cover the decisions.
+
+### Fullscreen sidebar clicks work again (root cause found)
+
+The 1.3.7 focus guard (`OnRootGotFocus`) pushed focus back to `RootGrid` on the
+pointer press, so WinUI cancelled the button `Click` - the sidebar tabs, toggles,
+ComboBox popups and sliders were all affected in fullscreen. The guard now returns
+early when `control.FocusState == FocusState.Pointer`
+(`src/Wiina.App/MainWindow.Playback.cs:2177-2187`); keyboard Tab is still
+intercepted. Reproduced and verified with a real mouse, fullscreen, evidence in
+`artifacts/v138-bugA-*.png`.
+
+### The PiP placeholder's restore button works
+
+`VideoFrame`'s `OnVideoPointerPressed` is registered with
+`handledEventsToo: true`; in PiP it started a drag gesture and stole the pointer
+capture, so the restore button never got its `Click`. It now returns early in PiP
+(`MainWindow.Playback.cs:2546-2556`). Verified with a real mouse: two windows
+collapse to one, the main window returns to 1920x1080 and the video comes back,
+evidence in `artifacts/v138-bugB-*.png`.
+
+### Thumbnails: a plan, not a change
+
+`docs/reports/thumbnails-v1.3.8-plan.md` (360 lines) analyses why the slow mode's
+three meanings conflict, proposes an effective-mode/disk-cache policy, a keyframe
+seek switch (`video.thumbnail-keyframe-seek`, default off), an instant-mode UX
+state machine (`ThumbnailOutcome`, no spinner, keep the previous frame) and
+breaks down the macOS 15 s vs 30-50 s gap (2.85x frame count, a possible hwdec
+fallback, the 20 ms poll floor). Nothing in this release implements it.
+
+### Limits and counts
+
+- Fullscreen and PiP were verified on a single 2560x1325 @ 100% DPI monitor with
+  a real mouse; high DPI and multi-monitor were not retested, and the mini
+  player's sidebar was not re-run separately.
+- Cursor hiding is still unsolved and was not touched in 1.3.8.
+- Settings 11 pages / 132 rows / 581 keys; tests 909; artifacts
+  `wiina-1.3.8-win-x64.zip` and `Wiina-Setup-1.3.8-x64.exe` (sizes and SHA-256 are
+  recorded in the acceptance page after packaging).
+
+## 1.3.7 — previous release
 
 ### Fullscreen sidebar input is fixed (mechanism-level)
 

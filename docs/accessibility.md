@@ -1,17 +1,21 @@
 # Accessibility, localization, DPI and motion
 
-This document records what Wiina v1.3.7 implements, how it was checked, and
+This document records what Wiina v1.3.8 implements, how it was checked, and
 what is intentionally limited. It is a summary, not a certification.
 
 ## 1. Keyboard and focus
 
 - Thumbnail `Instant` mode and its hover-delay NumberBox are ordinary keyboard
   reachable settings; the delay only affects hover previews, never playback.
+- Opening Settings from the menu while the window is already open only activates
+  it; it does not jump the page or steal focus. Explicit deep links (a page, a
+  row, or a search result) still navigate and focus the requested row.
 - Numeric settings rows are live: typed text is parsed and clamped, then applied
   after a 200 ms debounce and flushed on focus loss, page change, search,
   deactivation and close, so a screen-reader user does not have to press Enter
   before closing the window. Invalid text is ignored and the last valid value is
-  restored on commit. The video-quality editor keeps its explicit Apply step.- The thumbnail "preview while generating" switch is a normal keyboard-reachable toggle;
+  restored on commit. The video-quality editor keeps its explicit Apply step.
+- The thumbnail "preview while generating" switch is a normal keyboard-reachable toggle;
   while it is off, hover previews simply do not appear, and enabling it takes effect
   immediately without a restart.
 
