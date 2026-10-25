@@ -81,10 +81,12 @@
                                     PointerEntered="OnChromePointerEntered"
                                     PointerExited="OnChromePointerExited" />
             <controls:SidebarHost x:Name="SidebarLeading"
+                                  Canvas.ZIndex="2"
                                   HorizontalAlignment="Left"
                                   Margin="0,40,0,0"
                                   Visibility="Collapsed" />
             <controls:SidebarHost x:Name="SidebarTrailing"
+                                  Canvas.ZIndex="2"
                                   HorizontalAlignment="Right"
                                   Margin="0,40,0,0"
                                   Visibility="Collapsed" />

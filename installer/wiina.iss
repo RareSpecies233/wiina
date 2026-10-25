@@ -31,9 +31,9 @@
 
 #define MyAppName "Wiina"
 ; Overridable so a test build can be produced without touching the release
-; version: ISCC.exe /DMyAppVersion=1.3.6 installer\wiina.iss
+; version: ISCC.exe /DMyAppVersion=1.3.7 installer\wiina.iss
 #ifndef MyAppVersion
-  #define MyAppVersion "1.3.6"
+  #define MyAppVersion "1.3.7"
 #endif
 #define MyAppPublisher "Wiina contributors"
 #define MyAppUrl "https://github.com/RareSpecies233/wiina"

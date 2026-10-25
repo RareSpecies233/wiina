@@ -274,6 +274,8 @@ flowchart TD
 
 ## 14. 相关文档
 
+- [缩略图性能优化可行性（v1.3.7，仅报告）](../reports/thumbnails-optimization-1.3.7.md)
+
 - [性能测量](../performance.md) — 缩略图各档耗时与占用。
 - [1.3.1 验收](../acceptance/v1.3.1.md) — GPU 解码与整片内存缓存。
 - [1.3.2 验收](../acceptance/v1.3.2.md) — 关闭预览即零生成、删除缓存数量行。

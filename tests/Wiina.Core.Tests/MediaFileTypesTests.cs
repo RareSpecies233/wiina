@@ -98,6 +98,24 @@ public sealed class MediaFileTypesTests : IDisposable
     }
 
     [Fact]
+    public void ExpandFolderSortsEpisodesNaturally()
+    {
+        Directory.CreateDirectory(_directory);
+        foreach (string name in new[] { "EP10.mkv", "EP2.mkv", "EP1.mkv" })
+        {
+            File.WriteAllText(Path.Combine(_directory, name), string.Empty);
+        }
+
+        IReadOnlyList<string> files = MediaFileTypes.ExpandFolder(
+            _directory,
+            recursive: false);
+
+        Assert.Equal(
+            new[] { "EP1.mkv", "EP2.mkv", "EP10.mkv" },
+            files.Select(Path.GetFileName));
+    }
+
+    [Fact]
     public void ExpandNonRecursiveSkipsSubfolders()
     {
         Directory.CreateDirectory(_directory);

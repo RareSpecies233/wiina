@@ -1,11 +1,64 @@
 # Wiina release notes
 
-Release date (1.3.6): 2026-10-25
+Release date (1.3.7): 2026-10-25
 
 Windows-native, IINA-inspired mpv front end built with WinUI 3, Windows App
 SDK 2.5, and libmpv.
 
-## What's new in 1.3.6
+## What's new in 1.3.7
+
+### Fullscreen sidebar input is fixed (mechanism-level)
+
+While the chrome faded, WinUI could re-register the titlebar caption drag
+region. In fullscreen the sidebar tab strip sits inside that strip, so clicks
+turned into window drags. `ApplyLayout` now calls `SyncFullscreenInputLayers`
+(`src/Wiina.App/MainWindow.xaml.cs:1984`, helper at `:2001-2022`) on every
+layout pass: fullscreen clears the caption region again and re-asserts
+`IsHitTestVisible` on both sidebar hosts, and both hosts carry
+`Canvas.ZIndex="2"`. Evidence: `artifacts/v137-fullscreen-sidebar.png`.
+The dead zone never reproduced on the development machine, so this is a
+mechanism-level fix; if it still happens the next suspect is DPI/island
+hit-testing.
+
+### The mini player's restore button is no longer covered
+
+`PlaylistPanel` used `RowSpan=2` without a bottom margin, so an expanded playlist
+covered the 72 DIP control row (including restore). It now has
+`Margin="0,0,0,72"` (`MiniPlayerView.xaml:185-188`). Only the playlist-expanded
+case was affected; PiP regression passed and Tab still stays out of the controls.
+
+### Typed numbers save without pressing Enter
+
+A WinUI `NumberBox` only raises `ValueChanged` on commit, so typing half a value
+and closing the window lost it. New `src/Wiina.Core/Settings/NumberInput.cs`
+(culture-tolerant parse, clamp, coalesced edit) plus a 200 ms debounce and an
+inner `TextBox.TextChanged` hook in the settings window; the pending value is
+flushed on focus loss, page change, search, deactivation and close. Verified by
+typing 6.5 -> 8.5 into the auto-hide delay and closing without Enter.
+The nine spinners in the video-quality editor still use an explicit Apply step.
+
+### Auto playlist follows natural file order
+
+`src/Wiina.Core/Files/PlaylistOrdering.cs` sorts by path segments with numeric
+comparison, deduplicates, and returns the index of the file the user opened.
+Playback uses the full folder list and reorders the mpv queue with
+`playlist-move`, so "EP2, EP10, EP1" now plays in order and starts at the
+double-clicked file. Nine new tests plus a folder-expansion test.
+
+### Thumbnail optimisation remains a report
+
+`docs/reports/thumbnails-optimization-1.3.7.md` (333 lines) finds that about
+20 ms of each ~50 ms thumbnail bucket is the `Task.Delay(20)` seek-poll floor,
+that pushing the downscale into mpv should save roughly 30 %, that keyframe
+seeks only suit pre-generation, and that "slow mode" currently means "no
+pre-generation". No code changed this round; the P0/P1/P2 route is in the report.
+
+### Counts
+
+Settings 11 pages / 132 rows / 581 keys; tests 901. Cursor hiding is still
+unsolved and unchanged in 1.3.7.
+
+## 1.3.6 — previous release
 
 ### The blurred chrome now covers the whole chrome band
 
@@ -49,6 +102,7 @@ performance numbers and known limits.
 
 Settings 11 pages / 132 rows / 581 keys; tests 876. Cursor hiding is still
 unsolved and unchanged in 1.3.6.
+
 ## 1.3.5 — previous release
 
 ### The chrome blur now follows the real video rectangle
@@ -113,6 +167,7 @@ pointer capture is lost. Verified with `t62-content-rel4.csv`: sitting on the ed
 shows a visible gap of 0, 35 static frames stay constant, and moving 35 px back
 breaks away at 23 px of visible movement. Limits: measured at 100 % DPI on a single
 monitor; on a very slow machine the 16 ms pump can lag by one or two frames.
+
 ## 1.3.4 — previous release
 
 ### An unfocused window no longer wakes the OSC
@@ -172,6 +227,7 @@ configurations; treat it as unverified, not fixed.
 ### Counts
 
 Eleven pages, 129 settings rows, 571 UI strings, 833 tests.
+
 ## 1.3.3 — previous release
 
 ### Opening a chrome menu no longer hides the OSC
@@ -227,6 +283,7 @@ Eleven settings pages, 130 rows, 569 UI strings, 830 tests. Artifacts:
 `artifacts/wiina-1.3.3-win-x64.zip` and
 `artifacts/Wiina-Setup-1.3.3-x64.exe` (sizes and SHA-256 recorded in
 `docs/acceptance/v1.3.3.md` after packaging).
+
 ## 1.3.2 — previous release
 
 ### Cursor hiding actually works now
@@ -304,6 +361,7 @@ recovery path is code-verified only.
 every entry (feature / expected / fixed). New `docs/acceptance/v1.3.2.md`
 records the eleven user items, the decision table, the settings delta
 (129 -> 128 rows, 563 -> 568 keys, still eleven pages) and 827 tests.
+
 ## 1.3.1 — previous release
 
 ### Key-binding profiles: Wiina and mpv only
@@ -437,6 +495,7 @@ click-to-hide, focus-loss hiding and the auto-hide delay itself are unaffected.
 The crash dialog's "collect logs" buttons now do what they say: one opens the
 log folder, the other copies the log path. Logs stay under
 `%LOCALAPPDATA%\Wiina\logs` and are never uploaded anywhere.
+
 ### No-border fullscreen
 
 Fullscreen asks DWM to drop the window-corner rounding and the border colour,
@@ -461,6 +520,7 @@ the mpv player is destroyed) is carried forward. DXGI device-lost recovery is
 `docs/reference/iina-shortcuts.md` compares the Wiina/mpv/IINA defaults,
 `resources/mpvnet/README.md` explains the export, and the
 test suite is at 761 tests.
+
 ## 1.2.7 — previous release
 
 ### Timeline thumbnails now match IINA (pre-generated + disk cache)

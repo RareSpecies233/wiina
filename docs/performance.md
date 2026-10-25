@@ -1,8 +1,8 @@
-# Performance measurements (v1.3.6)
+# Performance measurements (v1.3.7)
 
 Measured on the development machine on 2026-10-19 (Asia/Hong_Kong), at v1.0.0.
 The numbers below are the historical baseline; they were **not** re-measured
-for 1.2.4 through 1.3.6 (see the per-version notes below for
+for 1.2.4 through 1.3.7 (see the per-version notes below for
 the known deltas). Numbers are what
 this machine produced; they are not universal guarantees.
 
@@ -70,6 +70,24 @@ scenarios (peak 265.7 MB at 4K). Private bytes exceed 300 MB at 4K because the
 GPU/driver surfaces and the video swapchain are charged to the process; this is
 reported honestly rather than trimmed by a smaller measurement window.
 
+## What changed in 1.3.7
+
+- Thumbnail budget analysis (report only, no code change): a 23:40 file takes
+  14.1-14.9 s for 285 buckets, i.e. about 50 ms per bucket, while decoding one
+  frame costs 29 ms wall / 15.6 ms CPU. The gap is dominated by the seek poll
+  floor - `ThumbnailService.cs:1124` sleeps 20 ms per poll, so every bucket pays
+  at least one 20 ms tick. Lowering it to 5 ms is estimated to bring the pass to
+  about 10 s without changing accuracy; the report keeps that as P0.
+- Slow mode currently disables pre-generation entirely, so each first hover pays
+  a cold extraction; the report proposes generating on pause, centre-outward,
+  every other bucket, instead.
+- Numeric settings now coalesce one edit burst into a single apply/save with a
+  200 ms debounce; no measurable runtime cost.
+- Auto playlist ordering sorts the folder once per file-open (`n log n` on a
+  typical folder) and reorders the mpv queue with `playlist-move`.
+- Counts: 11 pages / 132 rows / 581 keys; 901 tests. Startup, memory, blur and
+  thumbnail timings were not re-measured for 1.3.7.
+
 ## What changed in 1.3.6
 
 - Chrome blur: the blur target may now be the whole chrome band (edge-extended
@@ -82,6 +100,7 @@ reported honestly rather than trimmed by a smaller measurement window.
 - The PiP placeholder is static XAML with theme resources; no measurable cost.
 - Counts: 11 pages / 132 rows / 581 keys; 876 tests. Startup, memory and the
   blur cost were not re-measured for 1.3.6.
+
 ## What changed in 1.3.5
 
 - The blur readback now covers only the video rectangle. In a tall window with
@@ -96,6 +115,7 @@ reported honestly rather than trimmed by a smaller measurement window.
   stopped on release, so idle cost is unchanged.
 - Settings: eleven pages, 131 rows, 571 UI strings; 857 tests. Startup, memory,
   blur frame cost and 4K numbers were **not** re-measured for 1.3.5.
+
 ## What changed in 1.3.4
 
 - No new polling: the dropped-frame card is driven by the existing
@@ -108,6 +128,7 @@ reported honestly rather than trimmed by a smaller measurement window.
   applies its theme brush and `MicaBackdrop` once on entry.
 - Settings: eleven pages, 129 rows, 571 UI strings; 833 tests. Startup, memory,
   blur and 4K numbers were **not** re-measured for 1.3.4.
+
 ## What changed in 1.3.3
 
 - **Open chrome menus stop the auto-hide countdown** instead of letting a menu
@@ -124,6 +145,7 @@ reported honestly rather than trimmed by a smaller measurement window.
   surface.
 - **Counts:** 11 settings pages / 130 rows / 569 UI strings; 830 unit tests.
   Startup, memory, blur and thumbnail timings were not re-measured for 1.3.3.
+
 ## What changed in 1.3.2
 
 - **Previews off means zero thumbnail work.** With the preview master switch
@@ -146,6 +168,7 @@ reported honestly rather than trimmed by a smaller measurement window.
 - Counts for this snapshot: **11 settings pages / 128 rows**, 568 localization
   keys, **827** Core tests. Startup, memory, blur and 4K numbers were **not**
   re-measured for 1.3.2.
+
 ## What changed in 1.3.1
 
 - **Thumbnail decode can use the GPU.** The new `video.thumbnail-acceleration`
@@ -174,6 +197,7 @@ change; the key binding editor is modal; SMTC is event-driven; the frame-drop
 detector reuses one timer and a 3-second window; slow thumbnail mode *reduces*
 background I/O; and no new package references were added. Numbers below were
 not re-measured for 1.3.0.
+
 ## What changed in 1.2.7
 
 - **Thumbnail pre-generation runs once per file, off the UI thread.** After load,
@@ -203,6 +227,7 @@ not re-measured for 1.3.0.
 - Startup, memory, blur and 1080p/4K numbers were not re-measured for 1.2.7; the
   1.0.0 baseline and the 1.2.4/1.2.5/1.2.6 notes above remain the last measured
   values.
+
 ## What changed in 1.2.6
 
 - **Auto-hide idle tracking is one monotonic clock, not polling.** The main

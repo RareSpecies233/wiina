@@ -44,6 +44,9 @@ public sealed partial class SettingsWindow : Window
 
     private SettingsPageId _currentPage = SettingsPageId.General;
     private DispatcherQueueTimer? _saveTimer;
+    private DispatcherQueueTimer? _numberTimer;
+    private readonly CoalescedEdit<double> _pendingNumber = new();
+    private SettingsRowDefinition? _pendingNumberRow;
     private bool _loading;
     private bool _saving;
     private bool _applying;
@@ -83,13 +86,28 @@ public sealed partial class SettingsWindow : Window
         _saveTimer.IsRepeating = false;
         _saveTimer.Tick += (_, _) => SaveNow();
 
+        // Number rows apply while the user types; a short one-shot timer keeps a
+        // burst of keystrokes to a single apply and a single settings write.
+        _numberTimer = DispatcherQueue.CreateTimer();
+        _numberTimer.Interval = TimeSpan.FromMilliseconds(200);
+        _numberTimer.IsRepeating = false;
+        _numberTimer.Tick += (_, _) => CommitPendingNumber();
+
         RootGrid.Loaded += (_, _) => RootGrid.Focus(FocusState.Programmatic);
 
         // mpv pushes a new audio-device-list while this window may be in the
         // background; re-reading only the device picker on activation keeps it
         // current without disturbing text/number controls the user is editing.
-        Activated += (_, _) =>
+        Activated += (_, args) =>
         {
+            if (args.WindowActivationState == WindowActivationState.Deactivated)
+            {
+                // Alt-tabbing away is a commit point: a typed number must not be
+                // lost just because the box never lost focus inside the window.
+                CommitPendingNumber();
+                return;
+            }
+
             foreach ((SettingsRowDefinition row, Action refreshRow, Border _) in _rowWidgets)
             {
                 if (row.Kind == SettingsRowKind.AudioDevice)
@@ -184,6 +202,10 @@ public sealed partial class SettingsWindow : Window
 
     private void Navigate(SettingsPageId page, string? rowId = null)
     {
+        // Rebuilding the page replaces every NumberBox, so commit whatever the user
+        // typed on the page they are leaving.
+        CommitPendingNumber();
+
         if (page == SettingsPageId.KeyBindings)
         {
             // The standalone page was removed from navigation; keep stale
@@ -582,15 +604,7 @@ public sealed partial class SettingsWindow : Window
                     });
                 }
 
-                box.ValueChanged += (_, args) =>
-                {
-                    if (_loading || double.IsNaN(args.NewValue))
-                    {
-                        return;
-                    }
-
-                    Apply(row, args.NewValue, immediate: false);
-                };
+                WireNumberEditor(row, box);
                 refresh = () =>
                 {
                     _loading = true;
@@ -917,6 +931,144 @@ public sealed partial class SettingsWindow : Window
         }
     }
 
+    /// <summary>
+    /// Makes a number row live while the user types. WinUI raises
+    /// <c>ValueChanged</c> only when the text is committed (Enter, focus loss or a
+    /// spinner click), so a typed value used to be lost if the window closed first;
+    /// watching the inner text box and applying after a short debounce fixes that
+    /// without turning every keystroke into a settings write.
+    /// </summary>
+    private void WireNumberEditor(SettingsRowDefinition row, NumberBox box)
+    {
+        box.ValueChanged += (_, args) =>
+        {
+            if (_loading || double.IsNaN(args.NewValue))
+            {
+                return;
+            }
+
+            double clamped = NumberInput.Clamp(args.NewValue, row.Minimum, row.Maximum);
+            if (Math.Abs(clamped - args.NewValue) > 0.0001)
+            {
+                // Echo the legal value instead of leaving an out-of-range number on
+                // screen; the _loading guard keeps this echo from re-entering.
+                _loading = true;
+                box.Value = clamped;
+                _loading = false;
+            }
+
+            QueueNumberEdit(row, clamped);
+        };
+
+        box.LostFocus += (_, _) => CommitPendingNumber();
+
+        box.Loaded += (_, _) =>
+        {
+            if (FindDescendant<TextBox>(box) is not { } editor)
+            {
+                return;
+            }
+
+            editor.TextChanged += (_, _) =>
+            {
+                if (_loading)
+                {
+                    return;
+                }
+
+                string text = editor.Text.Trim();
+                if (text.EndsWith('.') || text.EndsWith(','))
+                {
+                    // Mid-typing "1." — waiting for the next key avoids truncating
+                    // the fraction the user is about to type.
+                    return;
+                }
+
+                // Invalid text (blank, letters, NaN, infinity) is ignored, so the
+                // previous valid value stays in settings and the box restores it on
+                // commit instead of writing garbage.
+                if (NumberInput.TryParse(text, row.Minimum, row.Maximum, out double typed))
+                {
+                    QueueNumberEdit(row, typed);
+                }
+            };
+        };
+    }
+
+    /// <summary>
+    /// Queues the newest value of a numeric row. Values that already match the
+    /// stored setting are ignored, which keeps the box's own re-formatting on commit
+    /// from applying twice.
+    /// </summary>
+    private void QueueNumberEdit(SettingsRowDefinition row, double value)
+    {
+        double current = Convert.ToDouble(row.Value(App.Settings) ?? 0);
+        if (Math.Abs(current - value) < 0.0001)
+        {
+            return;
+        }
+
+        _pendingNumberRow = row;
+        _pendingNumber.Set(value);
+        _numberTimer?.Stop();
+        _numberTimer?.Start();
+    }
+
+    /// <summary>
+    /// Applies the pending numeric edit once and, by default, writes settings once.
+    /// Called by the debounce timer and by every commit point (focus loss,
+    /// deactivation, page navigation, search filtering, window close).
+    /// </summary>
+    private void CommitPendingNumber(bool save = true)
+    {
+        _numberTimer?.Stop();
+        if (_pendingNumberRow is not { } row)
+        {
+            return;
+        }
+
+        _pendingNumberRow = null;
+        if (!_pendingNumber.TryTake(out double value))
+        {
+            return;
+        }
+
+        // Apply immediately in memory (this row can affect the player right away)
+        // and let the caller decide about the disk write.
+        Apply(row, value, immediate: false);
+        if (save)
+        {
+            SaveNow();
+        }
+        else
+        {
+            // The caller runs its own App.SaveSettings(); do not leave a stray
+            // timer that would write a second time after the window closed.
+            _saveTimer?.Stop();
+        }
+    }
+
+    private static T? FindDescendant<T>(DependencyObject root)
+        where T : DependencyObject
+    {
+        int count = VisualTreeHelper.GetChildrenCount(root);
+        for (int i = 0; i < count; i++)
+        {
+            DependencyObject child = VisualTreeHelper.GetChild(root, i);
+            if (child is T match)
+            {
+                return match;
+            }
+
+            if (FindDescendant<T>(child) is { } nested)
+            {
+                return nested;
+            }
+        }
+
+        return null;
+    }
+
     private void SaveNow()
     {
         _saveTimer?.Stop();
@@ -952,6 +1104,10 @@ public sealed partial class SettingsWindow : Window
 
     private void OnSearchChanged(object sender, TextChangedEventArgs e)
     {
+        // The page is still mounted while the search list floats above it; typing a
+        // query is a navigation-style commit point for a half-finished number.
+        CommitPendingNumber();
+
         string query = SearchBox.Text.Trim();
         if (query.Length == 0)
         {
@@ -1355,6 +1511,9 @@ public sealed partial class SettingsWindow : Window
     {
         try
         {
+            // Closing is the last commit point: apply a half-typed number before the
+            // bounds write below saves settings exactly once.
+            CommitPendingNumber(save: false);
             double scale = RootGrid.XamlRoot?.RasterizationScale ?? 1;
             App.Settings.SettingsWindowWidth = Math.Max(600, AppWindow.Size.Width / scale);
             App.Settings.SettingsWindowHeight = Math.Max(440, AppWindow.Size.Height / scale);
@@ -1370,6 +1529,7 @@ public sealed partial class SettingsWindow : Window
         App.SettingsChanged -= OnSettingsChanged;
         Loc.LanguageChanged -= OnLanguageChanged;
         _saveTimer?.Stop();
+        _numberTimer?.Stop();
         WindowShell.Detach(this);
     }
 

@@ -1981,6 +1981,44 @@ public sealed partial class MainWindow : Window
         // pointer, and the platform resets the cursor on the next move: push the
         // state that belongs to the new layout.
         UpdateCursorForChrome();
+        SyncFullscreenInputLayers();
+    }
+
+    /// <summary>True once the native caption region was cleared for the current fullscreen session.</summary>
+    private bool _captionRegionCleared;
+
+    /// <summary>
+    /// Keeps the input layers identical in windowed and fullscreen modes.
+    /// WinUI can restore the native caption drag region whenever the presenter
+    /// or the titlebar element changes; while that region exists the top strip
+    /// belongs to the non-client area, so pointer presses there start a window
+    /// drag instead of reaching XAML. In fullscreen the sidebar tab strip sits
+    /// in that same top strip, which makes every page tab dead until the
+    /// region is cleared again. Re-clearing it on each mode-changing layout
+    /// pass (and asserting the panels stay hit-testable) removes that
+    /// difference between fullscreen and maximized windows (task 69).
+    /// </summary>
+    private void SyncFullscreenInputLayers()
+    {
+        bool fullscreen = AppWindow.Presenter.Kind == AppWindowPresenterKind.FullScreen;
+        if (fullscreen)
+        {
+            // Idempotent and cheap: the region may come back on any presenter
+            // or titlebar transition, so fullscreen clears it on every pass.
+            WindowInterop.SetCaptionDragEnabled(this, false);
+            _captionRegionCleared = true;
+        }
+        else if (_captionRegionCleared)
+        {
+            // The titlebar element is restored on the way out of fullscreen,
+            // which reintroduces the region on its own.
+            _captionRegionCleared = false;
+        }
+
+        // Collapsed hosts cannot be clicked, so asserting the flag is safe and
+        // keeps a stale layout pass from silently disabling the panels.
+        SidebarLeading.IsHitTestVisible = true;
+        SidebarTrailing.IsHitTestVisible = true;
     }
 
     /// <summary>Shared edge magnet: snap threshold + breakaway hysteresis.</summary>

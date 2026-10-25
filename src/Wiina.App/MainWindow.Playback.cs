@@ -440,6 +440,7 @@ public sealed partial class MainWindow
         // Opening a single video can pull the rest of its folder into the
         // playlist. The subtitle/audio sidecar helpers still run from the
         // regular open path, so only plain playable media is expanded here.
+        int startIndex = 0;
         if (distinctInputs.Count == 1 && playable.Count == 1)
         {
             string single = distinctInputs[0].Trim('"');
@@ -452,11 +453,31 @@ public sealed partial class MainWindow
                 {
                     bool recursive =
                         _settings.AutoPlaylistMode == AutoPlaylistMode.IncludeSubfolders;
-                    playable.AddRange(MediaFileTypes
+                    IReadOnlyList<string> candidates = MediaFileTypes
                         .ExpandFolder(folder, recursive)
                         .Where(MediaFileTypes.IsPlayableMedia)
-                        .Where(path => !string.Equals(
+                        .ToArray();
+
+                    // Use the whole naturally sorted folder as the queue and
+                    // start at the opened file, so "next" is the following
+                    // episode instead of the first file in the folder.
+                    PlaylistExpansion? expansion =
+                        PlaylistOrdering.ExpandSingleFile(single, candidates);
+                    if (expansion is not null)
+                    {
+                        playable = expansion.Entries.ToList();
+                        startIndex = expansion.CurrentIndex;
+                        Trace(
+                            $"auto playlist ({playable.Count}, current={startIndex}): " +
+                            string.Join(" | ", playable));
+                    }
+                    else
+                    {
+                        // The opened file was not in the listing (permission or
+                        // race); keep the old behavior and append the others.
+                        playable.AddRange(candidates.Where(path => !string.Equals(
                             path, single, StringComparison.OrdinalIgnoreCase)));
+                    }
                 }
             }
         }
@@ -464,6 +485,10 @@ public sealed partial class MainWindow
         playable = playable
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToList();
+        if (startIndex >= playable.Count)
+        {
+            startIndex = 0;
+        }
 
         if (playable.Count == 0)
         {
@@ -486,7 +511,7 @@ public sealed partial class MainWindow
 
         _pendingSubtitles.Clear();
         _pendingSubtitles.AddRange(subtitles.Distinct(StringComparer.OrdinalIgnoreCase));
-        PlayEntries(playable);
+        PlayEntries(playable, startIndex);
     }
 
     private void CollectMediaPaths(
@@ -587,12 +612,15 @@ public sealed partial class MainWindow
         errors.Add(Loc.F("osd.urlNotFound", input));
     }
 
-    private void PlayEntries(IReadOnlyList<string> entries)
+    private void PlayEntries(IReadOnlyList<string> entries, int startIndex = 0)
     {
         if (entries.Count == 0)
         {
             return;
         }
+
+        startIndex = Math.Clamp(startIndex, 0, entries.Count - 1);
+        string current = entries[startIndex];
 
         _resumeApplied = false;
         _abLoopStage = 0;
@@ -603,24 +631,41 @@ public sealed partial class MainWindow
         TitleBar.Title = Loc.T("osd.loading");
         Title = "Wiina";
         UpdateSmtc();
-        Trace($"play entries ({entries.Count}): {string.Join(" | ", entries)}");
+        Trace($"play entries ({entries.Count}, current={startIndex}): {string.Join(" | ", entries)}");
 
-        SendPlayerCommandAsync("loadfile", entries[0], "replace");
-        for (int i = 1; i < entries.Count; i++)
+        // Open the requested file first so playback starts there, then append
+        // the rest of the queue in order. The appends would otherwise leave the
+        // opened file at index 0; playlist-move restores the sorted queue
+        // underneath the playing item, so next/previous follow the folder.
+        SendPlayerCommandAsync("loadfile", current, "replace");
+        for (int i = 0; i < entries.Count; i++)
         {
+            if (i == startIndex)
+            {
+                continue;
+            }
+
             SendPlayerCommandAsync("loadfile", entries[i], "append");
         }
 
-        BeginStreamOpen(entries[0]);
-        if (IsUrlPath(entries[0]))
+        for (int i = 0; i < startIndex; i++)
         {
-            ShowOsd(OsdMessages.NetworkOpening(ShortStreamName(entries[0]), Loc.CurrentLanguage));
+            SendPlayerCommandAsync(
+                "playlist-move",
+                (i + 1).ToString(CultureInfo.InvariantCulture),
+                i.ToString(CultureInfo.InvariantCulture));
+        }
+
+        BeginStreamOpen(current);
+        if (IsUrlPath(current))
+        {
+            ShowOsd(OsdMessages.NetworkOpening(ShortStreamName(current), Loc.CurrentLanguage));
         }
         else
         {
             ShowOsd(
                 entries.Count > 1 ? Loc.F("osd.openingCount", entries.Count) : Loc.T("osd.opening"),
-                entries.Count > 1 ? Path.GetFileName(entries[0]) : null);
+                entries.Count > 1 ? Path.GetFileName(current) : null);
         }
     }
 

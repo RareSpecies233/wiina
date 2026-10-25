@@ -25,7 +25,7 @@
 [CmdletBinding()]
 param(
     [string]$Configuration = 'Release',
-    [string]$Version = '1.3.6'
+    [string]$Version = '1.3.7'
 )
 
 $ErrorActionPreference = 'Stop'

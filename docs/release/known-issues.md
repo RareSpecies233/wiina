@@ -1,6 +1,22 @@
-# Known issues — Wiina v1.3.6
+# Known issues — Wiina v1.3.7
 
-Nothing here is hidden; these are known limitations of the v1.3.6 build. The full decision list (with fix cost and checkboxes) lives in [../reports/known-issues-1.3.1.md](../reports/known-issues-1.3.1.md).
+Nothing here is hidden; these are known limitations of the v1.3.7 build. The full decision list (with fix cost and checkboxes) lives in [../reports/known-issues-1.3.1.md](../reports/known-issues-1.3.1.md).
+
+## What changed in 1.3.7
+
+- The fullscreen sidebar dead zone was fixed at the mechanism level (caption
+  region re-cleared on every fullscreen layout pass, sidebar hosts raised and
+  kept hit-testable). The defect never reproduced on the development machine;
+  if clicks still fail, the next suspect is DPI/island hit-testing.
+- The mini player's restore button is only covered when the playlist is
+  expanded; the panel now leaves the 72 DIP control row free.
+- Numeric settings commit while typing (200 ms debounce plus flush on focus
+  loss, page change, search, deactivation and close). The video-quality
+  editor's nine spinners still require the explicit Apply step, by design.
+- Thumbnail optimisation is a report, not a change: the 20 ms `Task.Delay(20)`
+  poll floor, scaling in mpv, keyframe seeks and a redefined slow mode are
+  documented with a P0/P1/P2 route for a later decision.
+- Cursor hiding is still unsolved and unchanged in 1.3.7.
 
 ## What changed in 1.3.6
 
@@ -12,6 +28,7 @@ Nothing here is hidden; these are known limitations of the v1.3.6 build. The ful
   enabled; `Instant` mode ignores it.
 - The PiP placeholder text now follows the theme (light / dark / high contrast).
 - Cursor hiding did **not** change in 1.3.6 and remains unsolved.
+
 ## What changed in 1.3.5
 
 - The chrome blur follows the actual video rectangle now (letterbox/pillarbox
@@ -26,6 +43,7 @@ Nothing here is hidden; these are known limitations of the v1.3.6 build. The ful
 - Edge snapping no longer jitters; the fix is measured at 100 % DPI on a single
   monitor.
 - Cursor hiding did **not** change in 1.3.5 and is still not solved.
+
 ## What changed in 1.3.4
 
 - An unfocused window no longer shows the OSC on hover: the pointer handlers
@@ -41,6 +59,7 @@ Nothing here is hidden; these are known limitations of the v1.3.6 build. The ful
 - Settings -> Advanced keeps one mini-player entry, with a development warning
   and a confirmation dialog (default cancel).
 - Cursor hiding did **not** change in 1.3.4 and is not considered fixed.
+
 ## What changed in 1.3.3
 
 - Opening an OSC or title-bar menu no longer hides the chrome or the cursor:
@@ -54,6 +73,7 @@ Nothing here is hidden; these are known limitations of the v1.3.6 build. The ful
 - The frame-drop notice moved to the centre of the picture; see below.
 - Music and mini mode are reachable only from Settings → Advanced → Modes, and
   neither has a default shortcut.
+
 ## What changed in 1.3.2
 
 - Cursor hiding was attempted with an in-process IAT hook (`CursorHider`); see
@@ -127,6 +147,7 @@ exact centre with ASS tags; since 1.3.4 it is a native WinUI `Border` in the
 overlay layer (`FrameDropNotice`), centred, non-hit-testable, visible for 2.2 s
 with a 180 ms fade-out. The text is produced by `FrameDropNotice.Describe()` and
 a unit test rejects ASS markup. The statistics panel remains the detailed view.
+
 ## Screenshot file names
 
 - Screenshots are named `media-hour-minute-second-millisecond.png`
@@ -141,7 +162,7 @@ a unit test rejects ASS markup. The statistics panel remains the detailed view.
 
 ## Cursor hiding (still not solved)
 
-Status: **not solved.** The 1.3.2 hook below is the last attempt; it still loses to the WinUI input stack in some configurations, and 1.3.4 / 1.3.5 changed nothing here. Treat the measurements as historical evidence for the technique, not as a fix.
+Status: **not solved.** The 1.3.2 hook below is the last attempt; it still loses to the WinUI input stack in some configurations, and 1.3.4 / 1.3.5 / 1.3.6 / 1.3.7 changed nothing here. Treat the measurements as historical evidence for the technique, not as a fix.
 
 The desktop pointer over a WinUI 3 client area is driven by the input thread
 inside Microsoft.UI.Input.dll / Microsoft.InputStateManager.dll /
@@ -178,6 +199,7 @@ image.
 Single-worker mode trades first-hover latency for lower CPU: pre-generation is
 skipped, and each hovered bucket is generated on demand (cache hits are still
 instant). The default mode (pre-generation) is unchanged.
+
 ## Scope decisions
 
 - **Plugins (Stage 9) are not implemented.** There is no plugin API, no
@@ -243,6 +265,7 @@ instant). The default mode (pre-generation) is unchanged.
 - Measured on a 1080p 23:40 HEVC file: cold pre-generation 14.1–14.9 s for 285
   buckets, warm start 0.3 s, hover 73 ms cold / 4 ms warm, 1.70 MB on disk.
   Research comparison with IINA: [../reference/iina-thumbnails.md](../reference/iina-thumbnails.md).
+
 ## Audio output device
 
 - The dropdown is fed by mpv's `audio-device-list`. Before the first player
@@ -300,6 +323,7 @@ instant). The default mode (pre-generation) is unchanged.
 - There is no default shortcut and the shortcut editor no longer lists these
   actions. Picture-in-picture still has `Ctrl+Shift+P` (shipped Wiina profile),
   and the 窗口 menu label is derived from that profile rather than hard-coded.
+
 ## Chrome blur over video
 
 - **The three glass modes cost a capture readback.** In 固定 / 动态 / 始终 the
@@ -330,6 +354,7 @@ instant). The default mode (pre-generation) is unchanged.
   plain tint, so a tall window with 16:9 content no longer stretches the blur.
   Limits: 150 % DPI and PiP were not verified, and panscan/zoom with negative
   margins uses the aspect-fit fallback.
+
 ## Live theme switching
 
 - Settings, the quick-settings menu and the player window now apply a theme
@@ -391,6 +416,7 @@ instant). The default mode (pre-generation) is unchanged.
   static frames constant, breakaway at 23 px of visible movement.
 - Limits: the snapping measurements are 100 % DPI, single monitor; the 16 ms
   pump can lag one or two frames on a very slow machine.
+
 ## File associations
 
 - Two modes exist. **Per-user** (default, no admin): `HKCU\Software\Classes`
@@ -412,6 +438,7 @@ instant). The default mode (pre-generation) is unchanged.
   denies the delete, the system default is simply left for the user to change.
 - Machine-wide registration affects every user on the PC; portable copies that
   move after registering keep stale paths until re-registered or unregistered.
+
 ## Installer and portable uninstaller
 
 - The installer is unsigned, so SmartScreen may warn. It installs per user

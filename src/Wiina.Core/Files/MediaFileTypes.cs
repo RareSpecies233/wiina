@@ -124,7 +124,7 @@ public static class MediaFileTypes
             return Directory
                 .EnumerateFiles(folder, "*", options)
                 .Where(file => IsPlayableMedia(file) || IsPlaylist(file))
-                .OrderBy(file => file, StringComparer.OrdinalIgnoreCase)
+                .OrderBy(file => file, PlaylistOrdering.NaturalComparer)
                 .ToArray();
         }
         catch

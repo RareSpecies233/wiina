@@ -1,12 +1,12 @@
-# Wiina 设置布局快照（1.3.6）
+# Wiina 设置布局快照（1.3.7）
 
-> **快照版本（1.3.6）**：本文是 v1.3.6 工作树的设置界面完整快照：**11 页 / 132 行 / 40 个页面-分节对（35 个不同分节名）/ 581 个本地化键**。
+> **快照版本（1.3.7）**：本文是 v1.3.7 工作树的设置界面完整快照：**11 页 / 132 行 / 40 个页面-分节对（35 个不同分节名）/ 581 个本地化键**。
 > 与 1.2.7（12 页 / 125 行）相比：缩略图 8 项从「界面」迁到「视频 → 缩略图」，「工具」页并入「高级 → 工具」，
 > 字体设置页与 `utilities.font` 移除，`utilities.open-url` 移到「通用 → 播放与历史」，
 > `general.screenshot-folder` 移到「视频 → 截图」，新增 `control.media-keys`。完整增删移清单见 §6.4。
 
 > **用途**：设置菜单重排的对照基线。这是一份**静态快照**（非运行时截图）；所有数字与行内容都从源码统计，
-> 日期 **2026-10-25**（Asia/Hong_Kong），分支 **`feat/v1.3.6`**。
+> 日期 **2026-10-25**（Asia/Hong_Kong），分支 **`feat/v1.3.7`**。
 >
 > **覆盖范围**：设置窗口的 11 个页面 / 132 行 / 控件与保存管线、设置能打开的全部窗口与对话框、
 > 主窗口快速设置侧栏（含重复入口）、以及仍未解决的布局问题与重构契约。
@@ -15,7 +15,7 @@
 >
 > **如何重新生成**：以 `src/Wiina.Core/Settings/SettingsCatalog.cs` 的 `BuildRows()` 为准（`rows.Add(` 共 132 处），
 > 配合 `SettingsLocalization.cs` 的英文覆盖、`AppSettings*.cs` 的默认值、`SettingsWindow.xaml.cs` 的
-> `RunActionAsync` 分支、`MainWindow.Sidebar.cs` 的 `OnQuickSettingChanged` 分支统计。行号均指 1.3.6 工作树（以 id 为准；新增行会使后续行号顺延）。
+> `RunActionAsync` 分支、`MainWindow.Sidebar.cs` 的 `OnQuickSettingChanged` 分支统计。行号均指 1.3.7 工作树（以 id 为准；新增行会使后续行号顺延）。
 
 ## 0. 关键数字
 
@@ -641,6 +641,7 @@ English：Plugins — Not implemented yet (Stage 9): placeholder and folder entr
 | 改名 | `video.thumbnail-cache` | 改为「缩略图缓存下限」，描述改为内存至少保留的张数（实际缓存全片） |
 | 行为 | `video.thumbnail-cache-mb` | 仍为磁盘预算；内存缓存不再受此上限约束 |
 | 补齐 | 4 行英文 | `general.screenshot-folder`、`advanced.config-folder`、`advanced.log-folder`、`plugin.folder` 已有英文 |
+
 ### 6.6 1.3.1 → 1.3.2 增删移清单
 
 | 变化 | 行 id | 说明 |
@@ -648,6 +649,7 @@ English：Plugins — Not implemented yet (Stage 9): placeholder and folder entr
 | 删除 | `video.thumbnail-cache` | 内存缓存改为覆盖当前视频全部时间点，不再需要「缓存数量」下限；128 行 |
 | 行为 | 缩略图预览总开关 | 关闭时完全不生成：不建 headless mpv、不写磁盘、不做缓存定容；磁盘缓存由「缩略图磁盘缓存」单独控制 |
 | 行为 | 截图文件命名 | 由 `wiina-时间戳.png` 改为 `视频名-时-分-秒-毫秒.png`，同名递增、非法字符清洗 |
+
 ### 6.7 1.3.2 → 1.3.3 增删移清单
 
 | 变化 | 行 id | 说明 |
@@ -663,6 +665,7 @@ English：Plugins — Not implemented yet (Stage 9): placeholder and folder entr
 | 删除 | `advanced.music-mode` | 高级 → 模式只保留「迷你播放器（音乐模式）」一行；该行改名后带开发警告，点击弹确认框（默认取消），设置窗先关闭再切换 |
 | 改写 | `advanced.mini-player` | 标题「迷你播放器（音乐模式）」；说明含仍属开发中的功能，可先体验但不保证行为稳定 |
 | 不变 | 其余行 | 行 id 与顺序未变；丢帧提示改为原生 WinUI 卡片、未聚焦窗口悬停不显示 OSC、PiP 键盘转发均不涉及设置行 |
+
 ### 6.9 1.3.4 → 1.3.5 增删移清单
 
 | 变化 | 行 id | 说明 |
@@ -670,15 +673,23 @@ English：Plugins — Not implemented yet (Stage 9): placeholder and folder entr
 | 新增 | `video.thumbnail-mode` | 视频 → 缩略图，「预生成（推荐）/ 即时预览」；即时预览不预生成、不读不写磁盘缓存、不按全片定容内存缓存 |
 | 新增 | `video.thumbnail-hover-delay` | 视频 → 缩略图，0–2000 ms（步进 50，默认 250），仅即时预览使用 |
 | 不变 | 其余行 | 行 id 与顺序未变；毛玻璃矩形、缩略图字幕、小窗深色、吸附均不涉及设置行 |
+
 ### 6.10 1.3.5 → 1.3.6 增删移清单
 
 | 变化 | 行 id | 说明 |
 |---|---|---|
 | 新增 | `video.thumbnail-preview-while-generating` | 视频 → 缩略图，紧跟「缩略图悬停延迟」；默认关，关时预生成未完成不预览、不读盘、不排队解码 |
 | 不变 | 其余行 | 行 id 与顺序未变；毛玻璃边缘外扩、PiP 占位主题化均不新增设置行 |
+
+### 6.11 1.3.6 → 1.3.7 增删移清单
+
+| 变化 | 行 id | 说明 |
+|---|---|---|
+| 无 | — | 1.3.7 不增删设置行；数字即时保存、全屏侧栏输入、小窗恢复按钮与自动播放列表排序都不涉及设置目录 |
+
 ## 7. 附录 A：全部行 id（按字母序）
 
-> 1.3.5 新增 `video.thumbnail-mode`、`video.thumbnail-hover-delay` 后整体重新编号；1.3.6 再新增「生成完成前允许预览」1 行，现共 132 行；1.3.4 删除的 `advanced.music-mode` 不在表内，1.3.3 新增的 `advanced.mini-player` 仍在表内，1.3.2 删除了 `video.thumbnail-cache`。
+> 1.3.5 新增 `video.thumbnail-mode`、`video.thumbnail-hover-delay` 后整体重新编号；1.3.6 再新增「生成完成前允许预览」1 行（1.3.7 无增删），现共 132 行；1.3.4 删除的 `advanced.music-mode` 不在表内，1.3.3 新增的 `advanced.mini-player` 仍在表内，1.3.2 删除了 `video.thumbnail-cache`。
 
 | # | 行 id | 页面 / 分节 | 控件 |
 |---|---|---|---|

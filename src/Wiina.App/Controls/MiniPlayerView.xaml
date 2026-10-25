@@ -177,10 +177,15 @@
             </StackPanel>
         </Border>
 
-        <!-- Playlist panel: 300 wide (spec §10.2), overlays the right edge. -->
+        <!-- Playlist panel: 300 wide (spec §10.2), overlays the right edge of the
+             cover but must stop above the 72 DIP info/control strip: the strip
+             holds the transport and the only mouse "restore" entry, and an
+             unconstrained overlay hid the whole row (v1.3.7 restore was
+             unreachable while the playlist was open). -->
         <Border x:Name="PlaylistPanel"
                 Grid.RowSpan="2"
                 Width="300"
+                Margin="0,0,0,72"
                 HorizontalAlignment="Right"
                 Background="{ThemeResource PanelBrush}"
                 BorderBrush="{ThemeResource PanelBorderBrush}"
