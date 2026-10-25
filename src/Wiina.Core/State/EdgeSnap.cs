@@ -44,20 +44,11 @@ public readonly record struct EdgeSnapResult(WindowRect Rect, SnapEdges Edges)
 /// snaps the <em>visible</em> frame inside those invisible borders and converts
 /// the result back to the outer rect, so all four edges end up pixel-flush
 /// (issue 2). Without margins the behaviour is unchanged.
-/// Two call modes are supported:
-///
-/// <list type="bullet">
-///   <item><c>Apply(rect, area, scale)</c> — <c>rect</c> starts from the raw
-///   cursor position. Used by the app-driven drags (video surface, mini
-///   player), which compute the raw position from the pointer delta.</item>
-///   <item><c>Apply(rect, area, scale, fromApplied: true)</c> — <c>rect</c> is
-///   the rectangle Windows derived from the <em>previous, already snapped</em>
-///   position (WM_MOVING). The session keeps the per-axis offset between the
-///   raw position and the applied one, so the proposed rect can be converted
-///   back to the raw cursor position. Without this, the OS would keep proposing
-///   positions from the snapped edge and a 1 px drag could never pull the
-///   window off the magnet.</item>
-/// </list>
+/// Every caller must pass a <em>raw</em> rectangle that was computed from the
+/// pointer (never the rectangle this session returned last time): the native
+/// WM_MOVING proposal is anchored on the last applied rect, so the drag code
+/// rebuilds it from the cursor and the grab offset captured at the start of the
+/// gesture. Feeding the applied rect back in is what made the magnet drift.
 ///
 /// Snapping only changes the position; the size (16:9 aspect, minimum sizes)
 /// is never touched. Thresholds are DIP values scaled by the caller.
@@ -74,8 +65,6 @@ public sealed class EdgeSnapSession
     public const int DefaultBreakawayDip = 22;
 
     private SnapEdges _edges;
-    private int _offsetX;
-    private int _offsetY;
 
     public EdgeSnapSession(
         int snapDistanceDip = DefaultSnapDistanceDip,
@@ -110,8 +99,6 @@ public sealed class EdgeSnapSession
     public void Reset()
     {
         _edges = SnapEdges.None;
-        _offsetX = 0;
-        _offsetY = 0;
     }
 
     /// <summary>
@@ -119,17 +106,21 @@ public sealed class EdgeSnapSession
     /// is the display scale (DIP to physical pixels); the thresholds are rounded
     /// to physical pixels so 100% and 150% displays feel the same.
     ///
+    /// <paramref name="proposed"/> must be the <em>raw</em> rectangle (derived
+    /// from the cursor, not from the rectangle the previous call returned).
+    /// WM_MOVING proposals are anchored by the OS on the last applied rectangle,
+    /// so feeding the applied rect back in makes the magnet drift and flicker;
+    /// callers recover the raw rect from the cursor position instead.
+    ///
     /// <paramref name="margins"/> describes the window's invisible resize border
     /// (see <see cref="FrameMargins"/>). <paramref name="proposed"/> is the outer
-    /// rect in that case and so is the returned rect; the edge distances,
-    /// hysteresis offsets and the resulting position are all computed in the
-    /// visible frame.
+    /// rect in that case and so is the returned rect; the edge distances and the
+    /// resulting position are all computed in the visible frame.
     /// </summary>
     public EdgeSnapResult Apply(
         WindowRect proposed,
         WorkArea area,
         double scale = 1.0,
-        bool fromApplied = false,
         FrameMargins margins = default)
     {
         WindowRect visible = margins.ToVisible(proposed);
@@ -142,10 +133,8 @@ public sealed class EdgeSnapSession
         int snapPx = Math.Max(1, (int)Math.Round(SnapDistanceDip * factor));
         int breakawayPx = Math.Max(snapPx, (int)Math.Round(BreakawayDip * factor));
 
-        // Offsets are kept in visible-frame space; the margins are constant so
-        // subtracting them from both sides is equivalent to outer-frame space.
-        int rawLeft = fromApplied ? visible.Left - _offsetX : visible.Left;
-        int rawTop = fromApplied ? visible.Top - _offsetY : visible.Top;
+        int rawLeft = visible.Left;
+        int rawTop = visible.Top;
         int width = visible.Width;
         int height = visible.Height;
 
@@ -193,8 +182,6 @@ public sealed class EdgeSnapSession
             edges |= SnapEdges.Bottom;
         }
 
-        _offsetX = left - rawLeft;
-        _offsetY = top - rawTop;
         _edges = edges;
 
         // Translate the snapped visible frame back into outer window rect space
@@ -257,3 +244,4 @@ public sealed class EdgeSnapSession
         return rawStart;
     }
 }
+

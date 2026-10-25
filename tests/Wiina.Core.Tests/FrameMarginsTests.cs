@@ -207,14 +207,14 @@ public sealed class EdgeSnapFrameMarginTests
         Assert.Equal(-8, snapped.Rect.Left);
 
         // 15 px away from the applied position is still inside the breakaway.
-        EdgeSnapResult held = session.Apply(Rect(7, 150), Area, 1.0, fromApplied: true, margins: Margins);
+        EdgeSnapResult held = session.Apply(Rect(7, 150), Area, margins: Margins);
         Assert.Equal(-8, held.Rect.Left);
         Assert.Equal(SnapEdges.Left, held.Edges);
 
         // 40 px away is past the breakaway: the magnet lets go and the recovered
         // raw visible position is applied (it may overshoot by the hysteresis
         // window, exactly like the outer-rect path).
-        EdgeSnapResult released = session.Apply(Rect(32, 150), Area, 1.0, fromApplied: true, margins: Margins);
+        EdgeSnapResult released = session.Apply(Rect(32, 150), Area, margins: Margins);
         Assert.Equal(SnapEdges.None, released.Edges);
         Assert.True(released.Rect.Left > 0, "window must leave the edge after breakaway");
         Assert.Equal(8, Margins.ToVisible(released.Rect).Left - released.Rect.Left);
@@ -241,3 +241,4 @@ public sealed class EdgeSnapFrameMarginTests
         Assert.Equal(new WindowRect(0, 150, 816, 608), session.Apply(Rect(-5, 150), Area).Rect);
     }
 }
+

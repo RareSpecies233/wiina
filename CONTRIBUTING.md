@@ -24,11 +24,11 @@ powershell -ExecutionPolicy Bypass -File tools/fetch-libmpv.ps1
 
 ```powershell
 dotnet build src/Wiina.App/Wiina.App.csproj -c Debug -p:Platform=x64
-dotnet test tests/Wiina.Core.Tests/Wiina.Core.Tests.csproj -c Release   # 833 tests
+dotnet test tests/Wiina.Core.Tests/Wiina.Core.Tests.csproj -c Release   # 857 tests
 ```
 
 > 解决方案 `Wiina.slnx` 也带 x64 平台映射，但 `dotnet build Wiina.slnx -p:Platform=x64` 在当前 SDK 下会因
-> 平台名不被识别而失败；请按上面的项目构建，或用 `scripts/dev-build.ps1`。测试当前 833 项。
+> 平台名不被识别而失败；请按上面的项目构建，或用 `scripts/dev-build.ps1`。测试当前 857 项。
 
 ## 代码约定
 
@@ -57,7 +57,7 @@ dotnet test tests/Wiina.Core.Tests/Wiina.Core.Tests.csproj -c Release   # 833 te
   `docs/accessibility.md`。
 - 纯图标按钮必须有 `AutomationProperties.Name`；新动画必须同时尊重
   `AnimationsEnabled` 和系统动画设置；播放器画面/OSC 固定从左到右。
-- 打包：`pwsh -File scripts/package.ps1 -Version 1.3.4`（会校验 `Wiina.dll` 版本与便携卸载器）。修改清单时同步更新
+- 打包：`pwsh -File scripts/package.ps1 -Version 1.3.5`（会校验 `Wiina.dll` 版本与便携卸载器）。修改清单时同步更新
   `src/Wiina.Core/Release/PackageManifest.cs` 与脚本，`Stage11ReleaseTests` 会校验一致性；
   打包器还会校验 `Wiina.dll` 的文件版本必须等于 `-Version`。
 - 新增纯逻辑（吸附、几何、文件关联目录等）请配 Core 测试；现有 `EdgeSnapTests`、

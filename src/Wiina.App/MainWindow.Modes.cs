@@ -511,7 +511,11 @@ public sealed partial class MainWindow
         {
             if (suspended)
             {
-                SystemBackdrop = new MicaBackdrop();
+                // Mini chrome is forced dark, so the window backdrop is dropped
+                // entirely: Mica follows the app theme and would paint a light
+                // rim/band around the dark mini window in the light theme. A
+                // null backdrop paints that band black, matching the dark base.
+                SystemBackdrop = null;
             }
             else
             {
@@ -545,19 +549,23 @@ public sealed partial class MainWindow
         _modeResizedWindow = true;
 
         MiniPlayer.Visibility = Visibility.Visible;
+        // Mini chrome is always dark, whatever the app theme is. A light mini
+        // window beside the video looked wrong and left dark-on-light text over
+        // the cover, which was the "浅色小窗对比不对" report. Forcing the element
+        // theme makes every ThemeResource in MiniPlayerView.xaml resolve to the
+        // Dark token set (dark panels + light text, like IINA's mini player).
+        // Restored in HideMiniPlayer; normal mode, PiP and Settings are
+        // unaffected because only this subtree is themed.
+        MiniPlayer.RequestedTheme = ElementTheme.Dark;
         MiniPlayer.SetAnimationsEnabled(AnimationsEnabled);
         MiniPlayer.ResetControls();
-        // The normal root is transparent: the window backdrop (acrylic) paints
-        // it. The backdrop is suspended in mini mode, and any transparent
-        // pixel then exposes the black mpv swap chain or a dark album cover
-        // behind the info text (the light-theme "black mini window" report).
-        // Pin an opaque base matching the active theme for the mode.
+        // The normal root is transparent: the window backdrop paints it. The
+        // backdrop is suspended in mini mode, so any transparent pixel would
+        // expose the black mpv swap chain (the light-theme "black mini window"
+        // report). Pin the dark mini base that pairs with the forced dark
+        // element theme above.
         _miniBackgroundBackup = RootGrid.Background;
-        RootGrid.Background = new SolidColorBrush(MiniPlayer.ActualTheme == ElementTheme.Light
-            // Mirrors Tokens.xaml AppBackgroundBrush so the base matches the
-            // theme resource the rest of the window uses.
-            ? Windows.UI.Color.FromArgb(0xFF, 0xF7, 0xF7, 0xF7)
-            : Windows.UI.Color.FromArgb(0xFF, 0x08, 0x09, 0x0A));
+        RootGrid.Background = new SolidColorBrush(Windows.UI.Color.FromArgb(0xFF, 0x08, 0x09, 0x0A));
         // Mouse-only chrome: Tab must not park focus on a mini control, where
         // Space would press it instead of pausing. Restored on exit below.
         MiniPlayer.SetKeyboardMouseOnly(true);
@@ -600,6 +608,10 @@ public sealed partial class MainWindow
         }
 
         MiniPlayer.Visibility = Visibility.Collapsed;
+        // Mini forced a dark element theme (see EnterMiniInternal); hand the
+        // subtree back to the app theme so a later normal-mode overlay and the
+        // settings windows are unaffected.
+        MiniPlayer.RequestedTheme = ElementTheme.Default;
         MiniPlayer.SetKeyboardMouseOnly(false);
         MiniPlayer.HideVolumeBubble();
         MiniPlayer.SetPlaylistExpanded(false);

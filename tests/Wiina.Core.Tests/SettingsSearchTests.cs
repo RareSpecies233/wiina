@@ -227,6 +227,60 @@ public sealed class SettingsSearchTests
     }
 
     [Fact]
+    public void ThumbnailModeRowDefaultsToPreGenerationAndOffersInstant()
+    {
+        SettingsRowDefinition row = Assert.Single(
+            SettingsCatalog.Rows,
+            row => row.Id == "video.thumbnail-mode");
+        Assert.Equal(SettingsPageId.Video, row.Page);
+        Assert.Equal("缩略图", row.Section);
+        Assert.Equal(SettingsRowKind.Choice, row.Kind);
+        Assert.Equal(new[] { "预生成（推荐）", "即时预览" }, row.Choices);
+
+        var settings = new AppSettings();
+        Assert.Equal(ThumbnailMode.PreGenerate, settings.ThumbnailMode);
+        Assert.Equal(0, row.Value(settings));
+
+        row.Apply(settings, 1);
+        Assert.Equal(ThumbnailMode.Instant, settings.ThumbnailMode);
+        Assert.Equal(1, row.Value(settings));
+
+        // An imported settings.json with a bogus index clamps instead of throwing.
+        row.Apply(settings, 9);
+        Assert.Equal(ThumbnailMode.Instant, settings.ThumbnailMode);
+
+        row.Apply(settings, 0);
+        Assert.Equal(ThumbnailMode.PreGenerate, settings.ThumbnailMode);
+    }
+
+    [Fact]
+    public void ThumbnailHoverDelayRowIsClampedToTwoSeconds()
+    {
+        SettingsRowDefinition row = Assert.Single(
+            SettingsCatalog.Rows,
+            row => row.Id == "video.thumbnail-hover-delay");
+        Assert.Equal(SettingsPageId.Video, row.Page);
+        Assert.Equal("缩略图", row.Section);
+        Assert.Equal(SettingsRowKind.Number, row.Kind);
+        Assert.Equal(0, row.Minimum);
+        Assert.Equal(2_000, row.Maximum);
+        Assert.Equal(50, row.Step);
+
+        var settings = new AppSettings();
+        Assert.Equal(250, settings.ThumbnailHoverDelayMs);
+        Assert.Equal(250d, row.Value(settings));
+
+        row.Apply(settings, 800);
+        Assert.Equal(800, settings.ThumbnailHoverDelayMs);
+
+        // Out-of-range values are clamped by the row, not merely by the control.
+        row.Apply(settings, 9_000);
+        Assert.Equal(2_000, settings.ThumbnailHoverDelayMs);
+        row.Apply(settings, -10);
+        Assert.Equal(0, settings.ThumbnailHoverDelayMs);
+    }
+
+    [Fact]
     public void MediaKeysRowIsAToggleThatDefaultsToOn()
     {
         SettingsRowDefinition row = Assert.Single(
@@ -429,3 +483,4 @@ public sealed class SettingsSearchTests
             item => item.Id is "video.music-mode" or "video.mini-player" or "window.music-mode");
     }
 }
+

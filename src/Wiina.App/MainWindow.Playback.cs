@@ -50,6 +50,7 @@ public sealed partial class MainWindow
     private DispatcherQueueTimer? _clickTimer;
     private DispatcherQueueTimer? _suppressClickTimer;
     private DispatcherQueueTimer? _historyTimer;
+    private DispatcherQueueTimer? _dragPump;
 
     private string? _currentPath;
     private string? _currentTitle;
@@ -109,10 +110,14 @@ public sealed partial class MainWindow
         // would activate that control instead of toggling playback.
         RootGrid.GotFocus += OnRootGotFocus;
 
-        VideoFrame.PointerPressed += OnVideoPointerPressed;
-        VideoFrame.PointerMoved += OnVideoPointerMoved;
-        VideoFrame.PointerReleased += OnVideoPointerReleased;
+        // handledEventsToo: the video surface (SwapChainPanel) marks pointer input as
+        // handled once it owns the pointer, and a plain += subscription would then stop
+        // receiving PointerMoved — the content drag would start and immediately freeze.
+        VideoFrame.AddHandler(UIElement.PointerPressedEvent, new PointerEventHandler(OnVideoPointerPressed), handledEventsToo: true);
+        VideoFrame.AddHandler(UIElement.PointerMovedEvent, new PointerEventHandler(OnVideoPointerMoved), handledEventsToo: true);
+        VideoFrame.AddHandler(UIElement.PointerReleasedEvent, new PointerEventHandler(OnVideoPointerReleased), handledEventsToo: true);
         VideoFrame.PointerCaptureLost += OnVideoPointerCaptureLost;
+
         RootGrid.AddHandler(
             UIElement.PointerWheelChangedEvent,
             new PointerEventHandler(OnVideoPointerWheelChanged),
@@ -136,6 +141,14 @@ public sealed partial class MainWindow
         _suppressClickTimer.Interval = TimeSpan.FromMilliseconds(300);
         _suppressClickTimer.IsRepeating = false;
         _suppressClickTimer.Tick += (_, _) => _suppressClick = false;
+
+        // Content drag: poll the cursor while the mouse button is held. Moving the
+        // window drops the XAML pointer capture, so PointerMoved alone cannot keep
+        // the drag alive (the window stopped following the cursor after 1 px).
+        _dragPump = DispatcherQueue.CreateTimer();
+        _dragPump.Interval = TimeSpan.FromMilliseconds(16);
+        _dragPump.IsRepeating = true;
+        _dragPump.Tick += OnDragPumpTick;
 
         _historyTimer = DispatcherQueue.CreateTimer();
         _historyTimer.Interval = TimeSpan.FromSeconds(10);
@@ -2488,77 +2501,120 @@ public sealed partial class MainWindow
         // magnet with the native title-bar drag, starting from a clean gesture.
         _snapSession.Reset();
         RootGrid.Focus(FocusState.Pointer);
+        _dragPump?.Start();
     }
 
     private void OnVideoPointerMoved(object sender, PointerRoutedEventArgs e)
     {
-        if (!_windowDragCandidate)
+        if (!_windowDragCandidate && !_windowDragging)
         {
             return;
         }
 
+        DragWindowFromCursor();
+    }
+
+    /// <summary>
+    /// One content-drag step, driven either by a pointer message or by the drag
+    /// pump. Moving the window can make the XAML pointer lose its capture, so the
+    /// drag must not depend on receiving any further PointerMoved messages: the
+    /// pump keeps polling the cursor while the left button is down.
+    /// </summary>
+    private void DragWindowFromCursor()
+    {
         // Mode may have switched to fullscreen mid-gesture (shortcut, OSC, or
         // media end); never move the window from a fullscreen frame.
         if (IsFullscreen)
         {
             _windowDragCandidate = false;
             _windowDragging = false;
+            _dragPump?.Stop();
             return;
         }
 
-        Point current = e.GetCurrentPoint(RootGrid).Position;
+        if (!WindowInterop.TryGetCursorPosition(out int cursorX, out int cursorY))
+        {
+            return;
+        }
+
         if (!_windowDragging)
         {
-            double dx = current.X - _dragStartPoint.X;
-            double dy = current.Y - _dragStartPoint.Y;
-            if (Math.Sqrt((dx * dx) + (dy * dy)) < 3)
+            double dx = cursorX - _dragStartCursorX;
+            double dy = cursorY - _dragStartCursorY;
+            double threshold = 3 * Math.Max(0.1, DisplayScale);
+            if (Math.Sqrt((dx * dx) + (dy * dy)) < threshold)
             {
                 return;
             }
 
             _windowDragging = true;
-            VideoFrame.CapturePointer(e.Pointer);
             Trace("window drag started");
 
             // A maximized window must restore like a native title-bar drag; the
             // video surface is our own drag path, so it has to restore itself.
-            // The restore rebases the gesture and can drop the pointer capture,
-            // so the capture (and the drag) is re-taken afterwards.
-            if (WindowInterop.TryGetCursorPosition(out int restoreCursorX, out int restoreCursorY) &&
-                TryRestoreFromMaximized(restoreCursorX, restoreCursorY))
-            {
-                VideoFrame.CapturePointer(e.Pointer);
-            }
+            // The restore rebases the gesture, so the delta is taken afterwards.
+            TryRestoreFromMaximized(cursorX, cursorY);
         }
 
-        if (WindowInterop.TryGetCursorPosition(out int cursorX, out int cursorY))
+        int x = _windowStartX + (cursorX - _dragStartCursorX);
+        int y = _windowStartY + (cursorY - _dragStartCursorY);
+        SizeInt32 size = AppWindow.Size;
+        if (_settings.EdgeSnapping)
         {
-            int x = _windowStartX + (cursorX - _dragStartCursorX);
-            int y = _windowStartY + (cursorY - _dragStartCursorY);
-            SizeInt32 size = AppWindow.Size;
-            if (_settings.EdgeSnapping)
-            {
-                EdgeSnapResult snap = _snapSession.Apply(
-                    new WindowRect(x, y, x + size.Width, y + size.Height),
-                    WorkAreaUnderPointer(),
-                    DisplayScale,
-                    margins: SnapMargins());
-                x = snap.Rect.Left;
-                y = snap.Rect.Top;
-                ApplySnapFrame(snap.IsSnapped);
-            }
-            else
-            {
-                _snapSession.Reset();
-                ApplySnapFrame(false);
-            }
+            EdgeSnapResult snap = _snapSession.Apply(
+                new WindowRect(x, y, x + size.Width, y + size.Height),
+                WorkAreaUnderPointer(),
+                DisplayScale,
+                margins: SnapMargins());
+            x = snap.Rect.Left;
+            y = snap.Rect.Top;
+            ApplySnapFrame(snap.IsSnapped);
+        }
+        else
+        {
+            _snapSession.Reset();
+            ApplySnapFrame(false);
+        }
 
+        // Do not re-issue Move while the magnet holds the window in place:
+        // an unchanged position is already on screen, and moving it again
+        // would only add work (and a chance of a DWM flicker) per pointer
+        // message.
+        PointInt32 currentPosition = AppWindow.Position;
+        if (x != currentPosition.X || y != currentPosition.Y)
+        {
             AppWindow.Move(new PointInt32(x, y));
         }
     }
 
+    /// <summary>
+    /// Keeps the content drag alive across the window moves it performs: those
+    /// moves drop the XAML pointer capture, so waiting for PointerMoved alone
+    /// made the window stop following the cursor after the first pixel.
+    /// </summary>
+    private void OnDragPumpTick(DispatcherQueueTimer sender, object args)
+    {
+        if (!_windowDragCandidate && !_windowDragging)
+        {
+            sender.Stop();
+            return;
+        }
+
+        if (!WindowInterop.IsKeyDown(VirtualKey.LeftButton))
+        {
+            sender.Stop();
+            _windowDragCandidate = false;
+            _windowDragging = false;
+            return;
+        }
+
+        DragWindowFromCursor();
+    }
+
     private void OnVideoPointerReleased(object sender, PointerRoutedEventArgs e)
     {
+        _dragPump?.Stop();
+
         if (_windowDragging)
         {
             _suppressClick = true;
@@ -2580,8 +2636,16 @@ public sealed partial class MainWindow
 
     private void OnVideoPointerCaptureLost(object sender, PointerRoutedEventArgs e)
     {
+        // The drag itself moves the window, which drops the XAML pointer capture;
+        // that must not cancel an in-flight drag. The drag pump owns the gesture
+        // from now on and finishes when the left button is released.
+        if (_windowDragging)
+        {
+            return;
+        }
+
         _windowDragCandidate = false;
-        _windowDragging = false;
+        _dragPump?.Stop();
     }
 
     private void OnVideoPointerWheelChanged(object sender, PointerRoutedEventArgs e)
@@ -2622,3 +2686,6 @@ public sealed partial class MainWindow
         e.Handled = true;
     }
 }
+
+
+

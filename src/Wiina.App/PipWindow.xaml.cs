@@ -35,6 +35,13 @@ public sealed partial class PipWindow : Window
 
     private bool? _snapFrameApplied;
 
+    // Cursor anchor of the current drag gesture (see MainWindow.SnapMovingRect):
+    // WM_MOVING proposals are anchored on the applied rect, so the PiP snap path
+    // rebuilds the raw rect from the cursor instead of feeding it back in.
+    private int _moveAnchorX;
+    private int _moveAnchorY;
+    private bool _moveAnchorValid;
+
     /// <summary>
     /// Task-58: the main window that created this PiP surface. Captured at
     /// construction because the owner is minimized while PiP is the visible
@@ -108,7 +115,7 @@ public sealed partial class PipWindow : Window
             windowResizeStarted: null,
             windowMoveEnded: SnapToEdges,
             windowMoving: SnapMovingRect,
-            windowMoveStarted: _snapSession.Reset);
+            windowMoveStarted: OnWindowMoveStarted);
 
         Root.SizeChanged += OnRootSizeChanged;
         // Task-57: the transport buttons must never take keyboard focus, and the
@@ -303,7 +310,6 @@ public sealed partial class PipWindow : Window
             new WindowRect(position.X, position.Y, position.X + size.Width, position.Y + size.Height),
             WorkAreaUnderPointer(),
             DisplayScale,
-            fromApplied: true,
             margins: SnapMargins());
         if (result.Rect.Left != position.X || result.Rect.Top != position.Y)
         {
@@ -313,22 +319,45 @@ public sealed partial class PipWindow : Window
         ApplySnapFrame(result.IsSnapped);
     }
 
+    private void OnWindowMoveStarted()
+    {
+        _snapSession.Reset();
+        _moveAnchorValid = false;
+    }
+
     private WindowRect SnapMovingRect(WindowRect rect)
     {
         if (!App.Settings.EdgeSnapping ||
             AppWindow.Presenter is not OverlappedPresenter { State: OverlappedPresenterState.Restored })
         {
             _snapSession.Reset();
+            _moveAnchorValid = false;
             ApplySnapFrame(false);
             return rect;
         }
 
-        EdgeSnapResult result = _snapSession.Apply(
-            rect,
-            WorkAreaUnderPointer(),
-            DisplayScale,
-            fromApplied: true,
-            margins: SnapMargins());
+        // Rebuild the raw rectangle from the cursor, exactly like the main
+        // window: the OS anchors its proposal on the applied (snapped) rect, so
+        // feeding that back in made the magnet drift.
+        FrameMargins snapMargins = SnapMargins();
+        WindowRect raw = rect;
+        if (WindowInterop.TryGetCursorPosition(out int cursorX, out int cursorY))
+        {
+            if (!_moveAnchorValid)
+            {
+                _moveAnchorX = rect.Left - cursorX;
+                _moveAnchorY = rect.Top - cursorY;
+                _moveAnchorValid = true;
+            }
+
+            int width = rect.Right - rect.Left;
+            int height = rect.Bottom - rect.Top;
+            int left = cursorX + _moveAnchorX;
+            int top = cursorY + _moveAnchorY;
+            raw = new WindowRect(left, top, left + width, top + height);
+        }
+
+        EdgeSnapResult result = _snapSession.Apply(raw, WorkAreaUnderPointer(), DisplayScale, margins: snapMargins);
         ApplySnapFrame(result.IsSnapped);
         return result.Rect;
     }
@@ -520,3 +549,5 @@ public sealed partial class PipWindow : Window
         }
     }
 }
+
+

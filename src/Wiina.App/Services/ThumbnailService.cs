@@ -56,6 +56,8 @@ public sealed class ThumbnailService : IDisposable
     private volatile bool _slowMode;
     private volatile bool _cpuOnly;
     private volatile bool _previewEnabled = true;
+    private volatile bool _instantMode;
+    private volatile int _hoverDelayMs = ThumbnailPolicy.DefaultHoverDelayMilliseconds;
     private bool _restartPlayer;
     private bool _loggedDecodePath;
     private bool _disposed;
@@ -301,6 +303,104 @@ public sealed class ThumbnailService : IDisposable
     public void SetAcceleration(ThumbnailAcceleration acceleration) => Acceleration = acceleration;
 
     /// <summary>
+    /// Instant preview: no whole-file pre-generation and no disk-cache traffic —
+    /// only the frame under the pointer is decoded, after
+    /// <see cref="HoverDelayMilliseconds"/>. Frames already in the memory cache
+    /// still answer immediately, so scrubbing back over a visited position stays
+    /// cheap. Switching back to pre-generation restarts nothing by itself; the
+    /// window opens a file hook that starts the background pass again.
+    /// </summary>
+    public ThumbnailMode Mode
+    {
+        get => _instantMode ? ThumbnailMode.Instant : ThumbnailMode.PreGenerate;
+        set
+        {
+            bool instant = value == ThumbnailMode.Instant;
+            if (_instantMode == instant)
+            {
+                return;
+            }
+
+            _instantMode = instant;
+            if (instant)
+            {
+                StopPreGeneration();
+                ChangeAllQueuedToInstantLocked();
+            }
+
+            Log?.Invoke(
+                instant
+                    ? "thumbnail mode: instant (no pre-generation, no disk cache)"
+                    : "thumbnail mode: pre-generation");
+            try
+            {
+                _wake.Release();
+            }
+            catch (ObjectDisposedException)
+            {
+            }
+        }
+    }
+
+    /// <summary>Live-apply entry point used by the settings window.</summary>
+    public void SetMode(ThumbnailMode mode) => Mode = mode;
+
+    /// <summary>
+    /// Milliseconds the pointer must rest before an instant-mode extraction
+    /// starts (0–2000). Pre-generation mode ignores it because hovered frames are
+    /// already warm.
+    /// </summary>
+    public int HoverDelayMilliseconds
+    {
+        get => _hoverDelayMs;
+        set
+        {
+            int delay = ThumbnailPolicy.ClampHoverDelayMilliseconds(value);
+            if (_hoverDelayMs == delay)
+            {
+                return;
+            }
+
+            _hoverDelayMs = delay;
+            Log?.Invoke($"thumbnail hover delay: {delay} ms");
+        }
+    }
+
+    /// <summary>Live-apply entry point used by the settings window.</summary>
+    public void SetHoverDelayMilliseconds(int milliseconds) =>
+        HoverDelayMilliseconds = milliseconds;
+
+    /// <summary>
+    /// Instant mode keeps at most one pending hover job: a queued job was
+    /// requested for a position the pointer already left. The worker's in-flight
+    /// job still finishes (its frame is valid and lands in the memory cache).
+    /// </summary>
+    private void CancelPendingHoverJobsLocked()
+    {
+        lock (_gate)
+        {
+            for (int i = _queue.Count - 1; i >= 0; i--)
+            {
+                Job queued = _queue[i];
+                if (queued.Background)
+                {
+                    continue;
+                }
+
+                _queue.RemoveAt(i);
+                _jobs.Remove(queued.Id);
+                queued.Completion.TrySetResult(null);
+            }
+        }
+    }
+
+    private void ChangeAllQueuedToInstantLocked()
+    {
+        // Pre-generated jobs are already obsolete once instant mode starts.
+        CancelPendingHoverJobsLocked();
+    }
+
+    /// <summary>
     /// Requests a thumbnail for <paramref name="seconds"/>. Concurrent requests
     /// for the same source/time share one extraction. The memory cache answers
     /// immediately, the disk cache answers after an IO hop, and anything else is
@@ -340,11 +440,42 @@ public sealed class ThumbnailService : IDisposable
             return cached;
         }
 
+        bool instantHover = _instantMode && !background;
+        if (instantHover)
+        {
+            // Wait for the pointer to settle before decoding. The UI cancels the
+            // token as soon as the pointer moves on, so a scrub across the bar
+            // costs at most one extraction instead of one per position.
+            int delay = _hoverDelayMs;
+            if (delay > 0)
+            {
+                try
+                {
+                    await Task.Delay(delay, cancellationToken).ConfigureAwait(false);
+                }
+                catch (OperationCanceledException)
+                {
+                    return null;
+                }
+            }
+
+            if (!_previewEnabled || cancellationToken.IsCancellationRequested)
+            {
+                return null;
+            }
+
+            // A previous hover position is stale by definition once a newer one
+            // is being waited on; drop it before queuing this frame.
+            CancelPendingHoverJobsLocked();
+        }
+
         int height = ClampHeight(targetHeight);
         long bucket = _cache.KeyFor(seconds);
         double bucketTime = bucket * _bucketSeconds;
 
-        if (_disk is not null && durationSeconds > 0)
+        if (_disk is not null
+            && durationSeconds > 0
+            && ThumbnailPolicy.AllowsDiskCache(Mode))
         {
             var diskClock = Stopwatch.StartNew();
             ThumbnailFrame? diskFrame = await TryReadDiskAsync(
@@ -434,6 +565,14 @@ public sealed class ThumbnailService : IDisposable
             return;
         }
 
+        if (_instantMode)
+        {
+            // Instant preview never walks the timeline. Queued hover positions
+            // from the previous mode are stale, so drop them too.
+            CancelPendingHoverJobsLocked();
+            return;
+        }
+
         // Size the memory cache before any early return (slow mode, disk cache
         // disabled) so hovering still fills a cache that covers the whole file.
         SetSource(mediaPath, durationSeconds);
@@ -514,7 +653,7 @@ public sealed class ThumbnailService : IDisposable
         {
             for (long bucket = 0; bucket <= lastBucket; bucket++)
             {
-                if (ct.IsCancellationRequested || _disposed || !_previewEnabled)
+                if (ct.IsCancellationRequested || _disposed || !_previewEnabled || _instantMode)
                 {
                     return;
                 }
@@ -794,7 +933,10 @@ public sealed class ThumbnailService : IDisposable
                 (string.IsNullOrWhiteSpace(hwdec) ? "unknown" : hwdec) +
                 (_cpuOnly ? " (CPU only requested)" : " (auto)"));
         }
-        if (_previewEnabled && _disk is not null && job.Duration > 0)
+        if (_previewEnabled
+            && _disk is not null
+            && job.Duration > 0
+            && ThumbnailPolicy.AllowsDiskCache(Mode))
         {
             await WriteDiskAsync(job, frame).ConfigureAwait(false);
         }
@@ -912,7 +1054,10 @@ public sealed class ThumbnailService : IDisposable
         {
             try
             {
-                MpvScreenshot? shot = player.ScreenshotRaw();
+                // "video" drops subtitles and OSD from the capture. The headless
+                // player also starts with sid=no / sub-visibility=no, so an
+                // embedded fansub track can never be burned into a thumbnail.
+                MpvScreenshot? shot = player.ScreenshotRaw("video");
                 if (shot is not null)
                 {
                     return shot;

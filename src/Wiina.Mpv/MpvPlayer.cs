@@ -173,7 +173,12 @@ public sealed class MpvPlayer : IDisposable
                 string.IsNullOrWhiteSpace(hwdec) ? "auto-safe" : hwdec);
             SetOption("screenshot-format", "png");
             SetOption("screenshot-directory", DefaultScreenshotFolder());
-            SetOption("sub-visibility", "yes");
+
+            // The headless instance only exists to grab thumbnail frames, so it
+            // must never burn a subtitle track into them: a fansub ASS track
+            // would otherwise cover the frame (mpv renders subtitles into
+            // screenshot-raw output unless the capture asks for video only).
+            SetOption("sub-visibility", headless ? "no" : "yes");
 
             if (headless)
             {
@@ -183,6 +188,10 @@ public sealed class MpvPlayer : IDisposable
                 SetOption("hr-seek", "yes");
                 SetOption("video-sync", "audio");
                 SetOption("cache", "no");
+                SetOption("sub-auto", "no");
+                SetOption("sid", "no");
+                SetOption("secondary-sid", "no");
+                SetOption("osd-bar", "no");
             }
 
             Check(MpvInterop.mpv_initialize(_handle), "mpv_initialize");
@@ -508,32 +517,48 @@ public sealed class MpvPlayer : IDisposable
     }
 
     /// <summary>
-    /// Runs <c>screenshot-raw</c> synchronously and returns the decoded frame.
-    /// Only call this off the UI thread; a 4K frame is tens of megabytes.
+    /// Runs <c>screenshot-raw [flags…]</c> synchronously and returns the decoded
+    /// frame. Only call this off the UI thread; a 4K frame is tens of megabytes.
+    /// Pass <c>"video"</c> to capture the picture without subtitles or OSD; with
+    /// no flags mpv uses its default, which includes subtitles.
     /// </summary>
-    public unsafe MpvScreenshot? ScreenshotRaw()
+    public unsafe MpvScreenshot? ScreenshotRaw(params string[] flags)
     {
         if (_handle == 0)
         {
             throw new InvalidOperationException("MpvPlayer is not started.");
         }
 
-        nint name = Marshal.StringToCoTaskMemUTF8("screenshot-raw");
-        MpvNode* values = stackalloc MpvNode[1];
-        values[0] = new MpvNode { Data = name, Format = MpvFormat.String };
-        MpvNodeList list = new()
-        {
-            Count = 1,
-            Values = (nint)values,
-            Keys = 0,
-        };
-        MpvNode arguments = new()
-        {
-            Data = (nint)(&list),
-            Format = MpvFormat.NodeArray,
-        };
+        int extra = flags?.Length ?? 0;
+        int count = extra + 1;
+        nint* names = stackalloc nint[count];
+        MpvNode* values = stackalloc MpvNode[count];
         try
         {
+            names[0] = Marshal.StringToCoTaskMemUTF8("screenshot-raw");
+            values[0] = new MpvNode { Data = names[0], Format = MpvFormat.String };
+            for (int i = 0; i < extra; i++)
+            {
+                names[i + 1] = Marshal.StringToCoTaskMemUTF8(flags![i]);
+                values[i + 1] = new MpvNode
+                {
+                    Data = names[i + 1],
+                    Format = MpvFormat.String,
+                };
+            }
+
+            MpvNodeList list = new()
+            {
+                Count = count,
+                Values = (nint)values,
+                Keys = 0,
+            };
+            MpvNode arguments = new()
+            {
+                Data = (nint)(&list),
+                Format = MpvFormat.NodeArray,
+            };
+
             int result = MpvInterop.mpv_command_node(_handle, (nint)(&arguments), out MpvNode node);
             try
             {
@@ -552,7 +577,10 @@ public sealed class MpvPlayer : IDisposable
         }
         finally
         {
-            Marshal.FreeCoTaskMem(name);
+            for (int i = 0; i < count; i++)
+            {
+                Marshal.FreeCoTaskMem(names[i]);
+            }
         }
     }
 

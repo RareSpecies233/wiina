@@ -42,6 +42,8 @@ public static class SettingsLocalization
         ["ui.fullscreen-battery"] = new("Fullscreen battery", "Show battery and charging state in the bottom-left corner in fullscreen.", null),
         ["ui.fullscreen-title"] = new("Show title in fullscreen", "Include the current media title in the bottom-left status line.", null),
         ["video.thumbnail-preview"] = new("Timeline thumbnails", "Show a time preview and video frame when hovering the progress bar.", null),
+        ["video.thumbnail-mode"] = new("Thumbnail generation mode", "Pre-generate (recommended) walks the whole timeline in the background so hovering answers almost instantly; Instant never pre-generates and never writes the disk cache, decoding only the hovered time point after a short delay, which keeps disk and CPU use minimal.", new[] { "Pre-generate (recommended)", "Instant preview" }),
+        ["video.thumbnail-hover-delay"] = new("Thumbnail hover delay", "Instant preview only: how long the pointer must rest on the progress bar before decoding starts (0–2000 ms, step 50). Scrubbing across the bar only generates the position where it stops.", null),
         ["video.thumbnail-width"] = new("Thumbnail width", "80–320 DIP; height follows the video aspect.", null),
         ["video.thumbnail-bucket"] = new("Thumbnail interval", "Cache buckets per second; larger saves memory but is less precise.", null),
         ["video.thumbnail-cache-mb"] = new("Thumbnail disk cache", "Disk budget in megabytes; 0 disables the cache, and least-recently-used frames are evicted when the limit is exceeded.", null),

@@ -1,11 +1,75 @@
 # Wiina release notes
 
-Release date (1.3.4): 2026-10-25
+Release date (1.3.5): 2026-10-25
 
 Windows-native, IINA-inspired mpv front end built with WinUI 3, Windows App
 SDK 2.5, and libmpv.
 
-## What's new in 1.3.4
+## What's new in 1.3.5
+
+### The chrome blur now follows the real video rectangle
+
+When the window aspect did not match the video, the blurred chrome was sized from
+the whole swap chain, so it was stretched and offset. 1.3.5 adds
+`src/Wiina.Core/Playback/VideoDisplayRect.cs`: `TryFromOsd` reads mpv's
+`osd-dimensions` (`w/h/ml/mt/mr/mb`), converts to DIP with the window's
+`RasterizationScale`, sanity-checks the margins (2 px / 2 %) and falls back to a
+plain aspect-fit rectangle (`Fit`/`Clamp`) when mpv reports something odd.
+`ChromeBlur` now paints only inside that rectangle, so letterbox/pillarbox bars
+keep the plain tint and the blur no longer bleeds under the titlebar. Measured on
+a 506×993 window with 16:9 content at 100 % DPI: before, the blur covered
+`504x992` (`k = 1.575, 5.506`); after, `504x283` at `(0, 354)`, `k ≈ 1.573`.
+`WIINA_BLUR_LOG=1` prints `display/fromMpv`. Nine `VideoDisplayRectTests` cover the
+conversion and the fallbacks. Limits: 150 % DPI was not tested on real hardware,
+panscan/zoom that produce negative margins falls back to the aspect fit, and PiP
+was not verified separately.
+
+### Thumbnails no longer contain subtitles
+
+This was a real bug, not a misreading of the preview: the headless extraction
+instance also had `sub-visibility=yes` and no `sid`/`sub-auto` override, and
+`screenshot-raw` burns subtitles in by default. Now the headless instance uses
+`sub-visibility=no`, `sub-auto=no`, `sid=no`, `secondary-sid=no`, `osd-bar=no`,
+and `ScreenshotRaw` accepts flags so thumbnails request `"video"` explicitly.
+Evidence: the same Hibike file at 600 s showed the subtitle line before the fix;
+after it the thumbnail is clean and pixel-identical to `screenshot-raw video`
+(mean absolute difference 0.2022).
+
+### The mini player always uses dark chrome
+
+The mini player is an IINA-style dark surface by design: `MiniPlayer.RequestedTheme`
+is forced to `Dark`, the root is pinned to `#FF08090A`, and the system backdrop is
+suspended while it is open (all restored on exit). Contrast is about 18:1 for
+primary text and 9:1 for secondary text, and light- and dark-theme mini screenshots
+hash identically. It deliberately does **not** follow the Windows theme; following
+it later would need a separate light-token design.
+
+### Instant preview mode for thumbnails
+
+Two new rows: `video.thumbnail-mode` (`Pre-generate (recommended)` / `Instant`) and
+`video.thumbnail-hover-delay` (0–2000 ms, step 50, default 250, used only by
+Instant). Instant never pre-generates, never reads or writes the disk cache and
+does not size the whole-file memory cache; a hover waits for the delay, cancels the
+previous hover job and decodes only the current time point. Switching modes applies
+immediately, and turning previews off still generates nothing at all. Verified by
+trace: `thumbnail mode: instant`, no pre-generation entries, and the disk file
+count (3082) unchanged across a session. Limit: the automated check drives the code
+path, not a physical pointer.
+
+### Edge snapping no longer jitters
+
+The drag proposal was anchored on the previously snapped rectangle, and the
+internal offset accumulated ±2 px per `WM_MOVING`, so a snapped window hopped by
+±1–3 px; dragging from the content area also lost the one-pixel follow-up after a
+`Move`. `EdgeSnap.Apply` now takes the raw proposed rectangle only, works in integer
+physical pixels and snaps at 10 DIP / breaks away at 22 DIP; the main window and PiP
+track an anchor plus the cursor delta, skip `Move` when the position did not change,
+set DWM state only on transitions, and a 16 ms drag pump keeps tracking when the
+pointer capture is lost. Verified with `t62-content-rel4.csv`: sitting on the edge
+shows a visible gap of 0, 35 static frames stay constant, and moving 35 px back
+breaks away at 23 px of visible movement. Limits: measured at 100 % DPI on a single
+monitor; on a very slow machine the 16 ms pump can lag by one or two frames.
+## 1.3.4 — previous release
 
 ### An unfocused window no longer wakes the OSC
 

@@ -159,9 +159,29 @@ public sealed partial class MainWindow
                 }
 
                 break;
+            case "video.thumbnail-mode":
+                // Live apply: instant mode stops the background pass and drops
+                // queued hover positions; switching back restarts the walk for
+                // the file that is playing.
+                _thumbnailService?.SetMode(_settings.ThumbnailMode);
+                if (_settings.ThumbnailMode == ThumbnailMode.Instant)
+                {
+                    StopThumbnailPreGeneration();
+                }
+                else
+                {
+                    StartThumbnailPreGeneration();
+                }
+
+                break;
+            case "video.thumbnail-hover-delay":
+                // Only instant mode reads this, but applying it live keeps the
+                // next hover honest without a restart.
+                _thumbnailService?.SetHoverDelayMilliseconds(
+                    _settings.ThumbnailHoverDelayMs);
+                break;
             case "video.thumbnail-slow":
-                // Live apply: slow mode turns off whole-file pre-generation and
-                // throttles the single extraction worker; hover still reads the
+                // Live apply: slow mode turns off whole-file pre-generation and                // throttles the single extraction worker; hover still reads the
                 // memory/disk caches, so nothing reloads.
                 _thumbnailService?.SetSlowMode(_settings.ThumbnailSlowMode);
                 if (_settings.ThumbnailSlowMode)

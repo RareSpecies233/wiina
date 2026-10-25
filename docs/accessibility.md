@@ -1,9 +1,12 @@
 # Accessibility, localization, DPI and motion
 
-This document records what Wiina v1.3.4 implements, how it was checked, and
+This document records what Wiina v1.3.5 implements, how it was checked, and
 what is intentionally limited. It is a summary, not a certification.
 
 ## 1. Keyboard and focus
+
+- Thumbnail `Instant` mode and its hover-delay NumberBox are ordinary keyboard
+  reachable settings; the delay only affects hover previews, never playback.
 
 - Picture-in-Picture keeps its transport buttons out of the Tab order and
   handles the keys at the window root: Space play/pause, Enter fullscreen,
@@ -106,6 +109,12 @@ Spot check (Windows 11, “Contrast themes → Aquatic”): panels/text/icons fo
 the theme; no hardcoded white-on-white text remains in the shell. Media frames
 are user content and are not recolored.
 
+
+- The mini player uses a fixed dark surface in every theme (product choice):
+  primary text is about 18:1 against the panel and secondary text about 9:1,
+  so it stays readable under High Contrast too (the tokens flatten to system
+  colours there).
+
 ## 4. Reduced motion
 
 Animations run only when **both** the app setting (`Settings → General →
@@ -154,7 +163,7 @@ generic text containers mirror.
 
 - Runtime catalog: 571 keys in `UiStringCatalog.cs`, each with a non-empty
   zh-Hans and English string. Coverage includes the title bar, OSC, OSD, menus,
-  sidebars, quick settings, all settings pages (11 pages, 130 rows;
+  sidebars, quick settings, all settings pages (11 pages, 131 rows;
   page titles, summaries, section headers, row titles/descriptions/choices), welcome/about/log/inspector/open-URL
   dialogs, filter/equalizer windows, playlist/chapters, mini player, PiP badge,
   the 1.2.6 audio-device labels (auto/refresh/unavailable), the 1.2.7 thumbnail-cache and administrator-association labels, the 1.3.1

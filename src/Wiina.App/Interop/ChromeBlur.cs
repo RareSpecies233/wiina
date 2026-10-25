@@ -12,6 +12,7 @@ using Microsoft.UI.Xaml.Shapes;
 using Windows.Foundation;
 using Windows.UI;
 using Wiina.App.Controls;
+using Wiina.Core.Playback;
 using Wiina.Core.Settings;
 using Wiina.Mpv;
 namespace Wiina.App.Interop;
@@ -52,10 +53,12 @@ internal sealed class ChromeBlur
     private Thread? _thread;
     private volatile bool _running;
     private int _failureLogged;
+    private int _geometryDumped;
     private WriteableBitmap? _bitmap;
     private byte[]? _pending;
     private int _pendingWidth;
     private int _pendingHeight;
+    private VideoGeometry _pendingGeometry;
     private int _queued;
     private volatile bool _active = true;
     private volatile bool _fixedCaptured;
@@ -257,7 +260,7 @@ internal sealed class ChromeBlur
                     MpvScreenshot? shot = player.ScreenshotRaw();
                     if (shot is not null && shot.Pixels.Length > 0)
                     {
-                        Blur(shot);
+                        Blur(shot, ReadVideoGeometry(player));
                         if (_mode == ChromeBlurMode.Fixed)
                         {
                             _fixedCaptured = true;
@@ -304,7 +307,109 @@ internal sealed class ChromeBlur
         object? window = App.ActiveWindow;
         return window is null ? null : _playerField?.GetValue(window) as MpvPlayer;
     }
-    private void Blur(MpvScreenshot shot)
+
+    /// <summary>
+    /// Reads mpv's real video rectangle: <c>osd-dimensions</c> reports the
+    /// rendered frame size plus the letterbox/pillarbox margins, in the pixels
+    /// of mpv's window. That window is the composition swapchain sized from the
+    /// widget in physical pixels, so these values are physical pixels too and
+    /// must be divided by the XAML rasterization scale before use.
+    /// Missing or inconsistent properties surface as an invalid geometry and
+    /// the layer falls back to an aspect-fit rectangle.
+    /// </summary>
+    private VideoGeometry ReadVideoGeometry(MpvPlayer player)
+    {
+        try
+        {
+            // mpv exposes osd-dimensions as a node: w/h are the whole window
+            // (the composition surface) and ml/mt/mr/mb are the letterbox
+            // bars inside it, so the painted frame is w-ml-mr by h-mt-mb.
+            double width = player.GetPropertyDouble("osd-dimensions/w");
+            double height = player.GetPropertyDouble("osd-dimensions/h");
+            if (Environment.GetEnvironmentVariable("WIINA_BLUR_LOG") == "1")
+            {
+                DumpGeometryProperties(player);
+            }
+            if (width <= 0 || height <= 0)
+            {
+                return default;
+            }
+            double left = ReadMargin(player, "osd-dimensions/ml", "osd-dimensions/margin-l");
+            double top = ReadMargin(player, "osd-dimensions/mt", "osd-dimensions/margin-t");
+            double right = ReadMargin(player, "osd-dimensions/mr", "osd-dimensions/margin-r");
+            double bottom = ReadMargin(player, "osd-dimensions/mb", "osd-dimensions/margin-b");
+            if (left < 0 || top < 0 || right < 0 || bottom < 0)
+            {
+                // A negative margin means the video is cropped/panned beyond the
+                // window; that rectangle is not expressible here, so fall back
+                // to the aspect fit instead of painting outside the widget.
+                return default;
+            }
+            double videoWidth = width - left - right;
+            double videoHeight = height - top - bottom;
+            if (videoWidth <= 0 || videoHeight <= 0)
+            {
+                return default;
+            }
+            return new VideoGeometry(videoWidth, videoHeight, left, top, right, bottom);
+        }
+        catch (Exception ex)
+        {
+            LogOnce("video geometry unavailable: " + ex.Message);
+            return default;
+        }
+    }
+
+    private static double ReadMargin(MpvPlayer player, string primary, string fallback)
+    {
+        double value = player.GetPropertyDouble(primary);
+        return value != 0 ? value : player.GetPropertyDouble(fallback);
+    }
+
+    /// <summary>
+    /// Temporary diagnostic: dumps every property that can describe the video
+    /// rectangle so the letterbox mapping can be validated against reality.
+    /// </summary>
+    private void DumpGeometryProperties(MpvPlayer player)
+    {
+        if (Interlocked.Exchange(ref _geometryDumped, 1) != 0)
+        {
+            return;
+        }
+
+        static string S(MpvPlayer p, string name)
+        {
+            string? value = p.GetPropertyString(name);
+            return value is null ? "null" : value.Replace("\n", " ");
+        }
+
+        BlurLog(
+            "props osd=" + S(player, "osd-dimensions") +
+            " dwidth=" + S(player, "dwidth") + " dheight=" + S(player, "dheight") +
+            " out-params=" + S(player, "video-out-params") +
+            " params=" + S(player, "video-params") +
+            " panscan=" + S(player, "panscan") + " zoom=" + S(player, "video-zoom") +
+            " align=" + S(player, "video-align-x") + "," + S(player, "video-align-y") +
+            " scale=" + S(player, "current-window-scale") +
+            " hidpi=" + S(player, "display-hidpi-scale"));
+    }
+
+    /// <summary>
+    /// mpv's rendered video rectangle in the physical pixels of the composition
+    /// swapchain; <see cref="IsValid"/> is false when mpv could not report it.
+    /// </summary>
+    internal readonly record struct VideoGeometry(
+        double Width,
+        double Height,
+        double MarginLeft,
+        double MarginTop,
+        double MarginRight,
+        double MarginBottom)
+    {
+        public bool IsValid => Width > 0 && Height > 0;
+    }
+
+    private void Blur(MpvScreenshot shot, VideoGeometry geometry)
     {
         int width = Math.Min(TargetPixels, shot.Width);
         int height = Math.Max(
@@ -336,7 +441,7 @@ internal sealed class ChromeBlur
             session.Clear(Color.FromArgb(255, 0, 0, 0));
             session.DrawImage(blur);
         }
-        Publish(target.GetPixelBytes(), width, height);
+        Publish(target.GetPixelBytes(), width, height, geometry);
     }
     /// <summary>
     /// Box-filters one raw mpv frame (bgr0/bgra, possibly bottom-up) down to a
@@ -397,13 +502,14 @@ internal sealed class ChromeBlur
         }
         return target;
     }
-    private void Publish(byte[] pixels, int width, int height)
+    private void Publish(byte[] pixels, int width, int height, VideoGeometry geometry)
     {
         lock (_gate)
         {
             _pending = pixels;
             _pendingWidth = width;
             _pendingHeight = height;
+            _pendingGeometry = geometry;
         }
         if (Interlocked.Exchange(ref _queued, 1) == 0)
         {
@@ -415,11 +521,13 @@ internal sealed class ChromeBlur
         byte[]? pixels;
         int width;
         int height;
+        VideoGeometry geometry;
         lock (_gate)
         {
             pixels = _pending;
             width = _pendingWidth;
             height = _pendingHeight;
+            geometry = _pendingGeometry;
             _pending = null;
         }
         if (pixels is null || _mode == ChromeBlurMode.Solid)
@@ -443,7 +551,7 @@ internal sealed class ChromeBlur
             _bitmap.Invalidate();
             foreach (ChromeBlurLayer layer in SnapshotLayers())
             {
-                layer.Apply(_bitmap);
+                layer.Apply(_bitmap, geometry);
             }
         }
         catch (Exception ex)
@@ -480,6 +588,24 @@ internal sealed class ChromeBlur
         }
     }
 
+    /// <summary>Diagnostic log, only written when WIINA_BLUR_LOG=1.</summary>
+    private static void BlurLog(string message)
+    {
+        if (Environment.GetEnvironmentVariable("WIINA_BLUR_LOG") != "1")
+        {
+            return;
+        }
+        try
+        {
+            System.IO.File.AppendAllText(
+                System.IO.Path.Combine(System.IO.Path.GetTempPath(), "wiina-blur.log"),
+                message + "\n");
+        }
+        catch
+        {
+        }
+    }
+
     /// <summary>
     /// The current theme's opaque chrome brush is never handed to the chrome
     /// surfaces by this service: every surface keeps its XAML
@@ -500,7 +626,7 @@ public sealed class ChromeBlurLayer : Canvas
     private readonly ImageBrush _brush;
     private readonly CompositeTransform _transform;
     private WeakReference<MpvVideoView>? _video;
-    private static bool _diagLogged;
+    private string? _diagSignature;
     internal ChromeBlurLayer(double cornerRadius)
     {
         IsHitTestVisible = false;
@@ -576,7 +702,7 @@ public sealed class ChromeBlurLayer : Canvas
         }
     }
 
-    internal void Apply(WriteableBitmap bitmap)
+    internal void Apply(WriteableBitmap bitmap, ChromeBlur.VideoGeometry geometry)
     {
         FrameworkElement? root = XamlRoot?.Content as FrameworkElement;
         if (root is null)
@@ -594,19 +720,64 @@ public sealed class ChromeBlurLayer : Canvas
         {
             return;
         }
-        // The bitmap is a scaled copy of the whole video frame, so map the
-        // surface's rectangle into bitmap pixel coordinates.
-        double k = source.Width / bitmap.PixelWidth;
-        if (!_diagLogged && Environment.GetEnvironmentVariable("WIINA_BLUR_LOG") == "1")
+
+        // The widget embraces the letterbox/pillarbox bars; mpv paints the frame
+        // centred inside it. Map the bitmap onto that inner rectangle instead of
+        // stretching it over the whole widget, which used to shift the blur up
+        // whenever the video and window aspect ratios differed.
+        double scale = XamlRoot?.RasterizationScale ?? 1.0;
+        DisplayRect display = default;
+        bool fromMpv = false;
+        if (geometry.IsValid)
         {
-            _diagLogged = true;
+            fromMpv = VideoDisplayRect.TryFromOsd(
+                source.Width,
+                source.Height,
+                scale,
+                geometry.Width,
+                geometry.Height,
+                geometry.MarginLeft,
+                geometry.MarginTop,
+                geometry.MarginRight,
+                geometry.MarginBottom,
+                out display);
+        }
+        if (!fromMpv)
+        {
+            display = VideoDisplayRect.Fit(
+                source.Width,
+                source.Height,
+                (double)bitmap.PixelWidth / bitmap.PixelHeight);
+        }
+        display = VideoDisplayRect.Clamp(display, source.Width, source.Height);
+        if (display.IsEmpty)
+        {
+            return;
+        }
+
+        double videoX = source.X + display.X;
+        double videoY = source.Y + display.Y;
+        double scaleX = display.Width / bitmap.PixelWidth;
+        double scaleY = display.Height / bitmap.PixelHeight;
+        // Log the geometry whenever it changes (not per frame): this is the
+        // switch support needs to confirm the video rect on a user's machine.
+        string signature = $"{surface.Width:0.#}x{surface.Height:0.#}@{surface.X:0.#},{surface.Y:0.#}|" +
+            $"{source.Width:0.#}x{source.Height:0.#}|{display.X:0.#},{display.Y:0.#},{display.Width:0.#},{display.Height:0.#}|" +
+            $"{fromMpv}|{scale:0.##}|{geometry.Width:0.#}x{geometry.Height:0.#}";
+        if (Environment.GetEnvironmentVariable("WIINA_BLUR_LOG") == "1" && signature != _diagSignature)
+        {
+            _diagSignature = signature;
             try
             {
                 System.IO.File.AppendAllText(
                     System.IO.Path.Combine(System.IO.Path.GetTempPath(), "wiina-blur.log"),
-                    $"[layer] surface={surface.Width}x{surface.Height} at {surface.X},{surface.Y} " +
-                    $"source={source.Width}x{source.Height} at {source.X},{source.Y} " +
-                    $"bitmap={bitmap.PixelWidth}x{bitmap.PixelHeight} k={k:0.###}\n");
+                    $"[layer] surface={surface.Width:0.#}x{surface.Height:0.#} at {surface.X:0.#},{surface.Y:0.#} " +
+                    $"source={source.Width:0.#}x{source.Height:0.#} at {source.X:0.#},{source.Y:0.#} " +
+                    $"dpi={scale:0.##} osd={(geometry.IsValid ? $"{geometry.Width:0.#}x{geometry.Height:0.#} " +
+                        $"m={geometry.MarginLeft:0.#},{geometry.MarginTop:0.#},{geometry.MarginRight:0.#},{geometry.MarginBottom:0.#}" : "n/a")} " +
+                    $"display={display.Width:0.#}x{display.Height:0.#} at {display.X:0.#},{display.Y:0.#} " +
+                    $"fromMpv={fromMpv} bitmap={bitmap.PixelWidth}x{bitmap.PixelHeight} " +
+                    $"k={scaleX:0.###},{scaleY:0.###}\n");
             }
             catch
             {
@@ -614,10 +785,10 @@ public sealed class ChromeBlurLayer : Canvas
         }
         _fill.Fill = _brush;
         _brush.ImageSource = bitmap;
-        _transform.ScaleX = k;
-        _transform.ScaleY = k;
-        _transform.TranslateX = source.X - surface.X;
-        _transform.TranslateY = source.Y - surface.Y;
+        _transform.ScaleX = scaleX;
+        _transform.ScaleY = scaleY;
+        _transform.TranslateX = videoX - surface.X;
+        _transform.TranslateY = videoY - surface.Y;
         UpdateClip();
         if (!HasFrame && Visibility == Visibility.Visible)
         {

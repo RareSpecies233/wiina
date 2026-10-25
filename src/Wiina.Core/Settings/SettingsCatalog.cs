@@ -245,6 +245,25 @@ public static class SettingsCatalog
             settings => settings.ThumbnailPreviewEnabled,
             (settings, value) => settings.ThumbnailPreviewEnabled = value,
             "thumbnail preview 缩略图"));
+        rows.Add(ChoiceRow(
+            "video.thumbnail-mode", SettingsPageId.Video, "缩略图",
+            "缩略图生成模式",
+            "预生成（推荐）：打开文件后在后台遍历全片，悬停时几乎即时响应；即时预览：不预生成、不写磁盘缓存，指针在进度条上停留一会儿才解码当前时间点，磁盘与 CPU 占用最低。",
+            new[] { "预生成（推荐）", "即时预览" },
+            settings => (int)settings.ThumbnailMode,
+            (settings, value) => settings.ThumbnailMode =
+                (ThumbnailMode)Math.Clamp(value, 0, 1),
+            "thumbnail mode pregenerate instant on demand 缩略图 模式 预生成 即时 按需"));
+        rows.Add(NumberRow(
+            "video.thumbnail-hover-delay", SettingsPageId.Video, "缩略图",
+            "缩略图悬停延迟",
+            "仅即时预览使用：指针在进度条上停留这么久后才开始解码（0–2000 毫秒，步进 50）。快速扫动时只会生成最后停留的位置。",
+            0, ThumbnailPolicy.MaxHoverDelayMilliseconds, 50, " ms",
+            settings => ThumbnailPolicy.ClampHoverDelayMilliseconds(
+                settings.ThumbnailHoverDelayMs),
+            (settings, value) => settings.ThumbnailHoverDelayMs =
+                ThumbnailPolicy.ClampHoverDelayMilliseconds((int)Math.Round(value)),
+            "thumbnail hover delay instant 缩略图 悬停 延迟 毫秒 即时"));
         rows.Add(NumberRow(
             "video.thumbnail-width", SettingsPageId.Video, "缩略图",
             "缩略图宽度", "80–320 DIP；高度按视频比例计算。",

@@ -1,7 +1,21 @@
-# Known issues — Wiina v1.3.4
+# Known issues — Wiina v1.3.5
 
-Nothing here is hidden; these are known limitations of the v1.3.4 build. The full decision list (with fix cost and checkboxes) lives in [../reports/known-issues-1.3.1.md](../reports/known-issues-1.3.1.md).
+Nothing here is hidden; these are known limitations of the v1.3.5 build. The full decision list (with fix cost and checkboxes) lives in [../reports/known-issues-1.3.1.md](../reports/known-issues-1.3.1.md).
 
+## What changed in 1.3.5
+
+- The chrome blur follows the actual video rectangle now (letterbox/pillarbox
+  bars keep the plain tint); PiP was not verified separately and 150 % DPI was
+  not tested on hardware.
+- Timeline thumbnails no longer burn in subtitles; this was a confirmed bug in
+  the headless extraction instance, now fixed and checked pixel-by-pixel.
+- The mini player is deliberately dark in every theme; it no longer follows the
+  light theme (a product choice, not a regression).
+- A thumbnail `Instant` mode and a hover delay were added; they trade the fast
+  hover of pre-generation for zero background work and zero disk writes.
+- Edge snapping no longer jitters; the fix is measured at 100 % DPI on a single
+  monitor.
+- Cursor hiding did **not** change in 1.3.5 and is still not solved.
 ## What changed in 1.3.4
 
 - An unfocused window no longer shows the OSC on hover: the pointer handlers
@@ -117,7 +131,7 @@ a unit test rejects ASS markup. The statistics panel remains the detailed view.
 
 ## Cursor hiding (still not solved)
 
-Status: **not solved.** The 1.3.2 hook below is the last attempt; it still loses to the WinUI input stack in some configurations, and 1.3.4 changed nothing here. Treat the measurements as historical evidence for the technique, not as a fix.
+Status: **not solved.** The 1.3.2 hook below is the last attempt; it still loses to the WinUI input stack in some configurations, and 1.3.4 / 1.3.5 changed nothing here. Treat the measurements as historical evidence for the technique, not as a fix.
 
 The desktop pointer over a WinUI 3 client area is driven by the input thread
 inside Microsoft.UI.Input.dll / Microsoft.InputStateManager.dll /
@@ -205,6 +219,13 @@ instant). The default mode (pre-generation) is unchanged.
   15.6 ms CPU vs 104 ms / 461 ms per frame), and the **memory** cache now keeps
   every 5-second bucket of the current file (≈57.6 KB per bucket, ≈41 MB/hour).
 - **1.3.2:** the cache-count settings row is gone (the memory cache always covers the whole file); turning previews off skips all thumbnail work - no headless mpv instance, no disk writes, no cache sizing.
+- **1.3.5:** thumbnails no longer contain subtitles (headless
+  `sub-visibility=no`, `sub-auto=no`, `sid=no`, `secondary-sid=no`, `osd-bar=no`,
+  and `screenshot-raw` explicitly requests the `video` flag). New
+  `video.thumbnail-mode` (`Pre-generate` default / `Instant`) and
+  `video.thumbnail-hover-delay` (0–2000 ms, default 250) rows: Instant skips
+  pre-generation, the disk cache and the whole-file memory cache, decoding only
+  the hovered point after the delay. Turning previews off still does no work.
 - Limits: the cache key includes file size and mtime, so an in-place replacement
   with identical size/mtime can hit a stale frame; dragging the timeline is not
   throttled (only stale results are dropped); network/UNC sources are
@@ -250,11 +271,12 @@ instant). The default mode (pre-generation) is unchanged.
   (sliders and lazily created playlist rows included) and restores the saved
   values on exit, so Tab cycles the main window instead of landing on mini
   controls. This is a design trade-off, not a regression.
-- Light theme uses `MiniCoverFallbackBrush` / `MiniCoverScrimBrush` from
-  `Themes/Tokens.xaml` (all three theme dictionaries); High Contrast flattens
-  both to system colours. The PiP root and the mini player background now use
-  theme resources as well, and the mini player applies `MicaBackdrop` on entry
-  and restores the previous background on exit.
+- **Fixed dark chrome in every theme (1.3.5, product choice).** The mini player
+  forces `ElementTheme.Dark`, pins its root to `#FF08090A` and suspends the system
+  backdrop while open; all three are restored on exit. Contrast is about 18:1
+  for primary text and 9:1 for secondary text, and light/dark mini screenshots
+  hash identically. It deliberately does not follow the light theme; a
+  theme-following mini player would need its own light token set.
 - Auto-entering the mini player for audio files is disabled. `AutoSwitchToMusicMode`
   is still stored in `settings.json` for compatibility but no longer triggers a
   mode change.
@@ -292,6 +314,12 @@ instant). The default mode (pre-generation) is unchanged.
   degrade to Solid instead of crashing. The last blurred frame can stay visible
   while playback is paused or the player is idle.
 
+- **Since 1.3.5 the blur is drawn inside the actual video rectangle**, not the
+  whole swap chain: mpv's `osd-dimensions` margins are converted to DIP, and a
+  2 px / 2 % check falls back to a plain aspect-fit rectangle. Bars keep the
+  plain tint, so a tall window with 16:9 content no longer stretches the blur.
+  Limits: 150 % DPI and PiP were not verified, and panscan/zoom with negative
+  margins uses the aspect-fit fallback.
 ## Live theme switching
 
 - Settings, the quick-settings menu and the player window now apply a theme
@@ -344,6 +372,15 @@ instant). The default mode (pre-generation) is unchanged.
 - Snapping applies to the native titlebar (`WM_MOVING`), the video-area drag,
   the mini player and PiP. Maximized/fullscreen windows are not snapped.
 
+- **1.3.5** removes the snap jitter: `EdgeSnap.Apply` accepts only the raw
+  proposed rectangle (no `fromApplied`, no accumulated offset), works in integer
+  physical pixels and keeps 10 DIP snap / 22 DIP breakaway. The main window and
+  PiP follow an anchor plus cursor delta, skip `Move` when unchanged, set DWM
+  state only on transitions, and a 16 ms drag pump keeps tracking when pointer
+  capture is lost. Measured with a CSV capture: 0 visible gap on the edge, 35
+  static frames constant, breakaway at 23 px of visible movement.
+- Limits: the snapping measurements are 100 % DPI, single monitor; the 16 ms
+  pump can lag one or two frames on a very slow machine.
 ## File associations
 
 - Two modes exist. **Per-user** (default, no admin): `HKCU\Software\Classes`

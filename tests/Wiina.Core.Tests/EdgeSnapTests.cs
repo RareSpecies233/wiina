@@ -85,23 +85,41 @@ public sealed class EdgeSnapTests
 
         // 15 px away from the applied (snapped) position is still inside the
         // 22 DIP breakaway window: the window stays flush.
-        EdgeSnapResult held = session.Apply(Rect(17, 150), Area, 1.0, fromApplied: true);
+        EdgeSnapResult held = session.Apply(Rect(17, 150), Area);
         Assert.Equal(0, held.Rect.Left);
         Assert.Equal(SnapEdges.Left, held.Edges);
 
         // 40 px away is past the breakaway: the magnet lets go and the raw
         // position is applied.
-        EdgeSnapResult released = session.Apply(Rect(42, 150), Area, 1.0, fromApplied: true);
+        EdgeSnapResult released = session.Apply(Rect(42, 150), Area);
         Assert.Equal(SnapEdges.None, released.Edges);
         Assert.True(released.Rect.Left > 0, "window must leave the edge after breakaway");
     }
 
     /// <summary>
-    /// Regression for issue 4: Windows proposes every WM_MOVING rectangle from
-    /// the already snapped position, so re-snapping from that rectangle saw a
-    /// 1 px distance forever and the window could never be pulled off the edge.
-    /// The session must recover the raw cursor position and let the cumulative
-    /// movement escape.
+    /// The magnet must not drift when the incoming raw rectangle does not move:
+    /// the old implementation re-based every proposal on the applied rectangle and
+    /// turned a stationary pointer into fake movement per message, which released
+    /// the magnet and made the window flicker at the edge.
+    /// </summary>
+    [Fact]
+    public void RepeatedIdenticalRawProposalsDoNotDrift()
+    {
+        var session = new EdgeSnapSession();
+        Assert.Equal(0, session.Apply(Rect(9, 200), Area).Rect.Left);
+
+        for (int i = 0; i < 40; i++)
+        {
+            EdgeSnapResult held = session.Apply(Rect(9, 200), Area);
+            Assert.Equal(SnapEdges.Left, held.Edges);
+            Assert.Equal(0, held.Rect.Left);
+        }
+    }
+
+    /// <summary>
+    /// Regression for issue 4: a 1 px drag must move the window (the raw
+    /// rectangle grows by one pixel per proposal) and must be able to leave the
+    /// magnet once it travels past the breakaway distance.
     /// </summary>
     [Fact]
     public void CumulativeSmallProposalsCanEscapeTheMagnet()
@@ -112,20 +130,17 @@ public sealed class EdgeSnapTests
         Assert.Equal(SnapEdges.Left, first.Edges);
 
         EdgeSnapResult step = first;
+        int raw = 10;
         int steps = 0;
         while (step.IsSnapped && steps < 100)
         {
+            raw++;
             steps++;
-            step = session.Apply(
-                Rect(step.Rect.Left + 1, 200),
-                Area,
-                1.0,
-                fromApplied: true);
+            step = session.Apply(Rect(raw, 200), Area);
         }
 
         Assert.False(step.IsSnapped);
-        // The magnet was entered at raw x=10, so the raw position must travel
-        // past 22 before the 1 px proposals release it: 13 proposals.
+        // The raw position must travel past the 22 px breakaway: raw 10 + 13.
         Assert.Equal(13, steps);
         Assert.Equal(23, step.Rect.Left);
     }
@@ -136,10 +151,10 @@ public sealed class EdgeSnapTests
         var session = new EdgeSnapSession();
         session.Apply(Rect(2, 150), Area);
 
-        EdgeSnapResult released = session.Apply(Rect(40, 150), Area, 1.0, fromApplied: true);
+        EdgeSnapResult released = session.Apply(Rect(40, 150), Area);
         Assert.Equal(SnapEdges.None, released.Edges);
 
-        EdgeSnapResult next = session.Apply(Rect(41, 150), Area, 1.0, fromApplied: true);
+        EdgeSnapResult next = session.Apply(Rect(41, 150), Area);
         Assert.Equal(41, next.Rect.Left);
         Assert.Equal(SnapEdges.None, next.Edges);
     }
@@ -152,7 +167,7 @@ public sealed class EdgeSnapTests
 
         session.Reset();
 
-        EdgeSnapResult afterReset = session.Apply(Rect(2, 150), Area, 1.0, fromApplied: true);
+        EdgeSnapResult afterReset = session.Apply(Rect(2, 150), Area);
         Assert.Equal(SnapEdges.Left, afterReset.Edges);
         Assert.Equal(0, afterReset.Rect.Left);
     }
@@ -214,3 +229,4 @@ public sealed class EdgeSnapTests
         Assert.Equal(SnapEdges.Left | SnapEdges.Top, result.Edges);
     }
 }
+

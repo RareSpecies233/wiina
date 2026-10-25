@@ -84,6 +84,19 @@ public sealed partial class AppSettings
     /// </summary>
     public ThumbnailAcceleration ThumbnailAcceleration { get; set; }
 
+    /// <summary>
+    /// Pre-generate the whole file (default) or extract only the hovered frame
+    /// on demand; see <see cref="ThumbnailMode"/>.
+    /// </summary>
+    public ThumbnailMode ThumbnailMode { get; set; }
+
+    /// <summary>
+    /// How long the pointer must rest on a timeline position before an instant
+    /// thumbnail is extracted, so scrubbing across the bar does not queue a
+    /// decode per pixel. Clamped to 0–2000 ms by the settings row and service.
+    /// </summary>
+    public int ThumbnailHoverDelayMs { get; set; } = 250;
+
     // ---- Quick settings: video (persisted and re-applied on startup) ----
 
     public string VideoAspect { get; set; } = "no";

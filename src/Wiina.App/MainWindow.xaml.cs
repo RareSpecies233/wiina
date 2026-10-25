@@ -2006,6 +2006,22 @@ public sealed partial class MainWindow : Window
     private FrameMargins SnapMargins() =>
         WindowInterop.TryGetFrameMargins(this, out FrameMargins margins) ? margins : FrameMargins.None;
 
+    // The OS anchors WM_MOVING proposals on the last rectangle the window was
+    // moved to, so the proposal is not the cursor-anchored ("raw") position after
+    // a snap. Feeding the applied rect back into the session made the magnet drift
+    // and flicker at the edge. The raw position is reconstructed from the cursor
+    // plus the grab offset captured once per drag gesture instead.
+    private int _moveAnchorX;
+    private int _moveAnchorY;
+    private bool _moveAnchorValid;
+
+    /// <summary>WM_ENTERSIZEMOVE: a fresh drag gesture starts.</summary>
+    private void OnWindowMoveStarted()
+    {
+        _snapSession.Reset();
+        _moveAnchorValid = false;
+    }
+
     private void SnapWindowToEdges()
     {
         if (!_settings.EdgeSnapping ||
@@ -2018,12 +2034,13 @@ public sealed partial class MainWindow : Window
 
         PointInt32 position = AppWindow.Position;
         SizeInt32 size = AppWindow.Size;
+        FrameMargins margins = SnapMargins();
         EdgeSnapResult result = _snapSession.Apply(
             new WindowRect(position.X, position.Y, position.X + size.Width, position.Y + size.Height),
             WorkAreaUnderPointer(),
             DisplayScale,
-            fromApplied: true,
-            margins: SnapMargins());
+            margins: margins);
+
         if (result.Rect.Left != position.X || result.Rect.Top != position.Y)
         {
             AppWindow.Move(new PointInt32(result.Rect.Left, result.Rect.Top));
@@ -2034,10 +2051,11 @@ public sealed partial class MainWindow : Window
 
     /// <summary>
     /// Snaps the live WM_MOVING rectangle so edges feel magnetic while the user
-    /// is still dragging, not only after releasing the mouse. The session
-    /// converts the OS-proposed rectangle back to the raw cursor position, so a
-    /// 1 px drag can still leave the magnet (issue 4: re-snapping from the
-    /// already snapped rectangle used to swallow the cumulative movement).
+    /// is still dragging, not only after releasing the mouse. The OS-proposed
+    /// rectangle is ignored for the snap decision (it is anchored on the applied
+    /// rect); the raw rectangle is rebuilt from the cursor and the grab offset
+    /// captured at the first message of the gesture, so a 1 px drag always moves
+    /// the window 1 px and the magnet cannot feed back into itself.
     /// </summary>
     private WindowRect SnapMovingRect(WindowRect rect)
     {
@@ -2045,16 +2063,35 @@ public sealed partial class MainWindow : Window
             AppWindow.Presenter is not OverlappedPresenter { State: OverlappedPresenterState.Restored })
         {
             _snapSession.Reset();
+            _moveAnchorValid = false;
             ApplySnapFrame(false);
             return rect;
         }
 
+        FrameMargins snapMargins = SnapMargins();
+        WindowRect raw = rect;
+        if (WindowInterop.TryGetCursorPosition(out int cursorX, out int cursorY))
+        {
+            if (!_moveAnchorValid)
+            {
+                _moveAnchorX = rect.Left - cursorX;
+                _moveAnchorY = rect.Top - cursorY;
+                _moveAnchorValid = true;
+            }
+
+            int width = rect.Right - rect.Left;
+            int height = rect.Bottom - rect.Top;
+            int left = cursorX + _moveAnchorX;
+            int top = cursorY + _moveAnchorY;
+            raw = new WindowRect(left, top, left + width, top + height);
+        }
+
         EdgeSnapResult result = _snapSession.Apply(
-            rect,
+            raw,
             WorkAreaUnderPointer(),
             DisplayScale,
-            fromApplied: true,
-            margins: SnapMargins());
+            margins: snapMargins);
+
         ApplySnapFrame(result.IsSnapped);
         return result.Rect;
     }
@@ -2145,8 +2182,9 @@ public sealed partial class MainWindow : Window
             () => _userResizedWindow = true,
             SnapWindowToEdges,
             SnapMovingRect,
-            // A fresh drag/resize gesture starts with no magnet engaged.
-            () => _snapSession.Reset(),
+            // A fresh drag/resize gesture starts with no magnet engaged and a
+            // fresh cursor anchor for the WM_MOVING snap path.
+            OnWindowMoveStarted,
             // Fullscreen reports every hit as client area: a native move or
             // resize would drop the fullscreen presenter.
             () => IsFullscreen);
@@ -3125,3 +3163,4 @@ public sealed partial class MainWindow : Window
         }
     }
 }
+

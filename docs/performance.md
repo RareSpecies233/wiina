@@ -1,8 +1,8 @@
-# Performance measurements (v1.3.4)
+# Performance measurements (v1.3.5)
 
 Measured on the development machine on 2026-10-19 (Asia/Hong_Kong), at v1.0.0.
 The numbers below are the historical baseline; they were **not** re-measured
-for 1.2.4 through 1.3.4 (see the per-version notes below for
+for 1.2.4 through 1.3.5 (see the per-version notes below for
 the known deltas). Numbers are what
 this machine produced; they are not universal guarantees.
 
@@ -70,6 +70,20 @@ scenarios (peak 265.7 MB at 4K). Private bytes exceed 300 MB at 4K because the
 GPU/driver surfaces and the video swapchain are charged to the process; this is
 reported honestly rather than trimmed by a smaller measurement window.
 
+## What changed in 1.3.5
+
+- The blur readback now covers only the video rectangle. In a tall window with
+  16:9 content that is a much smaller area (504×283 instead of 504×992 in the
+  measured 506×993 window, roughly 3.5× fewer pixels to downscale and blur), so
+  the per-frame readback and Win2D work shrink with the bars. The 125 ms cadence
+  and the 320 px blur target are unchanged.
+- Thumbnail `Instant` mode removes all pre-generation work: no whole-file decode,
+  no disk cache writes and no whole-file memory sizing; a hover decodes one
+  point after the configured delay. Pre-generation stays the default.
+- The snap fix adds a 16 ms dispatcher timer that runs only during a drag; it is
+  stopped on release, so idle cost is unchanged.
+- Settings: eleven pages, 131 rows, 571 UI strings; 857 tests. Startup, memory,
+  blur frame cost and 4K numbers were **not** re-measured for 1.3.5.
 ## What changed in 1.3.4
 
 - No new polling: the dropped-frame card is driven by the existing

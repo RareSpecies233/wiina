@@ -582,6 +582,8 @@ public sealed partial class MainWindow
                 _settings.ThumbnailSlowMode,
                 _settings.ThumbnailAcceleration);
             _thumbnailService.SetPreviewEnabled(_settings.ThumbnailPreviewEnabled);
+            _thumbnailService.SetMode(_settings.ThumbnailMode);
+            _thumbnailService.SetHoverDelayMilliseconds(_settings.ThumbnailHoverDelayMs);
         }
 
         return _thumbnailService;
@@ -620,6 +622,15 @@ public sealed partial class MainWindow
 
         ThumbnailService service = GetThumbnailService();
 
+        // Instant mode only ever extracts the frame under the pointer, so it
+        // skips the whole-file cache sizing as well: no pre-generation task, no
+        // extra resident capacity, and no disk-cache traffic. Source tracking
+        // happens on the first hover (ThumbnailService.GetAsync re-syncs it).
+        if (_settings.ThumbnailMode == ThumbnailMode.Instant)
+        {
+            return;
+        }
+
         // Memory is sized for the whole file even when the walk is skipped
         // (slow mode); hovering then fills a cache that never evicts mid-file.
         service.SetSource(_currentPath, duration);
@@ -627,7 +638,8 @@ public sealed partial class MainWindow
         if (!ThumbnailPolicy.AllowsPreGeneration(
                 _settings.ThumbnailPreviewEnabled,
                 _settings.ThumbnailSlowMode,
-                _settings.ThumbnailCacheMegabytes)
+                _settings.ThumbnailCacheMegabytes,
+                _settings.ThumbnailMode)
             || string.Equals(
                 _thumbnailPregenPath,
                 _currentPath,
