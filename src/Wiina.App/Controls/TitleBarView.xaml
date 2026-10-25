@@ -26,15 +26,12 @@
     </UserControl.Resources>
 
     <Grid>
-        <!-- Live Gaussian blur of the pixels behind the chrome (video
-             included). BackdropBlur attaches a compositor child visual here;
-             the acrylic border below is collapsed when that succeeds. -->
         <Border x:Name="BackdropBlurHost" IsHitTestVisible="False" />
         <Border x:Name="BlurTint"
                 Background="{ThemeResource TitleBarBlurTintBrush}"
                 Visibility="Collapsed"
                 IsHitTestVisible="False" />
-        <Border x:Name="TranslucentBackground" Background="{ThemeResource TitleBarAcrylicBrush}" />
+        <Border x:Name="TranslucentBackground" Background="{ThemeResource ChromeSolidBrush}" />
         <Border x:Name="OpaqueBackground"
                 Background="{ThemeResource TitleBarOpaqueBrush}"
                 Visibility="Collapsed" />
@@ -168,10 +165,11 @@
                     BorderThickness="0,1,0,0">
                 <Grid>
                     <Border x:Name="TopOscAcrylicLayer"
-                            Background="{ThemeResource OscAcrylicBrush}" />
+                            Background="{ThemeResource ChromeSolidBrush}" />
                     <Border x:Name="TopOscBlurTintLayer"
                             Background="{ThemeResource OscBlurTintBrush}"
-                            Visibility="Collapsed" />
+                            Visibility="Collapsed"
+                            IsHitTestVisible="False" />
                     <Grid x:Name="TopOscRoot" Margin="10,0,8,0">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto" />

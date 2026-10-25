@@ -5,6 +5,8 @@ using System.Text;
 using System.Text.Json;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
+using Windows.UI;
+using Windows.UI.ViewManagement;
 using Wiina.App.Localization;
 using Wiina.App.Services;
 using Wiina.App.Views;
@@ -35,6 +37,9 @@ public partial class App : Application
     private static InspectorWindow? _inspectorWindow;
     private static FiltersWindow? _filtersWindow;
     private static VideoQualityWindow? _qualityWindow;
+    private static UISettings? _themeUiSettings;
+    private static DispatcherQueue? _themeDispatcher;
+    private static (ThemeMode Mode, ElementTheme Theme)? _lastTheme;
     private readonly Dictionary<string, MainWindow> _windows = new();
 
     /// <summary>True when settings.json did not exist before this launch.</summary>
@@ -69,6 +74,12 @@ public partial class App : Application
         Settings = SettingsStore.Load();
         Loc.Initialize(Settings.Language);
         Loc.LanguageChanged += (_, _) => ApplyLanguageToOpenWindows();
+        // WinUI freezes Application.RequestedTheme at launch, so System mode
+        // has to follow the Windows app theme through our own listener.
+        _themeDispatcher = DispatcherQueue.GetForCurrentThread();
+        _themeUiSettings = new UISettings();
+        _themeUiSettings.ColorValuesChanged += OnSystemColorValuesChanged;
+        ApplyThemeIfChanged();
         UnhandledException += OnUnhandledException;
         AppDomain.CurrentDomain.UnhandledException += (_, e) =>
             LogCrash(e.ExceptionObject as Exception);
@@ -95,12 +106,115 @@ public partial class App : Application
         Apply(_logWindow);
         Apply(_inspectorWindow);
         Apply(_filtersWindow);
+        Apply(_qualityWindow);
 
         void Apply(Window? window)
         {
             if (window is { Content: DependencyObject root } && seen.Add(window))
             {
                 Loc.ApplyToTree(root);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Resolves the effective element theme. System mode deliberately returns a
+    /// concrete dark/light value instead of <see cref="ElementTheme.Default"/>:
+    /// WinUI locks the application theme at launch, so only an explicit value
+    /// per window can follow a Windows theme switch at runtime.
+    /// </summary>
+    public static ElementTheme ResolveTheme()
+    {
+        return Settings.Theme switch
+        {
+            ThemeMode.Dark => ElementTheme.Dark,
+            ThemeMode.Light => ElementTheme.Light,
+            _ => DetectSystemTheme(),
+        };
+    }
+
+    /// <summary>True when <see cref="ResolveTheme"/> currently paints dark chrome.</summary>
+    public static bool IsDarkTheme => ResolveTheme() != ElementTheme.Light;
+
+    private static ElementTheme DetectSystemTheme()
+    {
+        try
+        {
+            UISettings uiSettings = _themeUiSettings ??= new UISettings();
+            Color background = uiSettings.GetColorValue(UIColorType.Background);
+            // The app background colour is near-white in light mode and
+            // near-black in dark mode; luminance is enough to tell them apart.
+            int luminance = (background.R * 299 + background.G * 587 + background.B * 114) / 1000;
+            return luminance < 128 ? ElementTheme.Dark : ElementTheme.Light;
+        }
+        catch (Exception)
+        {
+            // Hosts without UISettings support keep the launch-time theme.
+            return Application.Current?.RequestedTheme == ApplicationTheme.Light
+                ? ElementTheme.Light
+                : ElementTheme.Dark;
+        }
+    }
+
+    private static void OnSystemColorValuesChanged(UISettings sender, object args)
+    {
+        if (Settings.Theme != ThemeMode.System)
+        {
+            return;
+        }
+
+        // UISettings raises this on a worker thread; element themes are
+        // thread-affine, so hop back to the dispatcher that owns the windows.
+        _themeDispatcher?.TryEnqueue(ApplyThemeIfChanged);
+    }
+
+    /// <summary>
+    /// Pushes the resolved theme to every open window when the effective
+    /// (mode, theme) pair changed. Cheap enough to call after each save.
+    /// </summary>
+    private static void ApplyThemeIfChanged()
+    {
+        ElementTheme theme = ResolveTheme();
+        if (_lastTheme == (Settings.Theme, theme))
+        {
+            return;
+        }
+
+        _lastTheme = (Settings.Theme, theme);
+        ApplyThemeToOpenWindows();
+    }
+
+    /// <summary>
+    /// Re-applies the resolved theme to every open window immediately. Windows
+    /// call this when they change the theme in memory, before the debounced
+    /// settings save lands, so the other windows never keep the old theme.
+    /// </summary>
+    public static void SyncOpenWindowThemes() => ApplyThemeIfChanged();
+
+    /// <summary>Re-applies the current theme to every open player and tool window.</summary>
+    private static void ApplyThemeToOpenWindows()
+    {
+        ElementTheme theme = ResolveTheme();
+
+        foreach (MainWindow window in CurrentApp._windows.Values)
+        {
+            window.ApplyTheme();
+        }
+
+        ApplyWindow(_settingsWindow);
+        ApplyWindow(_keyBindingWindow);
+        ApplyWindow(_welcomeWindow);
+        ApplyWindow(_aboutWindow);
+        ApplyWindow(_logWindow);
+        ApplyWindow(_inspectorWindow);
+        ApplyWindow(_filtersWindow);
+        ApplyWindow(_qualityWindow);
+
+        void ApplyWindow(Window? window)
+        {
+            if (window?.Content is FrameworkElement root)
+            {
+                WindowShell.ApplyTheme(window, root, theme);
             }
         }
     }
@@ -127,8 +241,79 @@ public partial class App : Application
         return paths;
     }
 
+    /// <summary>
+    /// Handles the one-shot elevated registration flags
+    /// (<c>--associate-elevated-video</c> / <c>--associate-elevated-audio</c>).
+    /// Returns true when this process is the registration helper, in which case
+    /// the caller must not create any window.
+    /// </summary>
+    private static bool TryRunElevatedAssociation()
+    {
+        bool video = false;
+        bool audio = false;
+        foreach (string argument in Environment.GetCommandLineArgs())
+        {
+            if (string.Equals(argument, "--associate-elevated-video", StringComparison.OrdinalIgnoreCase))
+            {
+                video = true;
+            }
+            else if (string.Equals(argument, "--associate-elevated-audio", StringComparison.OrdinalIgnoreCase))
+            {
+                audio = true;
+            }
+        }
+
+        if (!video && !audio)
+        {
+            return false;
+        }
+
+        RunElevatedAssociation(video, audio);
+        return true;
+    }
+
+    private static void RunElevatedAssociation(bool video, bool audio)
+    {
+        int exitCode = 0;
+        try
+        {
+            FileAssociationService.RegisterElevated(video, audio);
+            LogAssociationRun(
+                $"elevated file association registration succeeded (video={video}, audio={audio})");
+        }
+        catch (Exception ex)
+        {
+            exitCode = 1;
+            LogAssociationRun(
+                $"elevated file association registration failed (video={video}, audio={audio}): {ex}");
+        }
+
+        Environment.Exit(exitCode);
+    }
+
+    private static void LogAssociationRun(string message)
+    {
+        try
+        {
+            File.AppendAllText(
+                TraceLogPath,
+                $"[{DateTimeOffset.Now:O}] {message}{Environment.NewLine}");
+        }
+        catch
+        {
+            // Logging must never break the registration helper.
+        }
+    }
+
     protected override void OnLaunched(LaunchActivatedEventArgs args)
     {
+        // The elevated helper mode is a console-style one-shot: it must finish
+        // before any window or welcome experience is created.
+        if (TryRunElevatedAssociation())
+        {
+            return;
+        }
+
         try
         {
             // Welcome is a standalone launcher: do not create an empty player
@@ -234,6 +419,9 @@ public partial class App : Application
             Loc.ApplyPreference(Settings.Language);
             SettingsStore.Save(Settings);
             SettingsChanged?.Invoke();
+            // Every window resolves its own theme; a save is the one place that
+            // sees a row or quick-menu toggle from any window.
+            ApplyThemeIfChanged();
         }
         catch (Exception ex)
         {
@@ -272,9 +460,31 @@ public partial class App : Application
     public static bool IsMediaTarget(MainWindow window) =>
         ReferenceEquals(ActiveWindow, window);
 
+    /// <summary>
+    /// Re-registers or releases SystemMediaTransportControls to match
+    /// <see cref="AppSettings.MediaKeysEnabled"/>. Applied live by the settings
+    /// window; the old semantics were "always on".
+    /// </summary>
+    public static void ApplyMediaKeysSetting()
+    {
+        if (Settings.MediaKeysEnabled)
+        {
+            EnsureMediaSession();
+        }
+        else
+        {
+            ShutdownMediaSession();
+        }
+    }
+
     private static void EnsureMediaSession()
     {
         if (_mediaSession is not null)
+        {
+            return;
+        }
+
+        if (!Settings.MediaKeysEnabled)
         {
             return;
         }
@@ -329,18 +539,32 @@ public partial class App : Application
 
     public static string CrashLogPath => Path.Combine(DataFolder, "crash.log");
 
+    /// <summary>
+    /// Opens the settings window. Pass a page (and optionally a row) only for a real
+    /// deep link; a plain call such as the main-menu 设置… item must not reset an
+    /// already-open window to 通用 — it only brings the window forward so the user
+    /// keeps their page, scroll offset and expanded sections.
+    /// </summary>
     public static void ShowSettingsWindow(
-        SettingsPageId page = SettingsPageId.General,
+        SettingsPageId? page = null,
         string? rowId = null)
     {
         if (_settingsWindow is { } existing)
         {
-            existing.NavigateTo(page, rowId);
+            if (SettingsNavigation.Decide(windowOpen: true, page, rowId) ==
+                SettingsOpenAction.NavigateThenActivate)
+            {
+                // A row-only deep link keeps the page the user is already on.
+                existing.NavigateTo(page ?? existing.CurrentPage, rowId);
+            }
+
             WindowShell.BringToForeground(existing);
             return;
         }
 
-        var window = new SettingsWindow(page, rowId);
+        var window = new SettingsWindow(
+            SettingsNavigation.InitialPage(page, Settings.SettingsPage),
+            rowId);
         _settingsWindow = window;
         window.Closed += (_, _) =>
         {

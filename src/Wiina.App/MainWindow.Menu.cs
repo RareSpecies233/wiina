@@ -29,6 +29,11 @@ public sealed partial class MainWindow
         _applicationMenu?.Hide();
         var flyout = new MenuFlyout();
         _applicationMenu = flyout;
+        // Park the auto-hide countdown for as long as the overflow menu (or any
+        // submenu) is open: its popup is a separate window, so hovering items
+        // raises PointerExited on the player and would otherwise hide the OSC
+        // (and the cursor) underneath the menu.
+        TrackChromeFlyout(flyout);
         flyout.Closed += (_, _) =>
         {
             if (ReferenceEquals(_applicationMenu, flyout))
@@ -37,6 +42,7 @@ public sealed partial class MainWindow
             }
         };
         MenuState state = BuildMenuState();
+        _acceleratorTexts = BuildAcceleratorTexts();
 
         // Quick window action: expanded OSC menus start with pin/unpin so the
         // common window operation does not require opening 窗口 first.
@@ -46,6 +52,11 @@ public sealed partial class MainWindow
         };
         pin.Click += (_, _) => TogglePin();
         flyout.Items.Add(pin);
+
+        // Playback-rate presets sit directly under the pin action: the OSC
+        // transport has no room for a rate picker, and the quick menu keeps
+        // only the continuous slider on its video page.
+        flyout.Items.Add(BuildSpeedMenu());
         flyout.Items.Add(new MenuFlyoutSeparator());
 
         foreach (MenuGroupDefinition group in MenuCatalog.Build(state, Loc.CurrentLanguage))
@@ -60,33 +71,6 @@ public sealed partial class MainWindow
             flyout.Items.Add(top);
         }
 
-        // Quick picture-quality switch without leaving the OSC overflow.
-        var quality = new MenuFlyoutSubItem { Text = Loc.T("ui.qualityPreset") };
-        foreach ((VideoQualityPreset preset, string labelKey) in new[]
-                 {
-                     (VideoQualityPreset.Auto, "ui.qualityAuto"),
-                     (VideoQualityPreset.Balanced, "ui.qualityBalanced"),
-                     (VideoQualityPreset.HighQuality, "ui.qualityHigh"),
-                     (VideoQualityPreset.Performance, "ui.qualityPerformance"),
-                 })
-        {
-            var option = new ToggleMenuFlyoutItem
-            {
-                Text = Loc.T(labelKey),
-                IsChecked = _settings.VideoQualityPreset == preset,
-            };
-            option.Click += (_, _) =>
-            {
-                _settings.VideoQualityPreset = preset;
-                ApplyQualityPreset();
-                SaveSettings();
-                ShowChrome();
-            };
-            quality.Items.Add(option);
-        }
-
-        flyout.Items.Add(quality);
-
         // Settings is a frequent destination but not a player command, so it
         // lives at the bottom of the overflow menu rather than as a permanent
         // gear button crowding the OSC transport row.
@@ -99,8 +83,73 @@ public sealed partial class MainWindow
     }
 
     /// <summary>
-    /// Adds post-v1 entries that are window-local instead of living in the
-    /// shared MenuCatalog: external audio and the keyboard profile picker.
+    /// Fixed playback-rate presets for the expanded OSC menu. Kept here (not in
+    /// <see cref="MenuCatalog"/>) because the list is an OSC-only shortcut; the
+    /// quick menu exposes a continuous slider instead.
+    /// </summary>
+    private MenuFlyoutSubItem BuildSpeedMenu()
+    {
+        var menu = new MenuFlyoutSubItem { Text = Loc.T("osd.labelSpeed") };
+        foreach (double speed in new[] { 0.5, 0.75, 1, 1.25, 1.5, 2, 2.5, 3, 4 })
+        {
+            double target = speed;
+            var item = new ToggleMenuFlyoutItem
+            {
+                Text = $"{speed:0.##}×",
+                IsChecked = Math.Abs(_oscVm.Speed - speed) < 0.005,
+            };
+            item.Click += (_, _) =>
+            {
+                SetSpeed(target);
+                ShowChrome();
+            };
+            menu.Items.Add(item);
+        }
+
+        return menu;
+    }
+
+    /// <summary>
+    /// Quick picture-quality switch for the 视频 submenu. Only the two built-in
+    /// profiles are offered; custom profiles live in the dedicated preset window
+    /// (video.quality-editor). Legacy Balanced/HighQuality values (kept only for
+    /// JSON compatibility) render as the default profile being active.
+    /// </summary>
+    private MenuFlyoutSubItem BuildQualityMenu()
+    {
+        var menu = new MenuFlyoutSubItem { Text = Loc.T("ui.qualityPreset") };
+        foreach ((VideoQualityPreset preset, string labelKey) in new[]
+                 {
+                     (VideoQualityPreset.Auto, "ui.qualityAuto"),
+                     (VideoQualityPreset.Performance, "ui.qualityPerformance"),
+                 })
+        {
+            var option = new ToggleMenuFlyoutItem
+            {
+                Text = Loc.T(labelKey),
+                IsChecked = preset == VideoQualityPreset.Auto
+                    ? _settings.VideoQualityPreset is VideoQualityPreset.Auto
+                        or VideoQualityPreset.Balanced or VideoQualityPreset.HighQuality
+                    : _settings.VideoQualityPreset == preset,
+            };
+            option.Click += (_, _) =>
+            {
+                _settings.VideoQualityPreset = preset;
+                ApplyQualityPreset();
+                SaveSettings();
+                ShowChrome();
+            };
+            menu.Items.Add(option);
+        }
+
+        return menu;
+    }
+
+    /// <summary>
+    /// Adds entries that are window-local instead of living in the shared
+    /// <see cref="MenuCatalog"/>: external audio, the 视频 settings tail
+    /// (screenshot subtitles, deband, quality presets) and the keyboard
+    /// profile picker plus the shortcut-editor shortcut.
     /// </summary>
     private void AppendExtraMenuItems(
         MenuFlyoutSubItem top,
@@ -120,6 +169,44 @@ public sealed partial class MainWindow
             return;
         }
 
+        if (string.Equals(groupId, "video", StringComparison.Ordinal))
+        {
+            top.Items.Add(new MenuFlyoutSeparator());
+
+            // The screenshot-subtitle switch lives only inside 视频 now: the
+            // expanded menu's top level stays reserved for the pin action and
+            // the playback-rate presets.
+            var screenshotSubtitles = new ToggleMenuFlyoutItem
+            {
+                Text = Loc.T("ui.screenshotSubtitles"),
+                IsChecked = _settings.ScreenshotWithSubtitles,
+            };
+            screenshotSubtitles.Click += (_, _) =>
+            {
+                _settings.ScreenshotWithSubtitles = screenshotSubtitles.IsChecked;
+                SaveSettings();
+                ShowChrome();
+            };
+            top.Items.Add(screenshotSubtitles);
+
+            var deband = new ToggleMenuFlyoutItem
+            {
+                Text = Loc.T("menu.deband"),
+                IsChecked = _settings.DebandEnabled,
+            };
+            deband.Click += (_, _) =>
+            {
+                _settings.DebandEnabled = deband.IsChecked;
+                ApplyQualityPreset();
+                SaveSettings();
+                ShowChrome();
+            };
+            top.Items.Add(deband);
+
+            top.Items.Add(BuildQualityMenu());
+            return;
+        }
+
         if (!string.Equals(groupId, "window", StringComparison.Ordinal))
         {
             return;
@@ -131,7 +218,7 @@ public sealed partial class MainWindow
             Text = Loc.T("menu.keyboardProfile"),
         };
         string current = KeyBindingProfiles.Normalize(_settings.KeyBindingProfile);
-        foreach (string profile in KeyBindingProfiles.All)
+        foreach (string profile in EnumerateKeyboardProfiles())
         {
             string captured = profile;
             string label = ProfileMenuLabel(profile);
@@ -146,6 +233,12 @@ public sealed partial class MainWindow
         }
 
         top.Items.Add(profiles);
+
+        // K09: the profile picker is the natural place to jump into the full
+        // shortcut editor, without detouring through Settings → 控制.
+        var editor = new MenuFlyoutItem { Text = Loc.T("menu.shortcutEditor") };
+        editor.Click += (_, _) => App.ShowKeyBindingWindow();
+        top.Items.Add(editor);
     }
 
     private void CloseApplicationMenu()
@@ -155,12 +248,34 @@ public sealed partial class MainWindow
     }
 
     private static string ProfileMenuLabel(string profile) =>
-        Loc.T(KeyBindingProfiles.Normalize(profile) switch
+        KeyBindingProfiles.Normalize(profile) switch
         {
-            KeyBindingProfiles.Iina => "menu.profileIina",
-            KeyBindingProfiles.Custom => "menu.profileCustom",
-            _ => "menu.profileDefault",
-        });
+            KeyBindingProfiles.Wiina => Loc.T("menu.profileWiina"),
+            KeyBindingProfiles.Mpv => Loc.T("menu.profileMpv"),
+            KeyBindingProfiles.Custom => Loc.T("menu.profileCustom"),
+            var custom => custom,
+        };
+
+    private IEnumerable<string> EnumerateKeyboardProfiles()
+    {
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        foreach (string profile in KeyBindingProfiles.All)
+        {
+            if (seen.Add(profile))
+            {
+                yield return profile;
+            }
+        }
+
+        foreach (KeyBindingUserProfile profile in _settings.UserKeyProfiles)
+        {
+            string name = KeyBindingProfiles.Normalize(profile.Name);
+            if (name.Length > 0 && seen.Add(name))
+            {
+                yield return name;
+            }
+        }
+    }
 
     private void SwitchKeyBindingProfile(string profile)
     {
@@ -169,6 +284,253 @@ public sealed partial class MainWindow
         SaveSettings();
         RebuildKeyMap();
         ShowOsd(Loc.F("osd.keyProfile", ProfileMenuLabel(normalized)));
+    }
+
+    // Menu command → player action, used to show the *effective* chord instead
+    // of the static text baked into the menu catalog. Commands not listed here
+    // (speed/loop/aspect arguments) keep their catalog text.
+    private static readonly Dictionary<string, string> MenuShortcutActions = new(StringComparer.Ordinal)
+    {
+        [MenuCommands.OpenFile] = PlayerActions.Open,
+        [MenuCommands.OpenUrl] = PlayerActions.OpenUrl,
+        [MenuCommands.Screenshot] = PlayerActions.Screenshot,
+        [MenuCommands.CloseWindow] = PlayerActions.CloseWindow,
+        [MenuCommands.Quit] = PlayerActions.Quit,
+        [MenuCommands.PlayPause] = PlayerActions.PlayPause,
+        [MenuCommands.Stop] = PlayerActions.Stop,
+        [MenuCommands.SeekBack5] = PlayerActions.SeekBack5,
+        [MenuCommands.SeekForward5] = PlayerActions.SeekForward5,
+        [MenuCommands.FramePrevious] = PlayerActions.FramePrevious,
+        [MenuCommands.FrameNext] = PlayerActions.FrameNext,
+        [MenuCommands.SpeedReset] = PlayerActions.SpeedReset,
+        [MenuCommands.AbLoop] = PlayerActions.AbLoop,
+        [MenuCommands.PlaylistPrevious] = PlayerActions.PlaylistPrevious,
+        [MenuCommands.PlaylistNext] = PlayerActions.PlaylistNext,
+        [MenuCommands.ChapterPrevious] = PlayerActions.ChapterPrevious,
+        [MenuCommands.ChapterNext] = PlayerActions.ChapterNext,
+        [MenuCommands.VideoPanel] = PlayerActions.VideoPanel,
+        [MenuCommands.AudioPanel] = PlayerActions.AudioPanel,
+        [MenuCommands.SubtitlesPanel] = PlayerActions.SubtitlesPanel,
+        [MenuCommands.VideoHalf] = PlayerActions.WindowHalf,
+        [MenuCommands.VideoNormal] = PlayerActions.WindowNormal,
+        [MenuCommands.VideoDouble] = PlayerActions.WindowDouble,
+        [MenuCommands.VideoFit] = PlayerActions.FitToScreen,
+        [MenuCommands.Pip] = PlayerActions.PictureInPicture,
+        [MenuCommands.Fullscreen] = PlayerActions.EnterFullscreen,
+        [MenuCommands.Topmost] = PlayerActions.ToggleTopmost,
+        [MenuCommands.MusicMode] = PlayerActions.MusicMode,
+        [MenuCommands.VolumeUp5] = PlayerActions.VolumeUp5,
+        [MenuCommands.VolumeDown5] = PlayerActions.VolumeDown5,
+        [MenuCommands.VolumeUp1] = PlayerActions.VolumeUp1,
+        [MenuCommands.VolumeDown1] = PlayerActions.VolumeDown1,
+        [MenuCommands.Mute] = PlayerActions.Mute,
+        [MenuCommands.AudioDelayUp] = PlayerActions.AudioDelayIncrease01,
+        [MenuCommands.AudioDelayDown] = PlayerActions.AudioDelayDecrease01,
+        [MenuCommands.AudioDelayReset] = PlayerActions.AudioDelayReset,
+        [MenuCommands.SubtitleToggle] = PlayerActions.SubtitleVisibility,
+        [MenuCommands.SubtitleDelayDown] = PlayerActions.SubtitleDelayDecrease,
+        [MenuCommands.SubtitleDelayUp] = PlayerActions.SubtitleDelayIncrease,
+        [MenuCommands.SubtitleDelayReset] = PlayerActions.SubtitleDelayReset,
+        [MenuCommands.SubtitlePositionUp] = PlayerActions.SubtitlePositionUp,
+        [MenuCommands.SubtitlePositionDown] = PlayerActions.SubtitlePositionDown,
+        [MenuCommands.SubtitleScaleUp] = PlayerActions.SubtitleScaleIncrease,
+        [MenuCommands.SubtitleScaleDown] = PlayerActions.SubtitleScaleDecrease,
+        [MenuCommands.NewWindow] = PlayerActions.NewWindow,
+        [MenuCommands.Settings] = PlayerActions.Settings,
+    };
+
+    private Dictionary<string, string>? _acceleratorTexts;
+
+    private Dictionary<string, string> BuildAcceleratorTexts()
+    {
+        var result = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (KeyValuePair<string, KeyChord> entry in KeyBindings.PrimaryChords(
+                     _settings.KeyBindings,
+                     _settings.KeyBindingProfile))
+        {
+            result[entry.Key] = FormatAccelerator(entry.Value);
+        }
+
+        return result;
+    }
+
+    private string? ResolveAcceleratorText(string command)
+    {
+        if (!MenuShortcutActions.TryGetValue(command, out string? action))
+        {
+            return null;
+        }
+
+        Dictionary<string, string> map = _acceleratorTexts ??= BuildAcceleratorTexts();
+        return map.TryGetValue(action, out string? text) ? text : string.Empty;
+    }
+
+    private static string FormatAccelerator(KeyChord chord)
+    {
+        string text = chord.ToString();
+        int split = text.LastIndexOf('+');
+        string prefix = split >= 0 ? text[..(split + 1)] : string.Empty;
+        string key = split >= 0 ? text[(split + 1)..] : text;
+        string glyph = key switch
+        {
+            "Left" => "←",
+            "Right" => "→",
+            "Up" => "↑",
+            "Down" => "↓",
+            "PageUp" => "PgUp",
+            "PageDown" => "PgDn",
+            _ => key,
+        };
+        return prefix + glyph;
+    }
+
+    /// <summary>
+    /// Executes the actions added for the Wiina default profile and raw
+    /// <c>mpv:&lt;command&gt;</c> bindings. Called from
+    /// <see cref="ExecuteAction"/> as a fallback so the legacy switch stays
+    /// untouched for the original actions.
+    /// </summary>
+    private bool TryExecuteShortcutAction(string action)
+    {
+        if (PlayerActionCatalog.RawCommand(action) is { Length: > 0 } raw)
+        {
+            SendPlayerCommandAsync(TokenizeCommand(raw));
+            return true;
+        }
+
+        switch (action)
+        {
+            case PlayerActions.Pause:
+                SendPlayerCommandAsync("set", "pause", "yes");
+                return true;
+            case PlayerActions.Resume:
+                SendPlayerCommandAsync("set", "pause", "no");
+                return true;
+            case PlayerActions.EnterFullscreen:
+                ExecuteMenuCommand(MenuCommands.Fullscreen, null);
+                return true;
+            case PlayerActions.ToggleTopmost:
+                ExecuteMenuCommand(MenuCommands.Topmost, null);
+                return true;
+            case PlayerActions.FitToScreen:
+                ExecuteMenuCommand(MenuCommands.VideoFit, null);
+                return true;
+            case PlayerActions.VideoPanel:
+                ExecuteMenuCommand(MenuCommands.VideoPanel, null);
+                return true;
+            case PlayerActions.AudioPanel:
+                ExecuteMenuCommand(MenuCommands.AudioPanel, null);
+                return true;
+            case PlayerActions.SubtitlesPanel:
+                ExecuteMenuCommand(MenuCommands.SubtitlesPanel, null);
+                return true;
+            case PlayerActions.PlaylistPanel:
+                ExecuteMenuCommand(MenuCommands.ShowPlaylist, null);
+                return true;
+            case PlayerActions.ChapterPanel:
+                ExecuteMenuCommand(MenuCommands.ShowChapters, null);
+                return true;
+            case PlayerActions.CycleVideo:
+                SendPlayerCommandAsync("cycle", "video");
+                return true;
+            case PlayerActions.CycleAudio:
+                SendPlayerCommandAsync("cycle", "audio");
+                return true;
+            case PlayerActions.CycleSubtitle:
+                SendPlayerCommandAsync("cycle", "sub");
+                return true;
+            case PlayerActions.CycleEdition:
+                SendPlayerCommandAsync("cycle", "edition");
+                return true;
+            case PlayerActions.ShowProgress:
+                SendPlayerCommandAsync("show-progress");
+                return true;
+            case PlayerActions.SecondarySubtitleVisibility:
+                SendPlayerCommandAsync("cycle", "secondary-sub-visibility");
+                return true;
+            case PlayerActions.AudioDelayIncrease05:
+                AdjustAudioDelay(0.5);
+                return true;
+            case PlayerActions.AudioDelayDecrease05:
+                AdjustAudioDelay(-0.5);
+                return true;
+            case PlayerActions.AudioDelayIncrease01:
+                AdjustAudioDelay(0.1);
+                return true;
+            case PlayerActions.AudioDelayDecrease01:
+                AdjustAudioDelay(-0.1);
+                return true;
+            case PlayerActions.AudioDelayReset:
+                AdjustAudioDelay(0);
+                return true;
+            case PlayerActions.SubtitleDelayDecrease05:
+                AdjustSubtitleDelay(-0.5);
+                return true;
+            case PlayerActions.SubtitleDelayIncrease05:
+                AdjustSubtitleDelay(0.5);
+                return true;
+            case PlayerActions.SpeedSlower:
+                MultiplySpeed(1 / 1.1);
+                return true;
+            case PlayerActions.SpeedFaster:
+                MultiplySpeed(1.1);
+                return true;
+            case PlayerActions.VolumeUp2:
+                AdjustVolume(2);
+                return true;
+            case PlayerActions.VolumeDown2:
+                AdjustVolume(-2);
+                return true;
+            case PlayerActions.SeekBack15:
+                SeekRelative(-15);
+                return true;
+            case PlayerActions.SeekForward15:
+                SeekRelative(15);
+                return true;
+            case PlayerActions.SeekBack600:
+                SeekRelative(-600);
+                return true;
+            case PlayerActions.SeekForward600:
+                SeekRelative(600);
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    private static string[] TokenizeCommand(string command)
+    {
+        var tokens = new List<string>();
+        var current = new System.Text.StringBuilder();
+        bool quoted = false;
+        foreach (char c in command)
+        {
+            if (c == '"')
+            {
+                quoted = !quoted;
+                continue;
+            }
+
+            if (char.IsWhiteSpace(c) && !quoted)
+            {
+                if (current.Length > 0)
+                {
+                    tokens.Add(current.ToString());
+                    current.Clear();
+                }
+
+                continue;
+            }
+
+            current.Append(c);
+        }
+
+        if (current.Length > 0)
+        {
+            tokens.Add(current.ToString());
+        }
+
+        return tokens.ToArray();
     }
 
     private void AddMenuDefinition(
@@ -208,9 +570,13 @@ public sealed partial class MainWindow
             Text = item.IsChecked ? "✓ " + item.Label : item.Label,
             IsEnabled = item.Enabled,
         };
-        if (!string.IsNullOrWhiteSpace(item.Shortcut))
+        // Show the chord that is actually effective for the current profile.
+        // The catalog shortcut is only a fallback: commands without a static
+        // shortcut (e.g. some window actions) still get their gesture hint.
+        string? hint = ResolveAcceleratorText(item.Command) ?? item.Shortcut;
+        if (!string.IsNullOrWhiteSpace(hint))
         {
-            flyoutItem.KeyboardAcceleratorTextOverride = item.Shortcut;
+            flyoutItem.KeyboardAcceleratorTextOverride = hint;
         }
 
         if (!item.Enabled && !string.IsNullOrWhiteSpace(item.DisabledReason))
@@ -692,7 +1058,9 @@ public sealed partial class MainWindow
                     App.ShowLogViewerWindow();
                     break;
                 case MenuCommands.Settings:
-                    App.ShowSettingsWindow(SettingsPageId.General, null);
+                    // Plain open: activate an existing window on its current page
+                    // instead of resetting it to 通用.
+                    App.ShowSettingsWindow();
                     break;
 
                 case MenuCommands.Welcome:
@@ -729,6 +1097,22 @@ public sealed partial class MainWindow
             ShowOsd(Loc.T("menu.operationFailed"), ex.Message);
         }
     }
+
+    /// <summary>
+    /// Advanced-settings entry points for the mini player. The window menu used
+    /// to carry 音乐模式/迷你播放器, but those entries (and their chords) were
+    /// removed; Settings → 高级 → 模式 is the only remaining way in.
+    /// </summary>
+    public void EnterMiniPlayerMode()
+    {
+        if (_mode.Current != PlayerMode.Mini)
+        {
+            RequestMode(PlayerMode.Mini);
+        }
+    }
+
+    /// <summary>Music mode is the mini player surface; same destination, different label.</summary>
+    public void EnterMusicMode() => EnterMiniPlayerMode();
 
     private async Task AddFilesToPlaylistAsync()
     {

@@ -2,11 +2,13 @@ using System.Linq;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Media;
 using Windows.Graphics;
 using Windows.Storage.Pickers;
 using Wiina.App.Interop;
 using Wiina.Core.Models;
 using Wiina.App.Localization;
+using Wiina.Core.Settings;
 using Wiina.Core.State;
 using Wiina.Core.Text;
 
@@ -30,11 +32,16 @@ public sealed partial class MainWindow
     private string? _artist;
     private string? _album;
     private bool _hasAlbumArt;
-    private string? _autoMiniPath;
     private int _miniDragWindowX;
     private int _miniDragWindowY;
     private int _miniDragCursorX;
     private int _miniDragCursorY;
+
+    /// <summary>
+    /// Background the root grid had before mini mode pinned an opaque,
+    /// theme-matched base. Restored on exit.
+    /// </summary>
+    private Brush? _miniBackgroundBackup;
 
     /// <summary>Stable id used by the app-level window registry.</summary>
     public string WindowId { get; } = Guid.NewGuid().ToString("N");
@@ -191,7 +198,29 @@ public sealed partial class MainWindow
                 RestoreVideoToMain();
                 CaptureNormalFrame();
                 SetTopmost(false);
+                // The snapped frame must not leak into fullscreen: fullscreen
+                // rebuilds the DWM frame and disables the edge magnet.
+                _snapSession.Reset();
+                _snapFrameEngaged = false;
                 AppWindow.SetPresenter(AppWindowPresenterKind.FullScreen);
+                if (AppWindow.Presenter.Kind == AppWindowPresenterKind.FullScreen)
+                {
+                    // The extended titlebar keeps a caption hit region alive even
+                    // while its XAML is transparent, so dragging the top of the
+                    // content area starts the native move loop and drops
+                    // fullscreen. Handing the caption back to the system removes
+                    // the drag region (the system titlebar paints nothing in
+                    // fullscreen) and is restored by ExitFullscreenPresenter.
+                    SetTitleBar(null);
+                    // Belt and braces: also clear the native caption region so
+                    // no hit test can start the OS move loop in fullscreen.
+                    WindowInterop.SetCaptionDragEnabled(this, false);
+                    // Do not leave keyboard focus on a chrome button: Space and
+                    // Enter must act on the player, not on the last clicked OSC
+                    // button.
+                    RootGrid.Focus(FocusState.Programmatic);
+                }
+
                 return AppWindow.Presenter.Kind == AppWindowPresenterKind.FullScreen;
 
             case PlayerMode.PiP:
@@ -243,6 +272,9 @@ public sealed partial class MainWindow
         ApplyLayout();
         UpdateOsdPlacement();
         UpdateFullscreenStatus();
+        // Mode switches rebuild the DWM frame; re-assert the fullscreen/snapped
+        // style after the presenter state has settled (v1.2.7 fullscreen ring).
+        ApplyWindowFrame();
 
         if (pip)
         {
@@ -264,6 +296,9 @@ public sealed partial class MainWindow
         }
 
         AppWindow.SetPresenter(AppWindowPresenterKind.Overlapped);
+        // Restore the custom titlebar drag region that entering fullscreen
+        // deliberately removed (see ApplyMode).
+        SetTitleBar(TitleBar);
         SetTopmost(_settings.AlwaysOnTop);
         SetTitleBarVisible(_chromeShown);
     }
@@ -285,7 +320,7 @@ public sealed partial class MainWindow
 
         DisplayArea area = DisplayArea.GetFromWindowId(
             AppWindow.Id,
-            DisplayAreaFallback.Primary);
+            DisplayAreaFallback.Nearest);
         RectInt32 workArea = area.WorkArea;
         SizeInt32 size = AppWindow.Size;
         PointInt32 position = AppWindow.Position;
@@ -315,6 +350,11 @@ public sealed partial class MainWindow
         VideoHost.Detach();
         pip.AttachSwapChain(_swapChain);
         pip.Activate();
+
+        // While PiP owns the video the main window is minimized, but a
+        // minimized/hidden window would still run the blur worker and steal a
+        // frame from the PiP surface every 125 ms. Park it until PiP exits.
+        SuspendChromeBlur("pip");
 
         // PiP is meant to get the player out of the way. Minimize the main
         // window after the PiP window is visible; it is restored on exit.
@@ -347,6 +387,10 @@ public sealed partial class MainWindow
         }
 
         PipPlaceholder.Visibility = Visibility.Collapsed;
+        // PiP is gone: the main window owns the video again, so the titlebar
+        // blur may resume (the counting helper keeps it parked if another
+        // small-window surface, e.g. mini, is still active).
+        ResumeChromeBlur("pip");
 
         if (_swapChain != 0)
         {
@@ -398,6 +442,12 @@ public sealed partial class MainWindow
         }
     }
 
+    /// <summary>
+    /// PiP reports the <em>layout</em> pixel size of its video surface (full
+    /// window). The mpv composition buffer uses exactly the same size so the
+    /// mini window stays as sharp as the main window instead of being upscaled
+    /// by the compositor (issue 7).
+    /// </summary>
     private void OnPipBufferSizeChanged(int pixelWidth, int pixelHeight, double scale)
     {
         double dpi = scale > 0.1 ? scale : 1.0;
@@ -411,9 +461,10 @@ public sealed partial class MainWindow
             return;
         }
 
+        (int renderWidth, int renderHeight) = PipGeometry.RenderSize(pixelWidth, pixelHeight);
         _player.TrySetPropertyString(
             "d3d11-composition-size",
-            $"{Math.Max(1, pixelWidth)}x{Math.Max(1, pixelHeight)}");
+            $"{renderWidth}x{renderHeight}");
 
         // A paused mpv does not present new frames on its own; a relative
         // zero seek forces one exact refresh so rebinding never stays black.
@@ -447,16 +498,95 @@ public sealed partial class MainWindow
 
     // ------------------------------------------------------------------- mini
 
+    private bool _miniBackdropSuspended;
+
+    /// <summary>
+    /// Mini mode replaces the window acrylic with Mica. The acrylic would only
+    /// add compositor work under the covered surface (small-window reference
+    /// doc §4), but dropping the backdrop entirely is not an option either:
+    /// the XAML island does not cover the non-client frame band, so a window
+    /// with no backdrop paints that band black — which is exactly how the
+    /// light-theme "black mini window" report looked. Mica is theme-tinted,
+    /// DWM-composited and cheap. The previous backdrop is restored on exit.
+    /// </summary>
+    private void SetMiniBackdropSuspended(bool suspended)
+    {
+        if (_miniBackdropSuspended == suspended)
+        {
+            return;
+        }
+
+        _miniBackdropSuspended = suspended;
+        try
+        {
+            if (suspended)
+            {
+                // Mini chrome is forced dark, so the window backdrop is dropped
+                // entirely: Mica follows the app theme and would paint a light
+                // rim/band around the dark mini window in the light theme. A
+                // null backdrop paints that band black, matching the dark base.
+                SystemBackdrop = null;
+            }
+            else
+            {
+                TrySetBackdrop();
+            }
+        }
+        catch
+        {
+            // Backdrop is cosmetic; never block a mode switch. Fall back to the
+            // normal window backdrop if Mica is unavailable on this system.
+            try
+            {
+                if (!suspended)
+                {
+                    TrySetBackdrop();
+                }
+            }
+            catch
+            {
+                // Ignore: still cosmetic.
+            }
+        }
+    }
+
     private bool EnterMiniInternal()
     {
+        // The mini window has a fixed dark chrome and no video behind the
+        // titlebar, so the blur worker would only burn frames. Park it here and
+        // restore the previous mode when mini exits.
+        SuspendChromeBlur("mini");
         CaptureNormalFrame();
         SetTopmost(true);
+        SetMiniBackdropSuspended(true);
         ResizeWindowDip(MiniPlayerLayout.DefaultWidth, MiniPlayerLayout.DefaultHeight);
         _modeResizedWindow = true;
 
         MiniPlayer.Visibility = Visibility.Visible;
+        // Mini chrome is always dark, whatever the app theme is. A light mini
+        // window beside the video looked wrong and left dark-on-light text over
+        // the cover, which was the "浅色小窗对比不对" report. Forcing the element
+        // theme makes every ThemeResource in MiniPlayerView.xaml resolve to the
+        // Dark token set (dark panels + light text, like IINA's mini player).
+        // Restored in HideMiniPlayer; normal mode, PiP and Settings are
+        // unaffected because only this subtree is themed.
+        MiniPlayer.RequestedTheme = ElementTheme.Dark;
         MiniPlayer.SetAnimationsEnabled(AnimationsEnabled);
         MiniPlayer.ResetControls();
+        // The normal root is transparent: the window backdrop paints it. The
+        // backdrop is suspended in mini mode, so any transparent pixel would
+        // expose the black mpv swap chain (the light-theme "black mini window"
+        // report). Pin the dark mini base that pairs with the forced dark
+        // element theme above.
+        _miniBackgroundBackup = RootGrid.Background;
+        RootGrid.Background = new SolidColorBrush(Windows.UI.Color.FromArgb(0xFF, 0x08, 0x09, 0x0A));
+        // Mouse-only chrome: Tab must not park focus on a mini control, where
+        // Space would press it instead of pausing. Restored on exit below.
+        MiniPlayer.SetKeyboardMouseOnly(true);
+        // The main-window chrome (titlebar buttons, OSC) is hidden behind the
+        // mini overlay but still in the tab order; the recursive pass is cheap
+        // and the preview handler remains the backstop for lazy containers.
+        MakeMediaChromeKeyboardTransparent();
         MiniPlayer.SetPlaylistExpanded(_settings.MusicModeShowPlaylist);
         UpdateMiniPlayerState();
         UpdateMiniPlaylist();
@@ -465,21 +595,103 @@ public sealed partial class MainWindow
             ResizeMiniForPlaylist(expanded: true);
         }
 
+        // Diagnostics for the light-theme background report: records the theme
+        // and the effective brush of every layer that can paint the window.
+        Trace($"mini theme: {MiniPlayer.DescribeThemeSurfaces()} " +
+            $"windowBg={DescribeBrush(RootGrid.Background)} element={MiniPlayer.ActualTheme}");
+
+        // Mini mode is keyboard-driven (Space pauses); never leave focus on a
+        // mini control after the mode switch or the player shortcuts stop.
+        RootGrid.Focus(FocusState.Programmatic);
         return true;
+    }
+
+    private static string DescribeBrush(Brush? brush) => brush switch
+    {
+        SolidColorBrush solid => solid.Color.ToString(),
+        LinearGradientBrush gradient => $"gradient({gradient.GradientStops.Count})",
+        null => "null",
+        _ => brush.GetType().Name,
+    };
+
+    // ------------------------------------------------- chrome blur suspension
+
+    /// <summary>
+    /// Number of active small-window surfaces (mini, PiP). A count keeps the
+    /// mini -> PiP transition from resuming the blur in between.
+    /// </summary>
+    private int _chromeBlurSuspendCount;
+
+    /// <summary>
+    /// Parks the ChromeBlur capture worker while only a small window is on
+    /// screen. <see cref="ChromeBlur.Suspend"/> forces the Solid strategy, the
+    /// only one that parks the worker unconditionally (Dynamic/Fixed/Always all
+    /// keep capturing, and a hidden or minimized chrome still burns GPU time
+    /// pulling frames out of mpv). The chrome surfaces switch to their opaque
+    /// <c>ChromeSolidBrush</c> meanwhile, so a titlebar that is still visible
+    /// (PiP placeholder) never shows a stale video texture. The persisted mode
+    /// is preserved and re-applied on resume.
+    /// </summary>
+    private void SuspendChromeBlur(string reason)
+    {
+        if (_chromeBlurSuspendCount++ > 0)
+        {
+            return;
+        }
+
+        ChromeBlur.Suspend();
+        Trace($"chrome blur: suspended ({reason})");
+    }
+
+    /// <summary>
+    /// Restores the chrome blur after the last small-window surface closed.
+    /// ChromeBlur remembers the mode requested while parked, so a settings
+    /// change made in the meantime wins over the pre-suspend snapshot.
+    /// </summary>
+    private void ResumeChromeBlur(string reason)
+    {
+        if (_chromeBlurSuspendCount == 0 || --_chromeBlurSuspendCount > 0)
+        {
+            return;
+        }
+
+        ChromeBlur.Resume();
+        Trace($"chrome blur: resumed ({reason}, mode={ChromeBlur.Current.Mode})");
     }
 
     private void HideMiniPlayer()
     {
+        // Unconditional: if EnterMiniInternal failed halfway the visibility
+        // guard below would otherwise leave the blur parked forever. The
+        // helper counts suspensions, so a call with none active is a no-op.
+        ResumeChromeBlur("mini");
+
         if (MiniPlayer.Visibility != Visibility.Visible)
         {
             return;
         }
 
         MiniPlayer.Visibility = Visibility.Collapsed;
+        // Mini forced a dark element theme (see EnterMiniInternal); hand the
+        // subtree back to the app theme so a later normal-mode overlay and the
+        // settings windows are unaffected.
+        MiniPlayer.RequestedTheme = ElementTheme.Default;
+        MiniPlayer.SetKeyboardMouseOnly(false);
         MiniPlayer.HideVolumeBubble();
         MiniPlayer.SetPlaylistExpanded(false);
         MiniPlayer.HideControls();
         MiniPlayer.ResetControls();
+        if (_miniBackgroundBackup is not null)
+        {
+            RootGrid.Background = _miniBackgroundBackup;
+            _miniBackgroundBackup = null;
+        }
+
+        SetMiniBackdropSuspended(false);
+        // The restored normal frame is not edge-snapped: drop the magnet and
+        // hand the normal DWM frame back.
+        _snapSession.Reset();
+        ApplySnapFrame(false);
         RestoreTopmostFromSettings();
         RestoreNormalFrame();
     }
@@ -546,6 +758,8 @@ public sealed partial class MainWindow
         WindowInterop.TryGetCursorPosition(out _miniDragCursorX, out _miniDragCursorY);
         _miniDragWindowX = AppWindow.Position.X;
         _miniDragWindowY = AppWindow.Position.Y;
+        // Mini drag is a third drag path (issue 4) and shares the edge magnet.
+        _snapSession.Reset();
     }
 
     private void MoveMiniDrag()
@@ -556,28 +770,27 @@ public sealed partial class MainWindow
             return;
         }
 
-        AppWindow.Move(new PointInt32(
-            _miniDragWindowX + (cursorX - _miniDragCursorX),
-            _miniDragWindowY + (cursorY - _miniDragCursorY)));
-    }
-
-    private void MaybeAutoEnterMini()
-    {
-        if (!_settings.AutoSwitchToMusicMode ||
-            _mode.Current != PlayerMode.Normal ||
-            string.IsNullOrWhiteSpace(_currentPath) ||
-            string.Equals(_autoMiniPath, _currentPath, StringComparison.Ordinal))
+        int x = _miniDragWindowX + (cursorX - _miniDragCursorX);
+        int y = _miniDragWindowY + (cursorY - _miniDragCursorY);
+        SizeInt32 size = AppWindow.Size;
+        if (_settings.EdgeSnapping)
         {
-            return;
+            EdgeSnapResult snap = _snapSession.Apply(
+                new WindowRect(x, y, x + size.Width, y + size.Height),
+                WorkAreaUnderPointer(),
+                DisplayScale,
+                margins: SnapMargins());
+            x = snap.Rect.Left;
+            y = snap.Rect.Top;
+            ApplySnapFrame(snap.IsSnapped);
+        }
+        else
+        {
+            _snapSession.Reset();
+            ApplySnapFrame(false);
         }
 
-        if (!MediaModeAdvice.IsAudioOnly(_trackList))
-        {
-            return;
-        }
-
-        _autoMiniPath = _currentPath;
-        RequestMode(PlayerMode.Mini);
+        AppWindow.Move(new PointInt32(x, y));
     }
 
     private void UpdateAlbumArtState()
@@ -660,7 +873,7 @@ public sealed partial class MainWindow
 
     private bool OnAppCommand(int command)
     {
-        if (!App.IsMediaTarget(this))
+        if (!_settings.MediaKeysEnabled || !App.IsMediaTarget(this))
         {
             return false;
         }

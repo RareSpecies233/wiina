@@ -33,7 +33,7 @@
                  window, so the main window keeps a compact restore surface. -->
             <Grid x:Name="PipPlaceholder"
                   Visibility="Collapsed"
-                  Background="#F208090A">
+                  Background="{ThemeResource AppBackgroundBrush}">
                 <StackPanel HorizontalAlignment="Center"
                             VerticalAlignment="Center"
                             Spacing="10">
@@ -44,6 +44,7 @@
                                loc:Loc.Text="ui.inPip"
                                FontSize="20"
                                FontWeight="SemiBold"
+                               Foreground="{ThemeResource PrimaryTextBrush}"
                                HorizontalAlignment="Center" />
                     <TextBlock x:Name="PipPlaceholderSubtitle"
                                loc:Loc.Text="ui.pipPlaying"
@@ -53,6 +54,7 @@
                     <Button loc:Loc.Content="ui.restore"
                             Click="OnPipRestoreClick"
                             HorizontalAlignment="Center"
+                            Style="{StaticResource AccentButtonStyle}"
                             loc:Loc.AutomationName="ui.restorePip" />
                 </StackPanel>
             </Grid>
@@ -79,10 +81,12 @@
                                     PointerEntered="OnChromePointerEntered"
                                     PointerExited="OnChromePointerExited" />
             <controls:SidebarHost x:Name="SidebarLeading"
+                                  Canvas.ZIndex="2"
                                   HorizontalAlignment="Left"
                                   Margin="0,40,0,0"
                                   Visibility="Collapsed" />
             <controls:SidebarHost x:Name="SidebarTrailing"
+                                  Canvas.ZIndex="2"
                                   HorizontalAlignment="Right"
                                   Margin="0,40,0,0"
                                   Visibility="Collapsed" />
@@ -107,6 +111,33 @@
                     <TextBlock x:Name="TimePreviewText"
                                Style="{StaticResource CaptionTextStyle}" />
                 </StackPanel>
+            </Border>
+
+            <!-- PotPlayer-style technical statistics (Tab panel). Plain XAML on
+                 top of the video, hit-testable only while visible. Position and
+                 margin are applied from MainWindow.Osd.cs so the card follows
+                 the OSD position setting (issue 6). -->
+            <controls:PlaybackStatsPanel x:Name="StatsPanel"
+                                         Visibility="Collapsed" />
+
+            <!-- Frame-drop notice: a short card centred on the picture. It is
+                 deliberately independent of the OSD position setting, so a drop
+                 burst is never hidden behind the title bar or the OSC. -->
+            <Border x:Name="FrameDropNotice"
+                    HorizontalAlignment="Center"
+                    VerticalAlignment="Center"
+                    Padding="14,8"
+                    CornerRadius="8"
+                    Background="{ThemeResource PanelBrush}"
+                    BorderBrush="{ThemeResource PanelBorderBrush}"
+                    BorderThickness="1"
+                    IsHitTestVisible="False"
+                    Visibility="Collapsed"
+                    Opacity="0">
+                <TextBlock x:Name="FrameDropNoticeText"
+                           Style="{StaticResource CaptionTextStyle}"
+                           TextAlignment="Center"
+                           TextWrapping="Wrap" />
             </Border>
         </Grid>
 

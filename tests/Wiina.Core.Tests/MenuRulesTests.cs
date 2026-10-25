@@ -9,7 +9,7 @@ public sealed class MenuRulesTests
         MenuCatalog.Flatten(MenuCatalog.Build(state)).Single(item => item.Id == id);
 
     [Fact]
-    public void EightTopLevelMenusInSpecOrder()
+    public void EightTopLevelMenusKeepWindowAndVideoWorkSeparate()
     {
         IReadOnlyList<MenuGroupDefinition> groups = MenuCatalog.Build(new MenuState());
         Assert.Equal(
@@ -19,19 +19,62 @@ public sealed class MenuRulesTests
     }
 
     [Fact]
+    public void WindowColumnsHoldOnlyWindowAndLayoutOperations()
+    {
+        IReadOnlyList<MenuGroupDefinition> groups = MenuCatalog.Build(new MenuState());
+        MenuGroupDefinition window = groups.Single(group => group.Title == "窗口");
+        MenuGroupDefinition video = groups.Single(group => group.Title == "视频");
+
+        // Window/layout operations stay together in 窗口 ...
+        string[] windowIds = window.Items.Select(item => item.Id).ToArray();
+        Assert.Contains("window.half", windowIds);
+        Assert.Contains("window.fit", windowIds);
+        Assert.Contains("video.fullscreen", windowIds);
+        Assert.Contains("video.topmost", windowIds);
+        Assert.Contains("video.lock-aspect", windowIds);
+        // PiP stays in 窗口 (it swaps the window for the floating player);
+        // mini/music mode is no longer reachable from any menu.
+        Assert.Contains("video.pip", windowIds);
+        Assert.DoesNotContain("video.music-mode", windowIds);
+
+        // ... while the pure picture family never appears there.
+        Assert.DoesNotContain("video.aspect", windowIds);
+        Assert.DoesNotContain("video.crop", windowIds);
+        Assert.DoesNotContain("video.rotate", windowIds);
+        Assert.DoesNotContain("video.flip-h", windowIds);
+        Assert.DoesNotContain("video.deinterlace", windowIds);
+        Assert.DoesNotContain("video.filters", windowIds);
+        Assert.DoesNotContain("video.screenshot", windowIds);
+        Assert.DoesNotContain("video.panel", windowIds);
+        Assert.DoesNotContain("video.tracks", windowIds);
+
+        string[] videoIds = video.Items.Select(item => item.Id).ToArray();
+        Assert.Contains("video.aspect", videoIds);
+        Assert.Contains("video.crop", videoIds);
+        Assert.Contains("video.rotate", videoIds);
+        Assert.Contains("video.flip-h", videoIds);
+        Assert.Contains("video.flip-v", videoIds);
+        Assert.Contains("video.deinterlace", videoIds);
+        Assert.Contains("video.filters", videoIds);
+        Assert.Contains("video.screenshot", videoIds);
+        Assert.Contains("video.panel", videoIds);
+        Assert.Contains("video.tracks", videoIds);
+    }
+
+    [Fact]
     public void NoMediaDisablesPlaybackButKeepsFileActions()
     {
         var state = new MenuState();
         Assert.False(Find(state, "playback.play-pause").Enabled);
         Assert.False(Find(state, "playback.seek-back").Enabled);
-        Assert.False(Find(state, "playback.screenshot").Enabled);
+        Assert.False(Find(state, "video.screenshot").Enabled);
         Assert.False(Find(state, "audio.mute").Enabled);
         Assert.False(Find(state, "subtitles.load").Enabled);
         Assert.True(Find(state, "file.open").Enabled);
         Assert.True(Find(state, "file.close").Enabled);
         Assert.True(Find(state, "window.settings").Enabled);
         Assert.True(Find(state, "video.fullscreen").Enabled);
-        Assert.True(Find(state, "video.pip").Enabled);
+        Assert.True(Find(state, "window.maximize").Enabled);
     }
 
     [Fact]
@@ -127,19 +170,20 @@ public sealed class MenuRulesTests
     }
 
     [Fact]
-    public void ModeItemsAreCheckedAndTitledByState()
+    public void FullscreenItemLabelFollowsState()
     {
         var fullscreen = new MenuState { HasMedia = true, IsFullscreen = true };
         Assert.True(Find(fullscreen, "video.fullscreen").IsChecked);
         Assert.Equal("退出全屏", Find(fullscreen, "video.fullscreen").Label);
 
-        var pip = new MenuState { IsPip = true };
-        Assert.True(Find(pip, "video.pip").IsChecked);
-        Assert.Equal("退出画中画", Find(pip, "video.pip").Label);
-
-        var mini = new MenuState { IsMini = true };
-        Assert.True(Find(mini, "video.music-mode").IsChecked);
-        Assert.Equal("退出音乐模式", Find(mini, "video.music-mode").Label);
+        // The mini/music menu entry was removed (mini mode now lives only under
+        // Settings → 高级 → 模式); PiP keeps its 窗口 entry.
+        string[] ids = MenuCatalog
+            .Flatten(MenuCatalog.Build(new MenuState()))
+            .Select(item => item.Id)
+            .ToArray();
+        Assert.DoesNotContain("video.music-mode", ids);
+        Assert.Contains("video.pip", ids);
     }
 
     [Fact]
@@ -168,7 +212,6 @@ public sealed class MenuRulesTests
         Assert.True(Find(state, "playback.ab-loop").IsChecked);
         Assert.True(Find(state, "playback.loop-one").IsChecked);
         Assert.False(Find(state, "playback.loop-off").IsChecked);
-        Assert.True(Find(state, "playback.speed.1.5").IsChecked);
         Assert.True(Find(state, "video.aspect.4:3").IsChecked);
         Assert.True(Find(state, "video.crop.5:4").IsChecked);
         Assert.True(Find(state, "video.rotate.90").IsChecked);
@@ -177,10 +220,12 @@ public sealed class MenuRulesTests
     }
 
     [Fact]
-    public void SpeedAndShortcutTextArePresent()
+    public void SpeedMenuIsGoneAndShortcutTextIsPresent()
     {
         var state = new MenuState { HasMedia = true, Speed = 2.0 };
-        Assert.Equal("速度：2×", Find(state, "playback.speed").Label);
+        Assert.DoesNotContain(
+            MenuCatalog.Flatten(MenuCatalog.Build(state)),
+            item => item.Id == "playback.speed");
         Assert.Equal("Ctrl+,", Find(state, "window.settings").Shortcut);
         Assert.Equal("Ctrl+Shift+O", Find(state, "file.open-url").Shortcut);
         Assert.Equal("F11", Find(state, "video.fullscreen").Shortcut);
@@ -204,7 +249,6 @@ public sealed class MenuRulesTests
         Assert.Equal(MenuItemKind.Submenu, Find(state, "file.recent").Kind);
         Assert.Equal(MenuItemKind.Submenu, Find(state, "video.aspect").Kind);
         Assert.NotEmpty(Find(state, "video.aspect").Children);
-        Assert.NotEmpty(Find(state, "playback.speed").Children);
     }
 
     [Fact]

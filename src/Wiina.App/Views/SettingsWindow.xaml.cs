@@ -1,4 +1,6 @@
 using System.Collections.Generic;
+using System.ComponentModel;
+using System.Diagnostics;
 using System.IO;
 using Microsoft.UI.Text;
 using Microsoft.UI.Windowing;
@@ -27,7 +29,7 @@ using DispatcherQueueTimer = Microsoft.UI.Dispatching.DispatcherQueueTimer;
 namespace Wiina.App.Views;
 
 /// <summary>
-/// Stage 7 settings window: eleven catalog-driven pages, live search with jump +
+/// Stage 7 settings window: twelve catalog-driven pages, live search with jump +
 /// highlight, section dots and the key-binding editor.
 /// </summary>
 public sealed partial class SettingsWindow : Window
@@ -37,11 +39,14 @@ public sealed partial class SettingsWindow : Window
     private static readonly Color TransparentColor = Color.FromArgb(0x00, 0, 0, 0);
 
     private readonly List<(SettingsPageId Page, Button Button)> _navButtons = new();
-    private readonly List<(SettingsRowDefinition Row, Action Refresh, Border Container)> _rowWidgets = new();
+    private readonly List<(SettingsRowDefinition Row, Action Refresh, Border Container, Action<bool> SetAvailable)> _rowWidgets = new();
     private readonly List<(string Section, FrameworkElement Element)> _sectionHeaders = new();
 
     private SettingsPageId _currentPage = SettingsPageId.General;
     private DispatcherQueueTimer? _saveTimer;
+    private DispatcherQueueTimer? _numberTimer;
+    private readonly CoalescedEdit<double> _pendingNumber = new();
+    private SettingsRowDefinition? _pendingNumberRow;
     private bool _loading;
     private bool _saving;
     private bool _applying;
@@ -51,9 +56,12 @@ public sealed partial class SettingsWindow : Window
     private int _titleDragCursorStartY;
 
     public SettingsWindow()
-        : this(ParsePage(App.Settings.SettingsPage), null)
+        : this(SettingsNavigation.ParsePage(App.Settings.SettingsPage), null)
     {
     }
+
+    /// <summary>Page currently shown; used by row-only deep links so they keep it.</summary>
+    public SettingsPageId CurrentPage => _currentPage;
 
     public SettingsWindow(SettingsPageId page, string? rowId)
     {
@@ -61,13 +69,8 @@ public sealed partial class SettingsWindow : Window
         Title = Loc.T("ui.wiinaSettings");
         _currentPage = page;
 
-        bool dark = App.Settings.Theme != ThemeMode.Light;
-        RootGrid.RequestedTheme = App.Settings.Theme switch
-        {
-            ThemeMode.Dark => ElementTheme.Dark,
-            ThemeMode.Light => ElementTheme.Light,
-            _ => ElementTheme.Default,
-        };
+        RootGrid.RequestedTheme = App.ResolveTheme();
+        bool dark = App.IsDarkTheme;
 
         WindowShell.Prepare(
             this,
@@ -86,7 +89,36 @@ public sealed partial class SettingsWindow : Window
         _saveTimer.IsRepeating = false;
         _saveTimer.Tick += (_, _) => SaveNow();
 
+        // Number rows apply while the user types; a short one-shot timer keeps a
+        // burst of keystrokes to a single apply and a single settings write.
+        _numberTimer = DispatcherQueue.CreateTimer();
+        _numberTimer.Interval = TimeSpan.FromMilliseconds(200);
+        _numberTimer.IsRepeating = false;
+        _numberTimer.Tick += (_, _) => CommitPendingNumber();
+
         RootGrid.Loaded += (_, _) => RootGrid.Focus(FocusState.Programmatic);
+
+        // mpv pushes a new audio-device-list while this window may be in the
+        // background; re-reading only the device picker on activation keeps it
+        // current without disturbing text/number controls the user is editing.
+        Activated += (_, args) =>
+        {
+            if (args.WindowActivationState == WindowActivationState.Deactivated)
+            {
+                // Alt-tabbing away is a commit point: a typed number must not be
+                // lost just because the box never lost focus inside the window.
+                CommitPendingNumber();
+                return;
+            }
+
+            foreach ((SettingsRowDefinition row, Action refreshRow, Border _, Action<bool> _) in _rowWidgets)
+            {
+                if (row.Kind == SettingsRowKind.AudioDevice)
+                {
+                    refreshRow();
+                }
+            }
+        };
 
         App.SettingsChanged += OnSettingsChanged;
         Loc.LanguageChanged += OnLanguageChanged;
@@ -102,11 +134,6 @@ public sealed partial class SettingsWindow : Window
         Navigate(page, rowId);
         Activate();
     }
-
-    private static SettingsPageId ParsePage(string? value) =>
-        Enum.TryParse(value, ignoreCase: true, out SettingsPageId page)
-            ? page
-            : SettingsPageId.General;
 
     // ------------------------------------------------------------- navigation
 
@@ -126,19 +153,21 @@ public sealed partial class SettingsWindow : Window
                 Orientation = Orientation.Horizontal,
                 Spacing = 10,
             };
-            content.Children.Add(new FontIcon
+            var icon = new FontIcon
             {
                 Glyph = page.Glyph,
                 FontSize = 14,
                 FontFamily = new FontFamily("Segoe Fluent Icons"),
-            });
+            };
             string pageTitle = SettingsLocalization.PageTitle(page, Loc.CurrentLanguage);
-            content.Children.Add(new TextBlock
+            var label = new TextBlock
             {
                 Text = pageTitle,
                 FontSize = 13,
                 VerticalAlignment = VerticalAlignment.Center,
-            });
+            };
+            content.Children.Add(icon);
+            content.Children.Add(label);
 
             var button = new Button
             {
@@ -146,6 +175,13 @@ public sealed partial class SettingsWindow : Window
                 Content = content,
                 Style = (Style)RootGrid.Resources["SettingsNavButtonStyle"],
             };
+            // Bind glyph and text colour to the button's Foreground so rest,
+            // hover and selected stay in lockstep with the style setters
+            // (SecondaryTextBrush → PrimaryTextBrush). Relying on the icon/text
+            // theme defaults left a bright fallback colour that read as a hover
+            // highlight on the otherwise dim rail.
+            icon.SetBinding(FontIcon.ForegroundProperty, NavForegroundBinding(button));
+            label.SetBinding(TextBlock.ForegroundProperty, NavForegroundBinding(button));
             SettingsPageId id = page.Id;
             Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(button, pageTitle);
             button.Click += (_, _) => Navigate(id);
@@ -154,8 +190,20 @@ public sealed partial class SettingsWindow : Window
         }
     }
 
+    /// <summary>One-way Foreground binding from a rail button to its icon/text.</summary>
+    private static Microsoft.UI.Xaml.Data.Binding NavForegroundBinding(Button button) => new()
+    {
+        Source = button,
+        Path = new PropertyPath("Foreground"),
+        Mode = Microsoft.UI.Xaml.Data.BindingMode.OneWay,
+    };
+
     private void Navigate(SettingsPageId page, string? rowId = null)
     {
+        // Rebuilding the page replaces every NumberBox, so commit whatever the user
+        // typed on the page they are leaving.
+        CommitPendingNumber();
+
         if (page == SettingsPageId.KeyBindings)
         {
             // The standalone page was removed from navigation; keep stale
@@ -220,6 +268,9 @@ public sealed partial class SettingsWindow : Window
             DispatcherQueue.TryEnqueue(() => HighlightRow(rowId));
         }
 
+        // The page rows are rebuilt in place; rewind the shared scroller so the
+        // next page does not inherit the previous page's offset.
+        PageScroll.ChangeView(null, 0, null, disableAnimation: true);
         AnimatePageChange();
     }
 
@@ -342,7 +393,7 @@ public sealed partial class SettingsWindow : Window
 
     private void HighlightRow(string rowId)
     {
-        foreach ((SettingsRowDefinition row, Action refresh, Border container) in _rowWidgets)
+        foreach ((SettingsRowDefinition row, Action refresh, Border container, Action<bool> _) in _rowWidgets)
         {
             if (!string.Equals(row.Id, rowId, StringComparison.Ordinal))
             {
@@ -409,11 +460,14 @@ public sealed partial class SettingsWindow : Window
         string description = row.Id == "control.keybindings"
             ? Loc.T("settings.keyBindingsHint")
             : SettingsLocalization.Description(row, Loc.CurrentLanguage);
-        if (!row.IsAvailable)
+        bool available = row.IsAvailableFor(App.Settings);
+        if (!available)
         {
             description += "\n" + Loc.F(
                 "settings.unavailable",
-                SettingsLocalization.UnavailableReason(row.UnavailableReason ?? string.Empty, Loc.CurrentLanguage));
+                SettingsLocalization.UnavailableReason(
+                    row.UnavailableReasonFor(App.Settings) ?? string.Empty,
+                    Loc.CurrentLanguage));
         }
 
         textStack.Children.Add(new TextBlock
@@ -431,22 +485,27 @@ public sealed partial class SettingsWindow : Window
         Grid.SetColumn(control, 2);
         grid.Children.Add(control);
 
-        if (!row.IsAvailable)
+        // Availability can change with other settings (for example the
+        // thumbnail preview-while-generating row is disabled while slow
+        // thumbnail mode is on), so the refresh pass re-evaluates it.
+        void SetAvailable(bool canUse)
         {
-            container.Opacity = 0.55;
-            if (control is Control disabled)
+            container.Opacity = canUse ? 1 : 0.55;
+            if (control is Control current)
             {
-                disabled.IsEnabled = false;
+                current.IsEnabled = canUse;
             }
             else
             {
-                control.IsHitTestVisible = false;
+                control.IsHitTestVisible = canUse;
             }
         }
 
+        SetAvailable(available);
+
         container.Child = grid;
         PagePanel.Children.Add(container);
-        _rowWidgets.Add((row, refresh, container));
+        _rowWidgets.Add((row, refresh, container, SetAvailable));
     }
 
     private FrameworkElement BuildControl(SettingsRowDefinition row, out Action refresh)
@@ -524,8 +583,13 @@ public sealed partial class SettingsWindow : Window
                     SmallChange = row.Step,
                     LargeChange = Math.Max(row.Step, row.Step * 5),
                     Value = Convert.ToDouble(value ?? 0),
-                    Width = 108,
-                    SpinButtonPlacementMode = NumberBoxSpinButtonPlacementMode.Inline,
+                    // Inline spin buttons take 32 DIP each and the focused text
+                    // box also reserves its clear button, which left no room for
+                    // the number at the old 108 DIP width (it read as blank
+                    // after a click). Compact moves the spinners into a popup.
+                    Width = 150,
+                    MinWidth = 120,
+                    SpinButtonPlacementMode = NumberBoxSpinButtonPlacementMode.Compact,
                     AcceptsExpression = false,
                 };
                 var wrap = new StackPanel
@@ -546,15 +610,7 @@ public sealed partial class SettingsWindow : Window
                     });
                 }
 
-                box.ValueChanged += (_, args) =>
-                {
-                    if (_loading || double.IsNaN(args.NewValue))
-                    {
-                        return;
-                    }
-
-                    Apply(row, args.NewValue, immediate: false);
-                };
+                WireNumberEditor(row, box);
                 refresh = () =>
                 {
                     _loading = true;
@@ -588,6 +644,80 @@ public sealed partial class SettingsWindow : Window
                     _loading = false;
                 };
                 return box;
+            }
+
+            case SettingsRowKind.AudioDevice:
+            {
+                var combo = new ComboBox
+                {
+                    Width = 280,
+                    FontSize = 12,
+                    DisplayMemberPath = nameof(AudioDeviceService.AudioDeviceOption.DisplayName),
+                };
+                var refreshButton = new Button
+                {
+                    Content = new FontIcon { Glyph = "\uE72C", FontSize = 14 },
+                    Padding = new Thickness(8, 5, 8, 5),
+                    VerticalAlignment = VerticalAlignment.Center,
+                };
+                ToolTipService.SetToolTip(refreshButton, Loc.T("settings.audioDeviceRefresh"));
+                Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(
+                    refreshButton, Loc.T("settings.audioDeviceRefresh"));
+                Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(
+                    combo, SettingsLocalization.Title(row, Loc.CurrentLanguage));
+
+                void Reload()
+                {
+                    IReadOnlyList<AudioDeviceService.AudioDeviceOption> options =
+                        AudioDeviceService.Build(
+                            row.Value(App.Settings) as string,
+                            Loc.T("settings.audioDeviceAuto"),
+                            Loc.T("settings.audioDeviceUnavailable"));
+                    _loading = true;
+                    try
+                    {
+                        combo.ItemsSource = options;
+                        int index = AudioDeviceService.IndexOf(
+                            options, row.Value(App.Settings) as string);
+                        combo.SelectedIndex = index;
+                        // Tooltip carries the raw mpv device name (useful for support
+                        // and for the persisted settings value) or the empty hint.
+                        ToolTipService.SetToolTip(
+                            combo,
+                            options.Count > 1
+                                ? index > 0 ? options[index].Name : null
+                                : Loc.T("quick.noAudioDevices"));
+                    }
+                    finally
+                    {
+                        _loading = false;
+                    }
+                }
+
+                combo.SelectionChanged += (_, _) =>
+                {
+                    if (_loading ||
+                        combo.SelectedItem is not AudioDeviceService.AudioDeviceOption option)
+                    {
+                        return;
+                    }
+
+                    // audio.device is applied to mpv immediately by MainWindow.
+                    Apply(row, option.Name, immediate: true);
+                };
+                refreshButton.Click += (_, _) => Reload();
+
+                var panel = new StackPanel
+                {
+                    Orientation = Orientation.Horizontal,
+                    Spacing = 6,
+                    VerticalAlignment = VerticalAlignment.Center,
+                };
+                panel.Children.Add(combo);
+                panel.Children.Add(refreshButton);
+                refresh = Reload;
+                Reload();
+                return panel;
             }
 
             case SettingsRowKind.Action:
@@ -694,6 +824,11 @@ public sealed partial class SettingsWindow : Window
     private static string ActionVerb(string? actionId) => actionId switch
     {
         "choose-screenshot-folder" => Loc.T("settings.choose"),
+        "associate-video" or "associate-audio" or "associate-all" =>
+            Loc.T("settings.associate"),
+        "associate-admin" => Loc.T("settings.associateAdmin"),
+        "unregister-associations" => Loc.T("settings.unassociate"),
+        "open-default-apps" => Loc.T("settings.openSettings"),
         "open-data-folder" or "open-config-folder" or "open-log-folder" or
             "open-plugin-folder" => Loc.T("settings.open"),
         "reset-video" or "reset-audio" or "reset-subtitles" or "reset-control" or
@@ -707,7 +842,7 @@ public sealed partial class SettingsWindow : Window
             "video.quality-editor" =>
             Loc.T("settings.open"),
         "reset-equalizer" => Loc.T("settings.reset"),
-        "toggle-technical-osd" => Loc.T("settings.toggle"),
+        "enter-mini-player" => Loc.T("settings.enter"),
         _ => Loc.T("settings.run"),
     };
 
@@ -715,8 +850,22 @@ public sealed partial class SettingsWindow : Window
     {
         "advanced.renderer" => App.ActiveWindow?.GetRendererInfo() ?? Loc.T("settings.noActiveWindow"),
         "advanced.libmpv" => $"libmpv {MpvRuntime.ClientApiVersion}",
+        "integration.status" => AssociationStatusText(),
         _ => row.Value(App.Settings) as string ?? string.Empty,
     };
+
+    private static string AssociationStatusText()
+    {
+        bool video = FileAssociationService.IsVideoRegistered;
+        bool audio = FileAssociationService.IsAudioRegistered;
+        return (video, audio) switch
+        {
+            (true, true) => Loc.T("integration.statusBoth"),
+            (true, false) => Loc.T("integration.statusVideo"),
+            (false, true) => Loc.T("integration.statusAudio"),
+            _ => Loc.T("integration.statusNone"),
+        };
+    }
 
     private void Apply(SettingsRowDefinition row, object? value, bool immediate)
     {
@@ -754,15 +903,17 @@ public sealed partial class SettingsWindow : Window
         }
     }
 
+    /// <summary>
+    /// Applies the resolved theme while this window stays open: either from its
+    /// own theme row or from another window's settings save.
+    /// </summary>
     private void ApplyTheme()
     {
-        RootGrid.RequestedTheme = App.Settings.Theme switch
-        {
-            ThemeMode.Dark => ElementTheme.Dark,
-            ThemeMode.Light => ElementTheme.Light,
-            _ => ElementTheme.Default,
-        };
-        WindowShell.ConfigureCaptionButtons(this, App.Settings.Theme != ThemeMode.Light);
+        RootGrid.RequestedTheme = App.ResolveTheme();
+        WindowShell.ConfigureCaptionButtons(this, App.IsDarkTheme);
+        // The theme row is saved with a debounce; push the new theme to the
+        // player and every other open tool window right away.
+        App.SyncOpenWindowThemes();
     }
 
     private void RefreshRows()
@@ -775,15 +926,154 @@ public sealed partial class SettingsWindow : Window
         _loading = true;
         try
         {
-            foreach ((SettingsRowDefinition _, Action refresh, Border _) in _rowWidgets)
+            foreach ((SettingsRowDefinition row, Action refresh, Border _, Action<bool> setAvailable) in _rowWidgets)
             {
                 refresh();
+                setAvailable(row.IsAvailableFor(App.Settings));
             }
         }
         finally
         {
             _loading = false;
         }
+    }
+
+    /// <summary>
+    /// Makes a number row live while the user types. WinUI raises
+    /// <c>ValueChanged</c> only when the text is committed (Enter, focus loss or a
+    /// spinner click), so a typed value used to be lost if the window closed first;
+    /// watching the inner text box and applying after a short debounce fixes that
+    /// without turning every keystroke into a settings write.
+    /// </summary>
+    private void WireNumberEditor(SettingsRowDefinition row, NumberBox box)
+    {
+        box.ValueChanged += (_, args) =>
+        {
+            if (_loading || double.IsNaN(args.NewValue))
+            {
+                return;
+            }
+
+            double clamped = NumberInput.Clamp(args.NewValue, row.Minimum, row.Maximum);
+            if (Math.Abs(clamped - args.NewValue) > 0.0001)
+            {
+                // Echo the legal value instead of leaving an out-of-range number on
+                // screen; the _loading guard keeps this echo from re-entering.
+                _loading = true;
+                box.Value = clamped;
+                _loading = false;
+            }
+
+            QueueNumberEdit(row, clamped);
+        };
+
+        box.LostFocus += (_, _) => CommitPendingNumber();
+
+        box.Loaded += (_, _) =>
+        {
+            if (FindDescendant<TextBox>(box) is not { } editor)
+            {
+                return;
+            }
+
+            editor.TextChanged += (_, _) =>
+            {
+                if (_loading)
+                {
+                    return;
+                }
+
+                string text = editor.Text.Trim();
+                if (text.EndsWith('.') || text.EndsWith(','))
+                {
+                    // Mid-typing "1." — waiting for the next key avoids truncating
+                    // the fraction the user is about to type.
+                    return;
+                }
+
+                // Invalid text (blank, letters, NaN, infinity) is ignored, so the
+                // previous valid value stays in settings and the box restores it on
+                // commit instead of writing garbage.
+                if (NumberInput.TryParse(text, row.Minimum, row.Maximum, out double typed))
+                {
+                    QueueNumberEdit(row, typed);
+                }
+            };
+        };
+    }
+
+    /// <summary>
+    /// Queues the newest value of a numeric row. Values that already match the
+    /// stored setting are ignored, which keeps the box's own re-formatting on commit
+    /// from applying twice.
+    /// </summary>
+    private void QueueNumberEdit(SettingsRowDefinition row, double value)
+    {
+        double current = Convert.ToDouble(row.Value(App.Settings) ?? 0);
+        if (Math.Abs(current - value) < 0.0001)
+        {
+            return;
+        }
+
+        _pendingNumberRow = row;
+        _pendingNumber.Set(value);
+        _numberTimer?.Stop();
+        _numberTimer?.Start();
+    }
+
+    /// <summary>
+    /// Applies the pending numeric edit once and, by default, writes settings once.
+    /// Called by the debounce timer and by every commit point (focus loss,
+    /// deactivation, page navigation, search filtering, window close).
+    /// </summary>
+    private void CommitPendingNumber(bool save = true)
+    {
+        _numberTimer?.Stop();
+        if (_pendingNumberRow is not { } row)
+        {
+            return;
+        }
+
+        _pendingNumberRow = null;
+        if (!_pendingNumber.TryTake(out double value))
+        {
+            return;
+        }
+
+        // Apply immediately in memory (this row can affect the player right away)
+        // and let the caller decide about the disk write.
+        Apply(row, value, immediate: false);
+        if (save)
+        {
+            SaveNow();
+        }
+        else
+        {
+            // The caller runs its own App.SaveSettings(); do not leave a stray
+            // timer that would write a second time after the window closed.
+            _saveTimer?.Stop();
+        }
+    }
+
+    private static T? FindDescendant<T>(DependencyObject root)
+        where T : DependencyObject
+    {
+        int count = VisualTreeHelper.GetChildrenCount(root);
+        for (int i = 0; i < count; i++)
+        {
+            DependencyObject child = VisualTreeHelper.GetChild(root, i);
+            if (child is T match)
+            {
+                return match;
+            }
+
+            if (FindDescendant<T>(child) is { } nested)
+            {
+                return nested;
+            }
+        }
+
+        return null;
     }
 
     private void SaveNow()
@@ -821,6 +1111,10 @@ public sealed partial class SettingsWindow : Window
 
     private void OnSearchChanged(object sender, TextChangedEventArgs e)
     {
+        // The page is still mounted while the search list floats above it; typing a
+        // query is a navigation-style commit point for a half-finished number.
+        CommitPendingNumber();
+
         string query = SearchBox.Text.Trim();
         if (query.Length == 0)
         {
@@ -990,10 +1284,6 @@ public sealed partial class SettingsWindow : Window
                     App.ShowAboutWindow();
                     break;
 
-                case "toggle-technical-osd":
-                    App.ActiveWindow?.ToggleTechnicalOsd();
-                    break;
-
                 case "export-diagnostics":
                 {
                     App.ExportDiagnostics();
@@ -1027,6 +1317,107 @@ public sealed partial class SettingsWindow : Window
                         Navigate(SettingsPageId.General);
                     }
 
+                    break;
+
+                case "enter-mini-player":
+                {
+                    // Mini player and music mode are one experimental surface
+                    // now. Warn once and require an explicit confirmation
+                    // (default is Cancel) before the settings window closes.
+                    if (!await Dialogs.ConfirmAsync(
+                            RootGrid.XamlRoot,
+                            Loc.T("settings.miniDevTitle"),
+                            Loc.T("settings.miniDevBody"),
+                            Loc.T("dialogs.continue")))
+                    {
+                        break;
+                    }
+
+                    // The mini player takes over the main window, so the
+                    // settings window must leave the screen first. Closing it
+                    // also clears App's singleton, so Settings reopens cleanly.
+                    MainWindow? main = App.ActiveWindow;
+                    Close();
+                    main?.EnterMiniPlayerMode();
+                    break;
+                }
+
+                case "open-default-apps":
+                    await Windows.System.Launcher.LaunchUriAsync(
+                        new Uri("ms-settings:defaultapps"));
+                    break;
+
+                case "associate-video":
+                case "associate-audio":
+                case "associate-all":
+                {
+                    bool video = row.ActionId != "associate-audio";
+                    bool audio = row.ActionId != "associate-video";
+                    FileAssociationService.Register(video, audio);
+                    RefreshRows();
+                    await ShowMessageAsync(
+                        Loc.T("integration.registeredTitle"),
+                        Loc.T("integration.registeredBody"));
+                    break;
+                }
+
+                case "associate-admin":
+                {
+                    string executable = Environment.ProcessPath
+                        ?? throw new InvalidOperationException("Cannot resolve the Wiina executable path.");
+                    try
+                    {
+                        using Process? process = Process.Start(new ProcessStartInfo
+                        {
+                            FileName = executable,
+                            Arguments = "--associate-elevated-video --associate-elevated-audio",
+                            WorkingDirectory = System.IO.Path.GetDirectoryName(executable) ?? string.Empty,
+                            UseShellExecute = true,
+                            Verb = "runas",
+                        });
+                        if (process is null)
+                        {
+                            await ShowMessageAsync(
+                                Loc.T("integration.adminFailedTitle"),
+                                Loc.T("integration.adminFailedBody"));
+                            break;
+                        }
+
+                        await process.WaitForExitAsync();
+                        bool succeeded = process.ExitCode == 0;
+                        RefreshRows();
+                        await ShowMessageAsync(
+                            Loc.T(succeeded
+                                ? "integration.adminRegisteredTitle"
+                                : "integration.adminFailedTitle"),
+                            Loc.T(succeeded
+                                ? "integration.adminRegisteredBody"
+                                : "integration.adminFailedBody"));
+                    }
+                    catch (Win32Exception ex) when (ex.NativeErrorCode == 1223)
+                    {
+                        // ERROR_CANCELLED: the user dismissed the UAC prompt.
+                        RefreshRows();
+                        await ShowMessageAsync(
+                            Loc.T("integration.adminCanceledTitle"),
+                            Loc.T("integration.adminCanceledBody"));
+                    }
+                    catch (Exception ex)
+                    {
+                        await ShowMessageAsync(
+                            Loc.T("integration.adminFailedTitle"),
+                            Loc.T("integration.adminFailedBody") + Environment.NewLine + ex.Message);
+                    }
+
+                    break;
+                }
+
+                case "unregister-associations":
+                    FileAssociationService.Unregister();
+                    RefreshRows();
+                    await ShowMessageAsync(
+                        Loc.T("integration.removedTitle"),
+                        Loc.T("integration.removedBody"));
                     break;
 
                 case "install-plugin":
@@ -1127,6 +1518,9 @@ public sealed partial class SettingsWindow : Window
     {
         try
         {
+            // Closing is the last commit point: apply a half-typed number before the
+            // bounds write below saves settings exactly once.
+            CommitPendingNumber(save: false);
             double scale = RootGrid.XamlRoot?.RasterizationScale ?? 1;
             App.Settings.SettingsWindowWidth = Math.Max(600, AppWindow.Size.Width / scale);
             App.Settings.SettingsWindowHeight = Math.Max(440, AppWindow.Size.Height / scale);
@@ -1142,6 +1536,7 @@ public sealed partial class SettingsWindow : Window
         App.SettingsChanged -= OnSettingsChanged;
         Loc.LanguageChanged -= OnLanguageChanged;
         _saveTimer?.Stop();
+        _numberTimer?.Stop();
         WindowShell.Detach(this);
     }
 

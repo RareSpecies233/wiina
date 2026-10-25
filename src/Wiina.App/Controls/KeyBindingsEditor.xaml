@@ -10,15 +10,16 @@
     IsTabStop="True"
     UseSystemFocusVisuals="True">
 
-    <Grid>
+    <Grid RowSpacing="10">
         <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
         <!-- Profile row -->
-        <Grid Margin="0,0,0,12" ColumnSpacing="10">
+        <Grid ColumnSpacing="10">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="Auto" />
@@ -32,29 +33,52 @@
             <ComboBox
                 x:Name="ProfileBox"
                 Grid.Column="1"
-                MinWidth="140"
+                MinWidth="170"
                 SelectionChanged="OnProfileChanged" />
             <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="2">
                 <Button Content="新建" Click="OnNewProfileClick" Style="{StaticResource SettingsEditorButtonStyle}" />
                 <Button Content="重命名" Click="OnRenameProfileClick" Style="{StaticResource SettingsEditorButtonStyle}" />
                 <Button loc:Loc.Content="ui.delete" Click="OnDeleteProfileClick" Style="{StaticResource SettingsEditorButtonStyle}" />
             </StackPanel>
-            <TextBlock x:Name="ProfileHintLabel"
+            <Button
+                x:Name="CopyToCustomButton"
                 Grid.Column="3"
-                Margin="4,0,0,0"
+                HorizontalAlignment="Left"
+                MinHeight="28"
+                Padding="10,2"
+                Click="OnCopyToCustomClick"
+                Style="{StaticResource SettingsEditorButtonStyle}"
+                Visibility="Collapsed"
+                loc:Loc.Content="keybindings.copyToCustom" />
+        </Grid>
+
+        <!-- Hint + search -->
+        <Grid Grid.Row="1" ColumnSpacing="12">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <TextBlock
+                x:Name="ProfileHintLabel"
                 VerticalAlignment="Center"
                 FontSize="11"
                 Opacity="0.62"
-                TextTrimming="CharacterEllipsis" />
+                TextWrapping="Wrap" />
+            <TextBox
+                x:Name="SearchBox"
+                Grid.Column="1"
+                Width="260"
+                TextChanged="OnSearchChanged"
+                VerticalAlignment="Center" />
         </Grid>
 
-        <Grid Grid.Row="1" ColumnSpacing="12">
+        <Grid Grid.Row="2" ColumnSpacing="12">
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="300" />
+                <ColumnDefinition Width="330" />
                 <ColumnDefinition Width="*" />
             </Grid.ColumnDefinitions>
 
-            <!-- Action list -->
+            <!-- Grouped, searchable action list -->
             <Border
                 Background="{ThemeResource SettingsRailBrush}"
                 BorderBrush="{ThemeResource PanelBorderBrush}"
@@ -149,6 +173,7 @@
                                 Style="{StaticResource SettingsEditorButtonStyle}"
                                 loc:Loc.Content="keybindings.cancelRecording" />
                             <Button
+                                x:Name="ClearButton"
                                 MinHeight="30"
                                 Padding="12,4"
                                 Click="OnClearClick"
@@ -157,6 +182,7 @@
                         </StackPanel>
                         <StackPanel Orientation="Horizontal" Spacing="6">
                             <Button
+                                x:Name="ResetOneButton"
                                 MinHeight="30"
                                 Padding="12,4"
                                 Click="OnResetOneClick"
@@ -169,7 +195,7 @@
         </Grid>
 
         <!-- Footer actions -->
-        <Grid Grid.Row="2" Margin="0,12,0,0" ColumnSpacing="6">
+        <Grid Grid.Row="3" ColumnSpacing="6">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" />
@@ -187,14 +213,22 @@
                     Click="OnExportClick"
                     Style="{StaticResource SettingsEditorButtonStyle}"
                     loc:Loc.Content="keybindings.export" />
+                <Button
+                    MinHeight="30"
+                    Padding="12,4"
+                    Click="OnResetAllClick"
+                    Style="{StaticResource SettingsEditorButtonStyle}"
+                    loc:Loc.Content="keybindings.resetAll" />
             </StackPanel>
             <Button
+                x:Name="SaveButton"
                 Grid.Column="1"
                 MinHeight="30"
-                Padding="12,4"
-                Click="OnResetAllClick"
-                Style="{StaticResource SettingsEditorButtonStyle}"
-                loc:Loc.Content="keybindings.resetAll" />
+                Padding="16,4"
+                Click="OnSaveClick"
+                Style="{StaticResource AccentButtonStyle}"
+                IsEnabled="False"
+                loc:Loc.Content="keybindings.save" />
         </Grid>
     </Grid>
 </UserControl>

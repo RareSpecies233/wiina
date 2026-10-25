@@ -55,6 +55,16 @@ public enum SingleClickAction
 }
 
 /// <summary>
+/// What the OSC prev/next buttons do. Track skip follows the playlist; seek
+/// jumps inside the current file (5 s, or 30 s while Ctrl is held).
+/// </summary>
+public enum OscPrevNextMode
+{
+    TrackSkip,
+    Seek,
+}
+
+/// <summary>
 /// Window presentation modes owned by <see cref="State.ModeStateMachine"/>.
 /// Exactly one mode is active at a time (mutual exclusion).
 /// </summary>

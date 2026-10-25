@@ -17,8 +17,10 @@
 
     The version is then verified against the built managed assembly, the
     portable archive is produced by scripts/package.ps1, and Inno Setup is
-    invoked when iscc.exe is available. Artifacts are written to artifacts/
-    and are gitignored; nothing is committed by this script.
+    invoked when iscc.exe is available. ISCC is looked up on PATH, then under
+    %LOCALAPPDATA%\Programs\Inno Setup 6, then under Program Files. Artifacts
+    are written to artifacts/ and are gitignored; nothing is committed by this
+    script.
 
 .PARAMETER Version
     Semantic version to release, e.g. 1.1.0.
@@ -176,6 +178,22 @@ if (-not (Test-Path -LiteralPath $archivePath)) {
     throw "Portable archive was not produced: $archivePath"
 }
 
+# Both distribution forms must ship the portable uninstall entry point: the
+# installer payload below is expanded from this very archive, so verifying it
+# here covers the portable zip and the installed copy at once.
+Add-Type -AssemblyName System.IO.Compression.FileSystem
+$archive = [System.IO.Compression.ZipFile]::OpenRead($archivePath)
+try {
+    $hasUninstaller = $null -ne ($archive.Entries | Where-Object { $_.FullName -eq 'Uninstall Wiina.exe' })
+}
+finally {
+    $archive.Dispose()
+}
+if (-not $hasUninstaller) {
+    throw "Portable archive is missing 'Uninstall Wiina.exe'."
+}
+Write-Host "Verified portable uninstaller in $archivePath."
+
 # Verify the shipped binary reports the requested product version. Wiina.exe is
 # the apphost, so read the managed assembly next to it.
 $releaseRoot = Join-Path $root 'src\Wiina.App\bin\x64\Release'
@@ -190,6 +208,7 @@ if (-not $NoInstaller) {
     $iscc = (Get-Command iscc -ErrorAction SilentlyContinue)?.Source
     if (-not $iscc) {
         foreach ($candidate in @(
+            (Join-Path $env:LOCALAPPDATA 'Programs\Inno Setup 6\ISCC.exe'),
             (Join-Path ${env:ProgramFiles(x86)} 'Inno Setup 6\ISCC.exe'),
             (Join-Path $env:ProgramFiles 'Inno Setup 6\ISCC.exe')
         )) {

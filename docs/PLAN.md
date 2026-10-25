@@ -1,6 +1,96 @@
-# Wiina 实施计划（v0.3 · 第二轮已确认，第三轮待确认）
+# Wiina 实施计划（v0.3 历史版）
 
-> 状态：**计划对齐中**。已确认：首版全量规格、`Wiina` + GPL-3.0-only、IINA 结构 + Fluent 皮肤 + Apple Music 式侧栏、
+> **状态：历史文档，不再是当前计划。** 这是 v1 开工前的规划与范围草案；实际发布以
+> README 与 `docs/acceptance/` 为准。下列条目已被实现推翻或补齐，阅读时请以标注为准：
+>
+> | 计划中的说法 | 实际（v1.3.9） |
+> |---|---|
+> | 设置窗口 600×480、“严格按规格” | 默认 **760×600 DIP**，最小 600×440 |
+> | 设置 11 页 | 1.2.3 起 12 页（新增「文件关联」）；1.3.0 起回到 **11 页**（工具页并入高级） |
+> | `.resw` + `ResourceLoader` | 运行时 `UiStringCatalog.cs` + `loc:Loc` 附加属性（WinUI 3 不支持自定义 markup extension） |
+> | 设置用 `NavigationView` 左栏 | 自定义 `SettingsWindow` 侧栏（`SettingsNavButtonStyle`），未用 NavigationView |
+> | `Wiina.sln` | `Wiina.slnx`（解决方案文件） |
+> | 文件关联“首次启动询问” | 1.2.3 起在设置 → 文件关联按用户注册，不弹首次启动询问 |
+> | 玻璃/模糊：三档、默认动态 | 四档：固定 / 动态（默认）/ 始终 / 关闭毛玻璃（纯色）；纯色档零取帧开销 |
+> | 小窗 640×360 渲染上限 | 1.2.4 取消，PiP 按整窗物理像素渲染，仅靠简化 UI 省开销 |
+> | 安装包“可选 Inno Setup” | 1.2.4 起提供按用户 `Wiina-Setup-<version>-x64.exe`，便携 zip 附 `Uninstall Wiina.exe` |
+> | 插件/在线字幕/yt-dlp 进 v1 | Stage 9/10 按维护者要求**跳过**，入口可见但禁用 |
+> | 画质管理只有 3 个缩放下拉 | 1.2.5 起 23 项 mpv 选项（缩放/色度/抖动/去色带/插帧/同步/其他），默认对齐 mpv/IINA |
+> | OSD 不参与毛玻璃 | 1.2.5 起 OSD 卡片跟随全局四档（三档玻璃、纯色不透明） |
+> | 深/浅色切换只影响当前窗口 | 1.2.5 起所有已打开窗口即时同步，`ThemeMode.System` 实时跟随 Windows 应用主题 |
+> | 迷你播放器 72+ 控件等规格数字 | `MiniPlayerLayout`：默认 400×297，最小 320×260 |
+> | OSC 自动隐藏固定 2.5 秒 | 1.2.6 起可配 0.5–30 秒（默认 2.5，`ui.osc-autohide-seconds`） |
+> | 设置 12 页 / 121 行 | 1.2.6 为 122 行（新增自动隐藏延时一行） |
+> | 音频设备为文本输入 | 1.2.6 起为 libmpv `audio-device-list` 下拉 + 刷新 + 不可用占位 |
+> | 侧栏打开会平移 OSC | 1.2.6 起仅当侧栏实际遮挡时才让位（8 DIP 间距） |
+> | 缩略图悬停时才实时抽帧 | 1.2.7 起加载后预生成整条时间轴并落盘，悬停只查缓存 |
+> | 文件关联只写 HKCU | 1.2.7 起保留按用户模式，并新增管理员（HKLM）一键关联 |
+> | 设置 12 页 / 122 行 | 1.2.7 为 125 行（缩略图缓存 2 行 + 管理员关联 1 行） |
+> | 0.5×/1×/2× 按 16:9 写死 | 1.2.7 起按视频真实显示分辨率与宽高比换算 |
+> | 设置 12 页 | 1.3.0 起 **11 页**（工具页并入高级，缩略图移到视频，截图文件夹移到视频，「打开 URL」移到通用）；1.3.1 为 **129 行 / 563 键** |
+> | 快捷键只有录制 | 1.3.0 起可搜索、按类分组、内置配置、自定义配置、冲突处理、JSON 导入导出、单配置重置；1.3.1 起只保留 Wiina/mpv 两套（IINA 预设移除，旧值迁移） |
+> | 无 mpv.net/profile 互通 | 1.3.0 起导出 `resources/mpvnet/`（mpv.conf 选项 + `[wiina]` profile + `wiina-input.conf`），仅供 mpv.net 手动使用 |
+> | 无系统媒体键 | 1.3.0 起控制页提供「系统媒体键」（SMTC）开关，即时生效 |
+> | 丢帧只在统计面板里 | 1.3.0 起恢复独立瞬时丢帧 OSD（3 秒窗口 / 12 秒冷却），统计面板同时保留计数与速率 |
+> | 安装包升级会重来一遍 | 安装包就地升级，不重启应用、不删除 `%LOCALAPPDATA%\Wiina` 与关联；仅卸载时明确选择不保留才删除 |
+> | 测试 711 项 | 1.3.0 为 761 项；1.3.1 为 **780 项**（新增缩略图缓存容量、快捷键迁移、菜单去重、截图字幕等测试） |
+> | OSC 速度档位放快速菜单 | 1.3.1 起只放在展开菜单 `⋯ → 置顶 → 速度 ▸`（用户后续澄清），快速菜单首页不再放，播放页保留滑杆 |
+> | 上一首/下一首固定行为 | 1.3.1 起设置里可改为 ±5 秒（Ctrl = ±30 秒，`ui.osc-prev-next`） |
+> | 缩略图只能软件解码 | 1.3.1 起可选「自动（推荐）/仅 CPU」（`video.thumbnail-acceleration`）；内存缓存覆盖全片（≈41 MB/小时） |
+> | 截图总是包含字幕 | 1.3.1 起设置 / OSC 展开菜单 / 快速设置-视频三处开关（默认开） |
+> | 卸载器无需管理员 | 1.3.1 起卸载器 manifest 为 `requireAdministrator`（安装包仍按用户安装、不需管理员） |
+> | 菜单开启会导致 OSC 消失 | 1.3.3 起所有媒体 chrome flyout 由 `TrackChromeFlyout` 登记，展开期间暂停自动隐藏、关闭后延迟一拍恢复 |
+> | 小窗可用 Tab 操作 | 1.3.3 起小窗控件整体移出键盘焦点（`MiniPlayerView.SetKeyboardMouseOnly`），为设计取舍 |
+> | 浅色主题小窗封面发黑 | 1.3.3 起改用 `MiniCoverFallbackBrush` / `MiniCoverScrimBrush` 主题画笔（三套主题） |
+> | 丢帧提示在右侧/左中 | 1.3.3 起固定在画面正中央（`\an5` + `\pos(w/2, h/2)`，2.2 秒） |
+> | 菜单可进入迷你/音乐模式 | 1.3.3 起撤掉菜单项与音频自动进入，唯一入口为 设置 → 高级 → 模式（无默认快捷键） |
+> | 设置 11 页 / 126 行 | 1.3.2 为 **128 行 / 568 键**（删除缩略图缓存数量行）；1.3.3 为 **130 行 / 569 键**（高级「模式」2 行） |
+> | 测试 780 项 | 1.3.2 为 827 项；1.3.3 为 **830 项**（快捷键 PiP 绑定与菜单规则断言更新） |
+> | 毛玻璃按整窗拉伸 | 1.3.5 起按 mpv `osd-dimensions` 的实际视频矩形绘制；黑边保留纯色 tint（150% DPI 与 PiP 未单独验证） |
+> | 缩略图带字幕 | 确认是 headless 实例 `sub-visibility=yes` 的真实 bug，1.3.5 修复（headless 关闭字幕 + `screenshot-raw video`） |
+> | 小窗跟随浅色主题 | 1.3.5 起小窗固定深色 chrome（产品选择，IINA 风格），不随系统主题变亮 |
+> | 缩略图只有预生成 | 1.3.5 新增 `video.thumbnail-mode`（预生成/即时预览）与 0–2000 ms 悬停延迟 |
+> | 贴边吸附抖动 | 1.3.5 起只接受原始 rect + 锚点/光标位移 + 16 ms 拖拽泵；100% DPI 单屏实测 |
+> | 1.3.5 计数 | 11 页 / 131 行 / 571 键、857 项测试 |
+> | 迷你/音乐两个入口 | 1.3.4 起只有「迷你播放器（音乐模式）」一个入口，带开发警告与确认框（默认取消） |
+> | “小窗”键盘/浅色问题 | 1.3.4 查实是画中画 `PipWindow`：Tab 不进按钮、Space/Enter/Escape 与全量快捷键转发；PiP/迷你浅色改用主题刷 |
+> | 丢帧提示用 ASS 定位 | 1.3.4 起是原生 WinUI 居中卡片（2.2 s，180 ms 淡出），不再有 ASS/show-text 路径 |
+> | 未聚焦窗口悬停会弹出 OSC | 1.3.4 起未聚焦不显示，需点击激活后再移动指针 |
+> | 1.3.4 计数 | 11 页 / 129 行 / 571 键、833 项测试；光标隐藏仍未解决 |
+> | 光标隐藏无法实现 | 1.3.2 起用进程内 IAT hook（`Interop/CursorHider.cs`）重定向 WinUI 输入模块的 `SetCursor`，实测隐藏后 20/20 次 `hCursor=0` 持续 4.75 秒、移动后 54/54 次恢复 |
+> | 设置 129 行 / 563 键 | 1.3.2 为 **128 行 / 568 键**（删除缩略图缓存数量行） |
+> | 关闭缩略图预览仍会预生成 | 1.3.2 起预览关闭即完全不做事：不建 headless mpv、不写磁盘、不做缓存定容 |
+> | 截图名为 `wiina-时间戳.png` | 1.3.2 起为 `视频名-时-分-秒-毫秒.png`，同名递增、非法字符清洗 |
+> | 全屏顶部有 1-3 px 条 | 1.3.2 起 `CoverClientArea` 铺满 XAML 岛子窗口，第 0 行即视频像素 |
+> | 全屏下拖动会退出全屏 | 1.3.2 起全屏拖动直接返回，`WM_NCHITTEST` 返回 `HTCLIENT` |
+> | 卸载器靠 PowerShell 子进程提权 | 1.3.2 起 Inno 卸载器启动即用 `runas` 重启自身并退出旧实例，无 PowerShell 窗口、无“卸载不干净”对话框 |
+> | OSC 按钮会吃掉 Space/Enter | 1.3.2 起媒体 chrome 退出 Tab 顺序与点击聚焦，小窗/全屏 Tab 回到 RootGrid |
+> | 测试 780 项 | 1.3.2 为 **827 项**（新增截图命名与设备丢失分类测试） |
+> | 光标隐藏 1.3.1 仍不稳定 | 1.3.2 起真正修复（进程内 IAT hook，实测 `hCursor=0`），1.3.0/1.3.1 的历史结论见 `docs/reports/known-issues-1.3.1.md` |
+> | 1.3.6 计数 | 11 页 / 132 行 / 581 键、876 项测试；光标隐藏仍未解决 |
+> | 毛玻璃只覆盖视频矩形，黑边留色带 | 1.3.6 起边缘外扩铺满 chrome（`VideoDisplayRect.ExtendedSize` / `TryMapExtended`），黑边区复制画面边缘；无 `osd-dimensions` 边距时回退 1.3.5 行为 |
+> | 缩略图未生成完无法预览 | 1.3.6 新增「生成完成前允许预览」（默认关，`video.thumbnail-preview-while-generating`）；即时模式恒允许、不受影响 |
+> | PiP 占位文字不跟随主题 | 1.3.6 起 `PipPlaceholder` 使用 `AppBackgroundBrush` / `PrimaryTextBrush` / `SecondaryTextBrush` / `AccentButtonStyle` |
+> | 全屏下 OSC 侧栏/快速菜单点不到 | 1.3.7 机制性修复：每次全屏布局清空 caption drag region 并重设侧栏 `IsHitTestVisible`，两个 `SidebarHost` 加 `Canvas.ZIndex="2"`；开发机未复现死点 |
+> | 小窗展开播放列表会盖住恢复按钮 | 1.3.7 起 `PlaylistPanel` 留 72 DIP 底边距（`MiniPlayerView.xaml:185-188`）；仅该场景，PiP 正常 |
+> | 设置数字必须按 Enter 才保存 | 1.3.7 起边输入边保存：200 ms 防抖 + 失焦/切页/搜索/失活/关窗 flush；`VideoQualityWindow` 的 9 个数字框仍显式应用 |
+> | 自动播放列表按字符串排序 | 1.3.7 起自然排序、去重，并把当前文件索引带入队列（`PlaylistOrdering` + `playlist-move`） |
+> | 缩略图优化已实施 | 1.3.7 仅交付调研报告，未改代码；20 ms 轮询地板与慢速模式重定义见 `docs/reports/thumbnails-optimization-1.3.7.md` |
+> | 1.3.7 计数 | 11 页 / 132 行 / 581 键、901 项测试；光标隐藏仍未解决 |
+> | 1.3.8 计数 | 11 页 / 132 行 / 581 键、909 项测试；光标隐藏仍未解决 |
+> | 再点设置会重置页面 | 1.3.8 起已打开时只前置、保留页面与滚动；显式页/行才导航（`SettingsNavigation.cs`） |
+> | 全屏侧栏点不动（1.3.7 机制修复） | 1.3.8 真鼠标复现：焦点守卫在 pointer press 抢焦点导致 Click 取消，已按 `FocusState.Pointer` 跳过 |
+> | PiP「恢复画中画」按钮无反应 | 1.3.8 修复：`OnVideoPointerPressed` 在 PiP 下直接返回，不再抢 pointer capture |
+> | 缩略图慢速模式 / 关键帧 / 即时模式 | 1.3.8 只新增方案报告 `docs/reports/thumbnails-v1.3.8-plan.md`，未改代码 |
+> | 小窗仍按 8 Hz 抓帧做毛玻璃 | 1.3.9 起 mini/PiP 计数挂起抓帧（强制纯色），退出后恢复原模式 |
+> | 缩略图慢速模式语义混乱 | 1.3.9 起按即时预览运行（不预生成、保留磁盘缓存、悬停延迟生效、关键帧定位可选） |
+> | 缩略图悬停闪黑 / 残留上一文件 | 1.3.9 起 Frame/Pending/NotAllowed 状态机：Pending 保留上一帧、NotAllowed 空卡、切文件清帧 |
+> | 同集多个外挂字幕只自动选一个 | 1.3.9 起全部加入轨道，assfonts 优先、普通版可选，且不覆盖已选外挂 |
+> | 设置 132 行 / 581 键 | 1.3.9 为 **133 行 / 581 键**，新增「预生成使用关键帧定位」 |
+>
+> 原始确认记录保留如下，仅作历史。
+
+> 已确认：首版全量规格、`Wiina` + GPL-3.0-only、IINA 结构 + Fluent 皮肤 + Apple Music 式侧栏、
 > fetch 脚本 + 发布包附带 libmpv、PR 由我推分支并给描述、多窗口、严格 600×480 / 560×440、
 > 在线字幕用户自备 API key、yt-dlp 仅用系统 PATH、插件兼容 IINA API 子集。
 > 第三轮：确认插件 API 的具体模块边界（见 §9），然后冻结 v1.0 并开始 Stage 0。
@@ -20,7 +110,7 @@
 | 在线字幕 | 用户自备 OpenSubtitles.com API key；不内置共享 key |
 | yt-dlp | 仅使用系统 PATH 中的 yt-dlp；不自动下载/更新 |
 | 多窗口 | v1 支持（共享设置、独立播放状态） |
-| 窗口尺寸 | 严格按规格：设置 600×480；欢迎 560×440 |
+| 窗口尺寸 | 严格按规格：设置 600×480；欢迎 560×440（**实际：760×600，最小 600×440**） |
 
 
 ---
@@ -77,7 +167,7 @@
 ### 2.4 范围
 
 - **v1 = 规格全量**：本地/URL/拖放播放、轨道/字幕/章节、OSC 三种位置、侧栏四页 + 播放列表/章节、
-  OSD/时间预览/缩略图、全屏/迷你/PiP、多窗口、设置 11 页（含按键编辑、插件管理、网络、高级）、欢迎、
+  OSD/时间预览/缩略图、全屏/迷你/PiP、多窗口、设置 12 页（含按键编辑、插件管理、文件关联、网络、高级）、欢迎、
   检查器、菜单树、**插件系统（WebView2，兼容 IINA API 子集）**、**在线字幕（OpenSubtitles，用户自备 key）**、
   **yt-dlp（仅系统 PATH）**、**10 段均衡器/滤镜 UI**。
 - **v2（后续）**：杜比视界、系统级 PiP、插件商店/自动更新、`iina.ws`（WebSocket 服务端）、`iina.subtitle`
@@ -85,6 +175,7 @@
 - **明确不做**：Touch Bar、Force Touch、macOS Services、SF Symbols、iina-cli 兼容层、浏览器扩展。
 - **“全量”的边界**：插件按 Stage 9 的模块清单兼容（第三轮确认）；不承诺所有现成 IINA 插件零修改运行。
 - **窗口**：设置 600×480（左栏 200，内容最小 400）；欢迎 560×440；严格按规格。
+  > **实际（v1.2.3）**：设置默认 760×600 DIP、最小 600×440；侧栏宽度由 `SettingsWindow.xaml` 决定，不是 200。
 
 ### 2.5 mpv 分发
 
@@ -100,12 +191,12 @@
 ### 3.1 解决方案结构
 
 ```
-Wiina.sln
+Wiina.slnx
 ├─ src/
 │  ├─ Wiina.Core/                 net10.0
 │  │   ├─ Models/                 MediaItem, TrackInfo, Chapter, Playlist
 │  │   ├─ Settings/               AppSettings + JSON schema/version/migration
-│  │   ├─ State/                  OscVisibility, SidebarState, FullscreenState
+│  │   ├─ State/                  OscVisibility, SidebarState, FullscreenState, MiniPlayerLayout, PipGeometry, EdgeSnap
 │  │   ├─ Input/                  KeyChord, KeyMap, mouse/wheel gestures
 │  │   ├─ Text/                   time formatting, OSD templates, i18n keys
 │  │   └─ Services/               interfaces: IPlayer, ISettingsStore, IClock, IHistory
@@ -181,11 +272,15 @@ XAML 内容（标题栏/OSC/侧栏/OSD/预览）绘制在 SwapChainPanel 之上
   - `logs\wiina-*.log`、`mpv.log`
 - 设置项默认值对齐规格 §2；未识别键保留（向前兼容）。
 - 播放列表：`.m3u/.m3u8` 读写；内置播放列表序列化为 JSON。
-- 文件关联：HKCU 注册，首次启动询问；支持“打开方式”。
+- 文件关联：**v1.2.3 已实现**——设置 → 文件关联，按当前用户（HKCU）注册视频/音频格式，
+  不做“首次启动询问”；Windows 仍要求在“默认应用”中确认。见 [file-associations.md](file-associations.md)。
 
 ### 3.6 本地化
 
-- `.resw`（WinUI 3 标准）+ `ResourceLoader`；语言：`zh-Hans`、`en`，默认跟随系统。
+- **实际实现（v1.2.3）**：不使用 `.resw`/`ResourceLoader`。运行时字符串目录是
+  `src/Wiina.Core/Localization/UiStringCatalog.cs`（zh-Hans/en 成对），设置与菜单的英文覆盖在
+  `SettingsLocalization.cs`、`MenuLocalization.cs`；XAML 通过 `loc:Loc.Text` 等附加属性绑定
+  （WinUI 3 不支持自定义 markup extension），语言：`zh-Hans`、`en`，默认跟随系统。
 - 键名沿用规格 §17.1（`menu.*`、`osc_toolbar.*`、`sidebar.*`、`settings.*`、`osd.*`、`mini_player.*`）。
 - 文案自己撰写；OSD 用带占位符的整句，不拼接句子。
 - 中文术语按规格 §17.2。
@@ -243,7 +338,7 @@ XAML 内容（标题栏/OSC/侧栏/OSD/预览）绘制在 SwapChainPanel 之上
 | OSD 字号 | 20（可设置 1–500） | 次要 ×0.5，clamp 11–25 |
 | 时间预览圆角 | 8 | |
 | 缩略图 | 宽 160，圆角 4，1px `#99FFFFFF` 边框 | |
-| 设置窗口 | 600×480 | 左栏 200，内容最小 400；紧凑行距 |
+| 设置窗口 | 760×600（最小 600×440） | 实际实现值；左栏由 `SettingsWindow.xaml` 决定，紧凑行距 |
 | 欢迎窗口 | 560×440 | 内容边距 30；最近文件行高 28 |
 | 插件窗口 | 600×400 | v1（Stage 9） |
 | OSC 自动隐藏 | 2.5s | 可设置 |
@@ -322,7 +417,9 @@ XAML 内容（标题栏/OSC/侧栏/OSD/预览）绘制在 SwapChainPanel 之上
 
 ### 4.8 设置 / 欢迎 / 二级窗口
 
-- 设置：`NavigationView` 左栏 11 页 + 顶部搜索；右侧 `ScrollViewer` + 卡片行；搜索跳转 + 1s 高亮描边；分区小圆点。
+- 设置：自定义侧栏（`SettingsWindow.xaml` 的 `SettingsNavButtonStyle`；**未使用** `NavigationView`）
+  12 页 + 标题栏搜索；右侧 `ScrollViewer` + 卡片行；搜索跳转 + 1s 高亮描边；分区小圆点。
+  侧栏未选中项在悬停/按下时保持暗色（1.2.3）。
 - 欢迎：Mica 窗口、应用图标、版本、打开文件/URL、继续播放行、最近文件列表、拖放。
 - 检查器、按键编辑、关于、日志、打开 URL：标准 Fluent 窗口/对话框。
 - 菜单：`MenuBar`（Alt 唤出）+ 右键上下文菜单 + 快捷键；完整菜单树对齐规格 §14。
@@ -350,26 +447,26 @@ XAML 内容（标题栏/OSC/侧栏/OSD/预览）绘制在 SwapChainPanel 之上
 |---|---|---|
 | 本地文件 / 文件夹 / 拖放 / 命令行 | ✅ | |
 | URL / 网络流 | ✅ | mpv 原生协议 |
-| yt-dlp 解析 | ✅ | **仅使用系统 PATH 中的 yt-dlp**；不自动下载/更新；缺失时提示安装 |
+| yt-dlp 解析 | ❌ | Stage 10 按维护者要求跳过；无 yt-dlp 调用 |
 | 硬件解码 / HDR 色调映射 | ✅ | hwdec 自动；HDR→SDR 默认；HDR 输出精调放 v2 |
 | 轨道切换（视频/音频/字幕/次字幕） | ✅ | |
 | 外挂字幕 / 延迟 / 位置 / 缩放 / 编码 | ✅ | |
-| 在线字幕 | ✅ | OpenSubtitles.com；API key 策略见 §9 |
+| 在线字幕 | ❌ | Stage 10 跳过；设置/菜单入口禁用并说明 |
 | 章节 / 播放列表 / 历史 / 续播 | ✅ | |
 | 多窗口 / 多播放器实例 | ✅ | 共享设置，独立播放状态 |
 | 截图 / A-B 循环 / 逐帧 | ✅ | |
 | OSC 三种位置 / 自动隐藏 / 拖动吸附 | ✅ | |
 | 侧栏：四页快速设置 + 播放列表/章节 | ✅ | |
-| 侧栏：插件页 | ✅ | WebView2 宿主 |
-| OSD / 持久 OSD / 时间预览 / 缩略图 | ✅ | |
+| 侧栏：插件页 | ❌ | Stage 9 跳过；无 WebView2 宿主，入口禁用 |
+| OSD / 持久 OSD / 时间预览 / 缩略图 | ✅ | 持久 OSD 已于 1.2.4 移除，只保留统计卡片与普通 OSD（1.2.5 起 OSD 跟随全局毛玻璃档位） |
 | 全屏 / 置顶 / 迷你 / 音乐模式 / PiP | ✅ | 自绘 PiP；系统 PiP 放 v2 |
-| 设置 11 页 + 搜索 + 分区指示 | ✅ | 含按键编辑、插件管理、网络、工具、高级 |
+| 设置 12 页 + 搜索 + 分区指示 | ✅ | 含按键编辑、插件管理（禁用）、文件关联、网络、工具、高级 |
 | 欢迎 / 最近文件 / 继续播放 | ✅ | |
 | 检查器 / 按键编辑 / 关于 / 日志 / 打开 URL | ✅ | |
 | 菜单树（含动态子菜单） | ✅ | 规格 §14 |
-| 插件系统（WebView2） | ✅ | IINA API 子集（Stage 9）；overlay / sidebar / standalone / 权限 / 简单模式 |
+| 插件系统（WebView2） | ❌ | Stage 9 按维护者要求跳过；无插件宿主/API/WebView2 |
 | 10 段均衡器 / 视频·音频滤镜 UI | ✅ | mpv `af`/`vf` + 预设；滤镜编辑窗口 |
-| 安装器 / 文件关联 / winget | ✅ 基础 | zip + Inno Setup；winget 可后补 |
+| 安装器 / 文件关联 / winget | ✅ 基础 | zip + **1.2.4 起按用户 Inno Setup 安装包**；**文件关联 1.2.3 起按用户注册**；winget 可后补 |
 | 杜比视界 / 系统 PiP / 插件商店 | v2 | |
 | Touch Bar / Force Touch / SF Symbols / Services | ❌ | 平台不存在或授权不允许 |
 | iina-cli / 浏览器扩展 | ❌ | 可另立项目 |
@@ -386,7 +483,7 @@ XAML 内容（标题栏/OSC/侧栏/OSD/预览）绘制在 SwapChainPanel 之上
 **目标**：把“WinUI 3 + libmpv composition swapchain + XAML 覆盖层”跑通，确定后续不会推倒重来。
 
 交付：
-- `Wiina.sln` + 三个项目骨架；`global.json`、`.editorconfig`、CI；`tools/fetch-libmpv.ps1`（固定版本 + SHA256）。
+- `Wiina.slnx` + 三个项目骨架；`global.json`、`.editorconfig`、CI；`tools/fetch-libmpv.ps1`（固定版本 + SHA256）。
 - 最小 App：unpackaged、深色、自定义标题栏、`SwapChainPanel`、libmpv P/Invoke、事件循环。
 - 播放内置 `testsrc`（或本地样本）；XAML 红色覆盖块在视频上方可见；窗口 resize / DPI / 全屏 / 退出。
 - `docs/acceptance/stage-0.md`：环境、命令、截图、GPU/驱动信息、已知限制。
@@ -457,7 +554,8 @@ XAML 内容（标题栏/OSC/侧栏/OSD/预览）绘制在 SwapChainPanel 之上
 
 交付：
 - 全屏状态机（进入/退出/失败回滚/标题栏切换/菜单栏/置顶恢复）；多显示器。
-- 置顶；迷你播放器/音乐模式（72+封面、播放列表 300、音量气泡 148、0.2s 控件互斥）；音频自动进入。
+- 置顶；迷你播放器/音乐模式（72+ 封面、播放列表 300、音量气泡 148、0.2s 控件互斥）；
+  窗口默认 **400×297**（72 DIP 控制区 + 16:9 封面），最小 320×260；音频自动进入。
 - 自绘 PiP 置顶小窗（swapchain 转移/恢复、暂停重绘）；全屏与 PiP 互斥。
 - 多窗口：新建窗口、在新窗口打开、独立播放状态、共享设置、Window 菜单、关闭最后窗口退出。
 - 媒体键与系统传输控件。
@@ -467,7 +565,7 @@ XAML 内容（标题栏/OSC/侧栏/OSD/预览）绘制在 SwapChainPanel 之上
 ### Stage 7 — 设置、菜单、欢迎与辅助窗口（L）
 
 交付：
-- 设置窗口 11 页完整内容：General / UI / Video / Audio / Subtitles / Network / Control / Key Bindings / Advanced / Plugin / Utilities。
+- 设置窗口 12 页完整内容：General / UI / Video / Audio / Subtitles / Network / Control / Key Bindings / Advanced / Integration（文件关联） / Plugin / Utilities。
 - 搜索（标题/说明/页面）+ 跳转高亮；分区小圆点；行样式；不可用项置灰。
 - 按键编辑：列表、录制、冲突检测、导入/导出、恢复默认。
 - 插件管理页：已安装列表、启用/禁用、从文件夹/URL 安装、权限查看（运行时 Stage 9）。
@@ -519,7 +617,7 @@ XAML 内容（标题栏/OSC/侧栏/OSD/预览）绘制在 SwapChainPanel 之上
 交付：
 - 动画曲线统一、减少动态、RTL、高对比度、键盘导航、AutomationProperties、屏幕阅读器抽查。
 - DPI 100/125/150/200、多显示器、休眠唤醒、HDR 基础、性能（启动/4K/内存）。
-- i18n zh-Hans/en 完整；日志/崩溃；安装包（zip + 可选 Inno Setup/MSIX）与 GPL 合规包（LICENSE/NOTICE/mpv/yt-dlp/WebView2 条款、源码链接）。
+- i18n zh-Hans/en 完整；日志/崩溃；安装包（1.2.4 起按用户 Inno Setup；无 MSIX）与 GPL 合规包（LICENSE/NOTICE/mpv/yt-dlp/WebView2 条款、源码链接）。
 - 发布文档、已知问题、贡献指南、插件开发文档。
 
 验收：规格 §19.2 全部；性能目标；许可证合规检查清单全绿；插件/在线服务合规复核。

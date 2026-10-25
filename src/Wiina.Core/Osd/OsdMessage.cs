@@ -19,7 +19,6 @@ public enum OsdMessageKind
     Error,
     Buffer,
     Network,
-    Persistent,
 }
 
 /// <summary>
@@ -212,15 +211,6 @@ public static class OsdMessages
             Text = UiStrings.Get("osd.seeking", language),
             IconGlyph = OsdIcons.Network,
             Kind = OsdMessageKind.Network,
-        };
-
-    public static OsdMessage Persistent(string title, string? subtitle = null) =>
-        new()
-        {
-            Text = title,
-            Secondary = subtitle,
-            IconGlyph = OsdIcons.Info,
-            Kind = OsdMessageKind.Persistent,
         };
 
     /// <summary>

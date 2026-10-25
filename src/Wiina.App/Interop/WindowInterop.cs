@@ -1,5 +1,7 @@
+using System.Reflection;
 using System.Runtime.InteropServices;
 using Microsoft.UI.Xaml;
+using Windows.Graphics;
 using Wiina.Core.State;
 
 namespace Wiina.App.Interop;
@@ -12,10 +14,26 @@ internal static class WindowInterop
 {
     private const uint WM_GETMINMAXINFO = 0x0024;
     private const uint WM_SIZING = 0x0214;
-    private const uint WM_EXITSIZEMOVE = 0x0232;
     private const uint WM_MOVING = 0x0216;
+    private const uint WM_ENTERSIZEMOVE = 0x0231;
+    private const uint WM_EXITSIZEMOVE = 0x0232;
     private const uint WM_NCHITTEST = 0x0084;
     private const uint WM_APPCOMMAND = 0x0319;
+    private const uint WM_SETCURSOR = 0x0020;
+    private const uint WM_NCMOUSEMOVE = 0x00A0;
+    private const uint WM_MOUSEMOVE = 0x0200;
+    private const uint WM_POINTERUPDATE = 0x0245;
+    private const uint WM_POINTERENTER = 0x0249;
+
+    // DWM window-attribute ids used to make a snapped window flush with the
+    // monitor edge (no 1 px border line, no rounded corner gap).
+    private const int DWMWA_WINDOW_CORNER_PREFERENCE = 33;
+    private const int DWMWA_BORDER_COLOR = 34;
+    private const int DWMWA_EXTENDED_FRAME_BOUNDS = 9;
+    private const int DWMWCP_DONOTROUND = 1;
+    private const int DWMWCP_ROUND = 2;
+    private const int DWMWA_COLOR_DEFAULT = unchecked((int)0xFFFFFFFF);
+    private const int DWMWA_COLOR_NONE = unchecked((int)0xFFFFFFFE);
 
     /// <summary>APPCOMMAND_* values carried by WM_APPCOMMAND (media keys).</summary>
     public const int AppCommandMediaNextTrack = 11;
@@ -26,9 +44,36 @@ internal static class WindowInterop
     public const int AppCommandMediaPause = 47;
     public const int AppCommandMediaFastForward = 49;
     public const int AppCommandMediaRewind = 50;
+    /// <summary>
+    /// Id of the embedded 1x1 transparent cursor (RT_GROUP_CURSOR / RT_CURSOR)
+    /// that hides the pointer over video. Keep in sync with
+    /// <c>Resources/wiina-cursor.rc</c>.
+    /// </summary>
+    internal const int BlankCursorResourceId = 101;
+
+    private const int IMAGE_CURSOR = 2;
+    private const uint LR_DEFAULTCOLOR = 0;
+    private const uint LR_SHARED = 0x8000;
     private const int HTCLIENT = 1;
 
     private static readonly Dictionary<nint, Hook> Hooks = new();
+
+    /// <summary>Top-level player window whose WinUI children get the cursor hook.</summary>
+    private static nint _cursorRootHwnd;
+
+    private static readonly HashSet<nint> CursorHookedChildren = new();
+
+    private static SubclassProc? _cursorChildProc;
+
+    private static long _cursorChildHits;
+
+    private static object? _arrowInputCursor;
+
+    private static bool _arrowLookupFailed;
+
+    private static object? _blankInputCursor;
+
+    private static bool _blankCursorLookupFailed;
 
     [DllImport("comctl32.dll", SetLastError = true)]
     private static extern bool SetWindowSubclass(
@@ -52,12 +97,318 @@ internal static class WindowInterop
     [DllImport("dwmapi.dll")]
     private static extern int DwmSetWindowAttribute(nint hWnd, int attribute, ref int value, int size);
 
+    [DllImport("dwmapi.dll")]
+    private static extern int DwmGetWindowAttribute(nint hWnd, int attribute, out RECT value, int size);
+
+    private delegate bool EnumChildProc(nint hWnd, nint lParam);
+
+    [DllImport("user32.dll")]
+    private static extern bool EnumChildWindows(nint hWndParent, EnumChildProc callback, nint lParam);
+
+    [DllImport("user32.dll")]
+    private static extern bool IsWindow(nint hWnd);
+
+    [DllImport("user32.dll")]
+    private static extern nint WindowFromPoint(POINT point);
+
+    [DllImport("user32.dll")]
+    private static extern uint GetWindowThreadProcessId(nint hWnd, out uint processId);
+
+    [DllImport("user32.dll")]
+    private static extern bool AttachThreadInput(uint idAttach, uint idAttachTo, bool attach);
+
+    [DllImport("kernel32.dll")]
+    private static extern uint GetCurrentThreadId();
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct CWPRETSTRUCT
+    {
+        public nint lResult;
+        public nint lParam;
+        public nint wParam;
+        public uint message;
+        public nint hwnd;
+    }
+
+    private delegate nint HookProc(int nCode, nint wParam, nint lParam);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    private static extern nint SetWindowsHookEx(int idHook, HookProc lpfn, nint hMod, uint dwThreadId);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    private static extern bool UnhookWindowsHookEx(nint hhk);
+
+    [DllImport("user32.dll")]
+    private static extern nint CallNextHookEx(nint hhk, int nCode, nint wParam, nint lParam);
+
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+    private static extern int GetClassName(nint hWnd, char[] lpClassName, int nMaxCount);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    private static extern bool SetWindowPos(
+        nint hWnd,
+        nint hWndInsertAfter,
+        int x,
+        int y,
+        int cx,
+        int cy,
+        uint flags);
+
+    [DllImport("user32.dll")]
+    private static extern bool GetClientRect(nint hWnd, out RECT rect);
+
+    [DllImport("user32.dll")]
+    private static extern bool ClientToScreen(nint hWnd, ref POINT point);
+
     public static void SetImmersiveDarkMode(Window window, bool dark)
     {
         nint hwnd = Microsoft.UI.Win32Interop.GetWindowFromWindowId(window.AppWindow.Id);
         int value = dark ? 1 : 0;
         _ = DwmSetWindowAttribute(hwnd, 20, ref value, sizeof(int));
     }
+
+    /// <summary>
+    /// DWM frame decoration styles the app drives explicitly. The default style
+    /// is the normal rounded window, <see cref="Snapped"/> removes the 1 px
+    /// border while the window is flush against a monitor edge, and
+    /// <see cref="Fullscreen"/> forces the borderless, square-cornered surface
+    /// so a fullscreen presenter never shows an outline ring at high DPI.
+    /// </summary>
+    public enum WindowFrameStyle
+    {
+        Default,
+        Snapped,
+        Fullscreen,
+    }
+
+    /// <summary>
+    /// Applies the DWM frame decoration for <paramref name="style"/>.
+    /// <see cref="WindowFrameStyle.Default"/> restores the system border and
+    /// rounded corners; the other styles suppress both (ignored on Windows 10,
+    /// where the calls are a no-op). Cosmetic only: never throws.
+    /// </summary>
+    public static void SetWindowFrame(Window window, WindowFrameStyle style)
+    {
+        try
+        {
+            nint hwnd = Microsoft.UI.Win32Interop.GetWindowFromWindowId(window.AppWindow.Id);
+            bool flush = style != WindowFrameStyle.Default;
+            int corner = flush ? DWMWCP_DONOTROUND : DWMWCP_ROUND;
+            _ = DwmSetWindowAttribute(hwnd, DWMWA_WINDOW_CORNER_PREFERENCE, ref corner, sizeof(int));
+            int border = flush ? DWMWA_COLOR_NONE : DWMWA_COLOR_DEFAULT;
+            _ = DwmSetWindowAttribute(hwnd, DWMWA_BORDER_COLOR, ref border, sizeof(int));
+        }
+        catch
+        {
+            // Cosmetic only; never let it break dragging or the presenter switch.
+        }
+    }
+
+    /// <summary>
+    /// Removes the DWM frame decoration while the window is snapped flush
+    /// against a monitor edge: the 1 px border (which shows up as a light line
+    /// between the window and the edge) is suppressed and the rounded corners
+    /// are disabled, so the client area really touches the screen edge. Both
+    /// attributes are ignored on Windows 10, where the call is a no-op.
+    /// </summary>
+    public static void SetSnappedFrame(Window window, bool snapped) =>
+        SetWindowFrame(window, snapped ? WindowFrameStyle.Snapped : WindowFrameStyle.Default);
+
+    private const uint SWP_NOZORDER = 0x0004;
+    private const uint SWP_NOACTIVATE = 0x0010;
+    private const uint SWP_NOOWNERZORDER = 0x0200;
+
+    /// <summary>
+    /// Stretches the WinUI content island (the <c>DesktopChildSiteBridge</c> that
+    /// hosts the XAML tree) over the window's whole client area. WinUI normally
+    /// places that island one pixel below the top edge and keeps the window's
+    /// background visible in that row, which shows up as a 1 px light or dark
+    /// strip above the video in fullscreen (the row follows the window
+    /// background, so it looks white in the light theme and black in the dark
+    /// one). Re-positioning and growing the island covers the strip with video.
+    /// Cosmetic and idempotent: it does nothing when the island already matches
+    /// the client area, and it never throws.
+    /// </summary>
+    public static void CoverClientArea(Window window)
+    {
+        try
+        {
+            nint hwnd = Microsoft.UI.Win32Interop.GetWindowFromWindowId(window.AppWindow.Id);
+            if (hwnd == 0 || !GetClientRect(hwnd, out RECT client))
+            {
+                return;
+            }
+
+            int width = client.Right - client.Left;
+            int height = client.Bottom - client.Top;
+            if (width <= 0 || height <= 0)
+            {
+                return;
+            }
+
+            nint site = FindDesktopChildSite(hwnd);
+            if (site == 0 || !GetWindowRect(site, out RECT siteRect))
+            {
+                return;
+            }
+
+            POINT origin = default;
+            if (!ClientToScreen(hwnd, ref origin))
+            {
+                return;
+            }
+
+            bool aligned = siteRect.Left == origin.X &&
+                siteRect.Top == origin.Y &&
+                siteRect.Right - siteRect.Left == width &&
+                siteRect.Bottom - siteRect.Top == height;
+            if (aligned)
+            {
+                return;
+            }
+
+            _ = SetWindowPos(
+                site,
+                0,
+                0,
+                0,
+                width,
+                height,
+                SWP_NOZORDER | SWP_NOACTIVATE | SWP_NOOWNERZORDER);
+        }
+        catch
+        {
+            // Cosmetic workaround for the 1 px content inset; never fatal.
+        }
+    }
+
+    private static nint FindDesktopChildSite(nint hwnd)
+    {
+        nint found = 0;
+        _ = EnumChildWindows(
+            hwnd,
+            (child, _) =>
+            {
+                char[] buffer = new char[96];
+                int length = GetClassName(child, buffer, buffer.Length);
+                if (length > 0 &&
+                    new string(buffer, 0, length).Contains("DesktopChildSiteBridge", StringComparison.Ordinal))
+                {
+                    found = child;
+                    return false;
+                }
+
+                return true;
+            },
+            0);
+        return found;
+    }
+
+    /// <summary>
+    /// Clears the native caption drag region while the window is fullscreen.
+    /// Dragging anywhere on a fullscreen window must never start the OS move
+    /// loop: moving or resizing the window makes Windows drop the fullscreen
+    /// presenter (the same behaviour that makes content drags leave fullscreen).
+    /// Windows exposes the caption of a custom-titlebar window through
+    /// <see cref="Microsoft.UI.Input.InputNonClientPointerSource"/>; removing the
+    /// region means the whole client area gets normal client hit-testing.
+    /// </summary>
+    public static void SetCaptionDragEnabled(Window window, bool enabled)
+    {
+        try
+        {
+            if (enabled)
+            {
+                // The caller restores the titlebar element, which reintroduces
+                // the caption region; nothing to do here.
+                return;
+            }
+
+            Microsoft.UI.Input.InputNonClientPointerSource source =
+                Microsoft.UI.Input.InputNonClientPointerSource.GetForWindowId(window.AppWindow.Id);
+            source.SetRegionRects(
+                Microsoft.UI.Input.NonClientRegionKind.Caption,
+                Array.Empty<RectInt32>());
+        }
+        catch
+        {
+            // Best effort only: fullscreen also drops the titlebar element itself.
+        }
+    }
+
+    // Frame margins are measured from DWM once per DPI (and re-measured at the
+    // start of every drag gesture), so WM_MOVING does not pay for two extra
+    // P/Invokes per pointer move.
+    private static readonly Dictionary<nint, CachedFrameMargins> FrameMarginsByWindow = new();
+
+    private readonly record struct CachedFrameMargins(uint Dpi, FrameMargins Margins);
+
+    /// <summary>
+    /// Visible-frame margins for a window (see <see cref="FrameMargins"/>): the
+    /// distance between the outer window rect and the frame DWM actually paints.
+    /// Snapping must happen in visible-frame space, otherwise the invisible
+    /// resize borders (≈8 px at 100% on left/right/bottom) leave a visible gap
+    /// on three edges while the top edge looks flush (issue 2).
+    ///
+    /// The result is cached per HWND and DPI. Call
+    /// <see cref="InvalidateFrameMargins(nint)"/> after anything that can change
+    /// the frame (drag start, presenter/fullscreen change); on failure the
+    /// zero margins are returned so callers degrade to the old outer-rect
+    /// behaviour instead of losing snapping.
+    /// </summary>
+    public static bool TryGetFrameMargins(Window window, out FrameMargins margins)
+    {
+        try
+        {
+            nint hwnd = Microsoft.UI.Win32Interop.GetWindowFromWindowId(window.AppWindow.Id);
+            return TryGetFrameMargins(hwnd, out margins);
+        }
+        catch
+        {
+            margins = FrameMargins.None;
+            return false;
+        }
+    }
+
+    /// <inheritdoc cref="TryGetFrameMargins(Window, out FrameMargins)"/>
+    public static bool TryGetFrameMargins(nint hwnd, out FrameMargins margins)
+    {
+        margins = FrameMargins.None;
+        if (hwnd == 0)
+        {
+            return false;
+        }
+
+        try
+        {
+            uint dpi = GetDpiForWindow(hwnd);
+            if (FrameMarginsByWindow.TryGetValue(hwnd, out CachedFrameMargins cached) && cached.Dpi == dpi)
+            {
+                margins = cached.Margins;
+                return true;
+            }
+
+            if (!GetWindowRect(hwnd, out RECT outer) ||
+                DwmGetWindowAttribute(hwnd, DWMWA_EXTENDED_FRAME_BOUNDS, out RECT visible, Marshal.SizeOf<RECT>()) != 0)
+            {
+                return false;
+            }
+
+            margins = FrameMargins.FromRects(
+                new WindowRect(outer.Left, outer.Top, outer.Right, outer.Bottom),
+                new WindowRect(visible.Left, visible.Top, visible.Right, visible.Bottom));
+            FrameMarginsByWindow[hwnd] = new CachedFrameMargins(dpi, margins);
+            return true;
+        }
+        catch
+        {
+            margins = FrameMargins.None;
+            return false;
+        }
+    }
+
+    /// <summary>Drops the cached frame margins for a window.</summary>
+    public static void InvalidateFrameMargins(nint hwnd) => FrameMarginsByWindow.Remove(hwnd);
 
     [DllImport("user32.dll", SetLastError = true)]
     private static extern bool GetWindowRect(nint hWnd, out RECT rect);
@@ -72,12 +423,101 @@ internal static class WindowInterop
     private static extern bool GetCursorPos(out POINT point);
 
     [DllImport("user32.dll")]
+    private static extern bool GetCursorInfo(ref CURSORINFO info);
+
+    [DllImport("user32.dll")]
     private static extern short GetKeyState(int nVirtKey);
 
     [DllImport("user32.dll")]
     private static extern uint GetDoubleClickTime();
 
     private const int IDC_ARROW = 32512;
+
+    private static readonly bool CursorDiagEnabled =
+        Environment.GetEnvironmentVariable("WIINA_CURSOR_DIAG") == "1";
+
+    /// <summary>
+    /// Temporary experiment switch: when set to an <c>InputSystemCursorShape</c>
+    /// name (for example <c>SizeAll</c>), the "hidden" cursor is that visible
+    /// system cursor instead of the transparent one. If the arrow on screen
+    /// turns into the probe shape, winrt cursor plumbing works and the blank
+    /// resource is the problem; if it stays an arrow, the protected cursor is
+    /// not what the compositor uses. Never set in shipping builds.
+    /// </summary>
+    private static readonly string? CursorProbeShape =
+        Environment.GetEnvironmentVariable("WIINA_CURSOR_PROBE");
+
+    /// <summary>Env-gated cursor diagnostics (WIINA_CURSOR_DIAG=1) for the
+    /// WM_SETCURSOR path, which is otherwise invisible from a release build.</summary>
+    private static void Diag(string message)
+    {
+        if (!CursorDiagEnabled)
+        {
+            return;
+        }
+
+        try
+        {
+            File.AppendAllText(
+                Path.Combine(Path.GetTempPath(), "wiina-cursor-diag.log"),
+                $"{DateTime.Now:HH:mm:ss.fff} {message}{Environment.NewLine}");
+        }
+        catch
+        {
+            // Diagnostics must never affect playback.
+        }
+    }
+
+    private const int CursorShowingFlag = 0x00000001;
+
+    /// <summary>
+    /// Diagnostic line that is always recorded, even without WIINA_CURSOR_DIAG.
+    /// Only used for the handful of one-shot cursor-state transitions that a
+    /// bug report would otherwise leave as guesswork.
+    /// </summary>
+    private static void DiagAlways(string message)
+    {
+        try
+        {
+            File.AppendAllText(
+                Path.Combine(Path.GetTempPath(), "wiina-cursor-state.log"),
+                $"{DateTime.Now:HH:mm:ss.fff} {message}{Environment.NewLine}");
+        }
+        catch
+        {
+            // Diagnostics must never affect playback.
+        }
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct CURSORINFO
+    {
+        public int cbSize;
+        public int flags;
+        public nint hCursor;
+        public POINT ptScreenPos;    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct ICONINFO
+    {
+        public int fIcon;
+        public int xHotspot;
+        public int yHotspot;
+        public nint hbmMask;
+        public nint hbmColor;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct BITMAP
+    {
+        public int bmType;
+        public int bmWidth;
+        public int bmHeight;
+        public int bmWidthBytes;
+        public ushort bmPlanes;
+        public ushort bmBitsPixel;
+        public nint bmBits;
+    }
 
     private delegate nint SubclassProc(
         nint hWnd,
@@ -96,7 +536,9 @@ internal static class WindowInterop
         Func<int, bool>? appCommand = null,
         Action? windowResizeStarted = null,
         Action? windowMoveEnded = null,
-        Func<WindowRect, WindowRect>? windowMoving = null)
+        Func<WindowRect, WindowRect>? windowMoving = null,
+        Action? windowMoveStarted = null,
+        Func<bool>? isFullscreen = null)
     {
         nint hwnd = Microsoft.UI.Win32Interop.GetWindowFromWindowId(window.AppWindow.Id);
         if (Hooks.ContainsKey(hwnd))
@@ -113,9 +555,17 @@ internal static class WindowInterop
             appCommand,
             windowResizeStarted,
             windowMoveEnded,
-            windowMoving);
+            windowMoving,
+            windowMoveStarted,
+            isFullscreen);
         Hooks[hwnd] = hook;
         hook.Attach();
+        _cursorRootHwnd = hwnd;
+
+        // Install the SetCursor IAT hook as early as possible: the WinUI input
+        // thread starts re-applying the arrow as soon as the pointer moves, and
+        // the hidden state must be interceptable from the very first frame.
+        _ = CursorHider.Install(Diag);
     }
 
     public static void Detach(Window window)
@@ -124,6 +574,12 @@ internal static class WindowInterop
         if (Hooks.Remove(hwnd, out Hook? hook))
         {
             hook.Detach();
+        }
+
+        // A detached window must never leave the desktop pointer hidden.
+        if (CursorHidden)
+        {
+            SetCursorVisible(true);
         }
     }
 
@@ -151,20 +607,849 @@ internal static class WindowInterop
     }
 
     /// <summary>
-    /// Hide the pointer while the chrome is hidden. WinUI keeps resetting the
-    /// cursor on pointer moves, so callers re-apply this from PointerMoved.
+    /// True while playback has hidden the pointer. The visible effect comes from
+    /// the embedded transparent cursor assigned through
+    /// <see cref="SetProtectedCursor"/>; the Win32 path below (ShowCursor /
+    /// SetCursor / message hooks) is kept only as an inert fallback for
+    /// non-client areas — WinUI's CoreMessaging input stack ignores it, which
+    /// was measured in v1.3.0.
+    /// </summary>
+    public static bool CursorHidden => _cursorHidden;
+
+    private static volatile bool _cursorHidden;
+
+    /// <summary>
+    /// Hide or restore the Win32 pointer state. Hiding is idempotent; restoring
+    /// always balances the display counter back above zero and unhooks the input
+    /// thread so a closed window cannot leave the desktop pointer hidden. This is
+    /// a fallback only: the WinUI cursor is controlled by
+    /// <see cref="SetProtectedCursor"/>.
     /// </summary>
     public static void SetCursorVisible(bool visible)
     {
         try
         {
-            SetCursor(visible ? LoadCursor(0, IDC_ARROW) : 0);
+            if (visible)
+            {
+                // Stop intercepting before restoring so the restore call itself
+                // is not rewritten to NULL.
+                CursorHider.SetHidden(false, Diag);
+
+                if (CursorHidden)
+                {
+                    while (ShowCursor(true) < 0)
+                    {
+                    }
+
+                    _cursorHidden = false;
+                }
+
+                UninstallCursorHook();
+                StopCursorHider();
+                SetCursor(LoadCursor(0, IDC_ARROW));
+            }
+            else
+            {
+                if (!CursorHidden)
+                {
+                    while (ShowCursor(false) >= 0)
+                    {
+                    }
+
+                    _cursorHidden = true;
+                }
+
+                // Install the input-thread hook; the UI-thread SetCursor is only
+                // a stopgap until the next message arrives.
+                HookCursorChildren();
+                _ = CursorHider.Install(Diag);
+                CursorHider.SetHidden(true, Diag);
+                SetCursor(GetBlankCursor());
+                StartCursorHider();
+            }
+        }
+        catch
+        {
+            _cursorHidden = false;
+            // Cursor feedback must never break playback.
+        }
+    }
+
+    private static Thread? _cursorHider;
+    private static volatile bool _cursorHiderRun;
+
+    private static void StartCursorHider()
+    {
+        _cursorHiderRun = true;
+        if (_cursorHider is { IsAlive: true })
+        {
+            return;
+        }
+
+        var thread = new Thread(CursorHiderLoop)
+        {
+            IsBackground = true,
+            Name = "Wiina.CursorHider",
+        };
+        _cursorHider = thread;
+        thread.Start();
+    }
+
+    private static void StopCursorHider() => _cursorHiderRun = false;
+
+    /// <summary>
+    /// Hides the pointer from a helper thread. Windows draws the cursor from the
+    /// thread that owns the window under the pointer, and <c>SetCursor</c> only
+    /// affects the calling thread's cursor; the UI thread cannot attach its own
+    /// input queue to that thread (WinUI already chains it), but a fresh helper
+    /// thread can attach for a moment, set a NULL cursor, and detach again.
+    /// </summary>
+    private static void CursorHiderLoop()
+    {
+        uint self = GetCurrentThreadId();
+        while (_cursorHiderRun)
+        {
+            try
+            {
+                if (!CursorHidden)
+                {
+                    _cursorHiderRun = false;
+                    return;
+                }
+
+                if (GetCursorPos(out POINT point))
+                {
+                    nint under = WindowFromPoint(point);
+                    uint target = 0;
+                    uint targetProcess = 0;
+                    if (under != 0)
+                    {
+                        target = GetWindowThreadProcessId(under, out targetProcess);
+                    }
+                    // Only touch threads in this process: attaching to a foreign
+                    // (possibly suspended) thread could stall input.
+                    if (target != 0 && targetProcess == Environment.ProcessId)
+                    {
+                        if (target == self)
+                        {
+                            SetCursor(0);
+                        }
+                        else if (AttachThreadInput(self, target, true))
+                        {
+                            SetCursor(0);
+                            AttachThreadInput(self, target, false);
+                        }
+                    }
+                }
+            }
+            catch
+            {
+                // The hider must survive any transient failure.
+            }
+
+            Thread.Sleep(60);
+        }
+    }
+
+    /// <summary>
+    /// Re-applies the hidden pointer while the chrome is faded out. The hook on
+    /// the input thread does the real work; this keeps the install alive if the
+    /// island was recreated and covers the gap before the next message arrives.
+    /// </summary>
+    public static void ReassertHiddenCursor()
+    {
+        if (!CursorHidden)
+        {
+            return;
+        }
+
+        try
+        {
+            HookCursorChildren();
+            // Null is the strongest Win32 signal: no cursor at all. The blank
+            // 1x1 resource cursor (assigned through UIElement.ProtectedCursor)
+            // is the WinUI-side counterpart; whichever layer the compositor
+            // honours, nothing visible survives.
+            SetCursor(0);
         }
         catch
         {
             // Cursor feedback must never break playback.
         }
     }
+
+    /// <summary>
+    /// Sets or clears WinUI's protected cursor on one element. Hiding assigns the
+    /// embedded 1x1 fully transparent cursor (<see cref="BlankCursorResourceId"/>)
+    /// as a <c>Microsoft.UI.Input.InputDesktopResourceCursor</c>; restoring assigns
+    /// the system arrow. <c>ProtectedCursor</c> is the only supported way to
+    /// control the cursor over WinUI content, because the CoreMessaging input
+    /// stack ignores <c>SetCursor</c> and WM_SETCURSOR from the XAML thread
+    /// (measured in v1.3.0). The property is protected, so it is reached by
+    /// reflection and every failure is swallowed — a cursor problem must never
+    /// break playback.
+    /// </summary>
+    public static bool SetProtectedCursor(UIElement? element, bool hidden)
+    {
+        if (element is null)
+        {
+            return false;
+        }
+
+        try
+        {
+            if (_protectedCursorSetter is null && !_protectedCursorLookupFailed)
+            {
+                var property = typeof(UIElement).GetProperty(
+                    "ProtectedCursor",
+                    BindingFlags.Instance | BindingFlags.NonPublic);
+                _protectedCursorSetter = property?.GetSetMethod(nonPublic: true);
+                _protectedCursorLookupFailed = _protectedCursorSetter is null;
+            }
+
+            if (_protectedCursorSetter is null)
+            {
+                Diag("protectedcursor: setter unavailable");
+                return false;
+            }
+
+            // Restoring null lets each element fall back to its own cursor
+            // (text boxes keep the I-beam, buttons keep the hand).
+            object? value = hidden ? GetBlankInputCursor() : null;
+            _protectedCursorSetter.Invoke(element, new[] { value });
+            return true;
+        }
+        catch (Exception exception)
+        {
+            Diag($"protectedcursor failed: {exception.GetType().Name}: {exception.Message}");
+            return false;
+        }
+    }
+
+    /// <summary>The system arrow as a WinUI <c>InputCursor</c>, created once.</summary>
+    private static object? GetArrowInputCursor()
+    {
+        if (_arrowInputCursor is not null || _arrowLookupFailed)
+        {
+            return _arrowInputCursor;
+        }
+
+        try
+        {
+            Type? cursorType = FindType("Microsoft.UI.Input.InputSystemCursor");
+            Type? shapeType = FindType("Microsoft.UI.Input.InputSystemCursorShape");
+            MethodInfo? create = cursorType?.GetMethod(
+                "Create",
+                BindingFlags.Public | BindingFlags.Static);
+            if (cursorType is null || shapeType is null || create is null)
+            {
+                _arrowLookupFailed = true;
+                return null;
+            }
+
+            object arrow = Enum.Parse(shapeType, "Arrow");
+            _arrowInputCursor = create.Invoke(null, new[] { arrow });
+            _arrowLookupFailed = _arrowInputCursor is null;
+        }
+        catch
+        {
+            _arrowLookupFailed = true;
+        }
+
+        return _arrowInputCursor;
+    }
+
+    /// <summary>
+    /// The embedded transparent cursor as a WinUI <c>InputCursor</c>, created
+    /// once. The cursor lives in <c>Wiina.Core.dll</c> (a managed module has a
+    /// Win32 resource section; the .NET apphost cannot carry one next to its
+    /// ApplicationIcon), so the module-name factory is the primary route.
+    /// Returns null (hiding then falls back to the inert Win32 path) if the SDK
+    /// surface is missing or none of the resource lookups succeed.
+    /// </summary>
+    private static object? GetBlankInputCursor()
+    {
+        if (_blankInputCursor is not null || _blankCursorLookupFailed)
+        {
+            return _blankInputCursor;
+        }
+
+        try
+        {
+            if (!string.IsNullOrEmpty(CursorProbeShape))
+            {
+                Type? systemCursor = FindType("Microsoft.UI.Input.InputSystemCursor");
+                Type? shapeType = FindType("Microsoft.UI.Input.InputSystemCursorShape");
+                MethodInfo? createSystem = systemCursor?.GetMethod(
+                    "Create",
+                    BindingFlags.Public | BindingFlags.Static);
+                if (createSystem is null || shapeType is null)
+                {
+                    _blankCursorLookupFailed = true;
+                    Diag("probecursor: InputSystemCursor unavailable");
+                    return null;
+                }
+
+                object shape = Enum.Parse(shapeType, CursorProbeShape, ignoreCase: true);
+                _blankInputCursor = createSystem.Invoke(null, new[] { shape });
+                DiagAlways($"probe: shape={CursorProbeShape} ok={_blankInputCursor is not null}");
+                _blankCursorLookupFailed = _blankInputCursor is null;
+                return _blankInputCursor;
+            }
+
+            Type? cursorType = FindType("Microsoft.UI.Input.InputDesktopResourceCursor");
+            if (cursorType is null)
+            {
+                _blankCursorLookupFailed = true;
+                Diag("blankcursor: InputDesktopResourceCursor unavailable");
+                return null;
+            }
+
+            MethodInfo? fromModule = cursorType.GetMethod(
+                "CreateFromModule",
+                BindingFlags.Public | BindingFlags.Static,
+                binder: null,
+                types: new[] { typeof(string), typeof(uint) },
+                modifiers: null);
+            MethodInfo? create = cursorType.GetMethod(
+                "Create",
+                BindingFlags.Public | BindingFlags.Static,
+                binder: null,
+                types: new[] { typeof(uint) },
+                modifiers: null);
+
+            var attempts = new List<string>();
+            foreach (string module in new[] { "Wiina.Core.dll", Environment.ProcessPath ?? string.Empty })
+            {
+                if (fromModule is null || string.IsNullOrEmpty(module))
+                {
+                    continue;
+                }
+
+                try
+                {
+                    _blankInputCursor = fromModule.Invoke(
+                        null,
+                        new object[] { module, (uint)BlankCursorResourceId });
+                }
+                catch (TargetInvocationException exception)
+                {
+                    attempts.Add($"{Path.GetFileName(module)}:{exception.InnerException?.GetType().Name}");
+                    continue;
+                }
+
+                if (_blankInputCursor is not null)
+                {
+                    attempts.Add($"{Path.GetFileName(module)}:ok");
+                    break;
+                }
+
+                attempts.Add($"{Path.GetFileName(module)}:null");
+            }
+
+            if (_blankInputCursor is null && create is not null)
+            {
+                try
+                {
+                    _blankInputCursor = create.Invoke(null, new object[] { (uint)BlankCursorResourceId });
+                    attempts.Add($"process:{( _blankInputCursor is null ? "null" : "ok")}");
+                }
+                catch (TargetInvocationException exception)
+                {
+                    attempts.Add($"process:{exception.InnerException?.GetType().Name}");
+                }
+            }
+
+            _blankCursorLookupFailed = _blankInputCursor is null;
+            Diag(
+                $"blankcursor: input={(_blankInputCursor is null ? "null" : _blankInputCursor.GetType().Name)} " +
+                $"attempts=[{string.Join(", ", attempts)}] win32=0x{LoadBlankCursorHandle():X}");
+        }
+        catch (Exception exception)
+        {
+            _blankCursorLookupFailed = true;
+            Diag($"blankcursor failed: {exception.GetType().Name}: {exception.Message}");
+        }
+
+        return _blankInputCursor;
+    }
+
+    /// <summary>
+    /// Loads the embedded blank cursor as a raw HCURSOR. Only used for
+    /// diagnostics: comparing it with <c>GetCursorInfo</c> proves which cursor
+    /// the system is actually showing.
+    /// </summary>
+    private static nint LoadBlankCursorHandle(bool shared = false)
+    {
+        try
+        {
+            // The cursor resource lives in the managed Wiina.Core.dll module,
+            // not in the apphost exe.
+            nint module = GetModuleHandle("Wiina.Core.dll");
+            if (module == 0)
+            {
+                module = GetModuleHandle(null);
+            }
+
+            return LoadImage(
+                module,
+                BlankCursorResourceId,
+                IMAGE_CURSOR,
+                0,
+                0,
+                shared ? LR_DEFAULTCOLOR | LR_SHARED : LR_DEFAULTCOLOR);
+        }
+        catch
+        {
+            return 0;
+        }
+    }
+
+    private static Type? FindType(string fullName)
+    {
+        Type? type = typeof(UIElement).Assembly.GetType(fullName);
+        if (type is not null)
+        {
+            return type;
+        }
+
+        foreach (var assembly in AppDomain.CurrentDomain.GetAssemblies())
+        {
+            try
+            {
+                type = assembly.GetType(fullName);
+            }
+            catch
+            {
+                type = null;
+            }
+
+            if (type is not null)
+            {
+                return type;
+            }
+        }
+
+        try
+        {
+            return Type.GetType(
+                fullName + ", Microsoft.InteractiveExperiences.Projection",
+                throwOnError: false);
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private static MethodInfo? _protectedCursorSetter;
+
+    private static bool _protectedCursorLookupFailed;
+
+    /// <summary>
+    /// Installs a message hook on the WinUI input thread that owns the content
+    /// site bridge window. That thread — not the XAML UI thread — owns the
+    /// desktop cursor while the pointer is over the video surface, so a
+    /// SetCursor call made from the UI thread is silently ineffective. A
+    /// WH_CALLWNDPROCRET hook runs after the window procedure on the owning
+    /// thread, so clearing the cursor there sticks until the next message.
+    /// </summary>
+    private static void HookCursorChildren()
+    {
+        nint root = _cursorRootHwnd;
+        if (root == 0 || !IsWindow(root))
+        {
+            return;
+        }
+
+        if (CursorHookedChildren.Count == 0 || _cursorHook == 0)
+        {
+            HookAllCursorHosts(root);
+        }
+    }
+
+    /// <summary>
+    /// Walks the WinUI child windows below the player window once: same-thread
+    /// hosts are subclassed directly, hosts owned by the input thread get a
+    /// message hook instead.
+    /// </summary>
+    private static void HookAllCursorHosts(nint root)
+    {
+        uint self = GetCurrentThreadId();
+        uint foreignThread = 0;
+        nint foreignWindow = 0;
+
+        _cursorChildProc ??= CursorChildProc;
+        CursorHookedChildren.RemoveWhere(hwnd => !IsWindow(hwnd));
+
+        EnumChildWindows(
+            root,
+            (hwnd, unused) =>
+            {
+                string className = ClassNameOf(hwnd);
+                bool cursorHost =
+                    className.Contains("DesktopChildSiteBridge", StringComparison.Ordinal) ||
+                    className.Contains("InputSiteWindowClass", StringComparison.Ordinal) ||
+                    className.Contains("InputNonClientPointerSource", StringComparison.Ordinal);
+                if (!cursorHost)
+                {
+                    return true;
+                }
+
+                uint thread = GetWindowThreadProcessId(hwnd, out _);
+                if (thread == self)
+                {
+                    if (CursorHookedChildren.Add(hwnd))
+                    {
+                        SetWindowSubclass(hwnd, _cursorChildProc, 0xB1, 0);
+                    }
+
+                    return true;
+                }
+
+                if (foreignThread == 0)
+                {
+                    foreignThread = thread;
+                    foreignWindow = hwnd;
+                }
+
+                return true;
+            },
+            0);
+
+        if (foreignThread == 0)
+        {
+            // WinUI 3 may run its input stack on the XAML thread itself: the
+            // platform sets the arrow while processing pointer messages and never
+            // dispatches WM_SETCURSOR to the island windows, so the only place
+            // left to win is right after each message on this very thread.
+            foreignThread = self;
+            Diag("hook: no foreign input thread, hooking the XAML thread");
+        }
+
+        if (_cursorHook != 0 && _cursorHookThread == foreignThread)
+        {
+            return;
+        }
+
+        UninstallCursorHook();
+
+        _cursorHookProc ??= CursorHookCallback;
+        _cursorHook = SetWindowsHookEx(WH_CALLWNDPROCRET, _cursorHookProc, 0, foreignThread);
+        int error = Marshal.GetLastWin32Error();
+        _cursorHookThread = _cursorHook != 0 ? foreignThread : 0;
+        _cursorTargetThread = foreignThread;
+        Diag(
+            $"hook: thread={foreignThread} self={self} installed={_cursorHook != 0} error={error} " +
+            $"subclassed={CursorHookedChildren.Count}");
+    }
+
+    private static nint CursorChildProc(
+        nint hWnd,
+        uint msg,
+        nint wParam,
+        nint lParam,
+        nuint uIdSubclass,
+        nint dwRefData)
+    {
+        // The platform's own procedure (and the XAML pointer pipeline it drives)
+        // sets the arrow while processing input, so the clear has to happen
+        // *after* it runs. Doing it before only lets the platform overwrite it
+        // one line later.
+        nint result = DefSubclassProc(hWnd, msg, wParam, lParam);
+
+        if (msg != WM_SETCURSOR && msg != WM_MOUSEMOVE && msg != WM_NCMOUSEMOVE &&
+            msg != WM_POINTERUPDATE && msg != WM_POINTERENTER && msg != 0x0246 /* WM_POINTERDOWN */ &&
+            msg != 0x0247 /* WM_POINTERUP */ && msg != 0x0245)
+        {
+            return result;
+        }
+
+        DiagChildMessage(msg, hWnd);
+
+        if (CursorHidden)
+        {
+            switch (msg)
+            {
+                case WM_SETCURSOR:
+                    SetCursor(0);
+                    _cursorChildHits++;
+                    return 1;
+                case WM_MOUSEMOVE:
+                case WM_NCMOUSEMOVE:
+                case WM_POINTERUPDATE:
+                case WM_POINTERENTER:
+                    SetCursor(0);
+                    _cursorChildHits++;
+                    break;
+            }
+        }
+
+        return result;
+    }
+
+    private static void UninstallCursorHook()
+    {
+        if (_cursorHook == 0)
+        {
+            return;
+        }
+
+        try
+        {
+            UnhookWindowsHookEx(_cursorHook);
+        }
+        catch
+        {
+            // Cursor feedback must never break playback.
+        }
+
+        _cursorHook = 0;
+        _cursorHookThread = 0;
+        _cursorTargetThread = 0;
+    }
+
+    private static nint CursorHookCallback(int nCode, nint wParam, nint lParam)
+    {
+        try
+        {
+            if (nCode >= 0 && CursorHidden)
+            {
+                var message = Marshal.PtrToStructure<CWPRETSTRUCT>(lParam);
+                if (message.message == WM_SETCURSOR ||
+                    message.message == WM_MOUSEMOVE ||
+                    message.message == WM_NCMOUSEMOVE ||
+                    message.message == WM_POINTERUPDATE ||
+                    message.message == WM_POINTERENTER)
+                {
+                    // Runs on the input thread, so this really changes the cursor
+                    // the desktop shows over the SwapChainPanel.
+                    SetCursor(0);
+                    _cursorHookHits++;
+                }
+            }
+        }
+        catch
+        {
+            // A throwing hook would poison the input thread; swallow everything.
+        }
+
+        return CallNextHookEx(0, nCode, wParam, lParam);
+    }
+
+    private static readonly HashSet<uint> _childMessagesLogged = new();
+
+    /// <summary>
+    /// Records the first few cursor-related messages the WinUI host windows
+    /// actually dispatch. Without this there is no way to tell whether the
+    /// island gets WM_SETCURSOR at all or the platform bypasses messages.
+    /// </summary>
+    private static void DiagChildMessage(uint msg, nint hwnd)
+    {
+        if (!CursorDiagEnabled || !_childMessagesLogged.Add(msg))
+        {
+            return;
+        }
+
+        Diag($"child msg=0x{msg:X} hwnd=0x{hwnd:X} class={ClassNameOf(hwnd)}");
+    }
+
+    private static string ClassNameOf(nint hwnd)
+    {
+        try
+        {
+            var buffer = new char[256];
+            int length = GetClassName(hwnd, buffer, buffer.Length);
+            return length > 0 ? new string(buffer, 0, length) : string.Empty;
+        }
+        catch
+        {
+            return string.Empty;
+        }
+    }
+
+    private static HookProc? _cursorHookProc;
+    private static nint _cursorHook;
+    private static uint _cursorHookThread;
+    private static uint _cursorTargetThread;
+    private static long _cursorHookHits;
+    private const int WH_CALLWNDPROCRET = 12;
+
+    /// <summary>
+    /// Logs which cursor the desktop is showing and how big it is. The mask
+    /// bitmap size is the decisive signal: the embedded blank cursor is 1x1,
+    /// while the system arrow is 32x32 (or larger when cursor scaling is on).
+    /// Read-only and env-gated; a real-mouse visual check is still the final
+    /// word, because GetCursorInfo cannot see the composited pointer.
+    /// </summary>
+    public static void LogCursorResourceState(string label)
+    {
+        if (!CursorDiagEnabled)
+        {
+            return;
+        }
+
+        try
+        {
+            var info = new CURSORINFO { cbSize = Marshal.SizeOf<CURSORINFO>() };
+            GetCursorInfo(ref info);
+            nint shared = LoadBlankCursorHandle(shared: true);
+            string shape = DescribeCursor(info.hCursor);
+            Diag(
+                $"{label} resource hidden={CursorHidden} shown={(info.flags & 1) != 0} " +
+                $"hCursor=0x{info.hCursor:X} sharedBlank=0x{shared:X} isSharedBlank={info.hCursor == shared} " +
+                $"shape={shape}");
+        }
+        catch (Exception exception)
+        {
+            Diag($"{label} resource probe failed: {exception.GetType().Name}: {exception.Message}");
+        }
+    }
+
+    /// <summary>Describes the current cursor's hotspot and mask size.</summary>
+    private static string DescribeCursor(nint cursor)
+    {
+        if (cursor == 0)
+        {
+            return "none";
+        }
+
+        if (!GetIconInfo(cursor, out ICONINFO icon))
+        {
+            return "unreadable";
+        }
+
+        try
+        {
+            var mask = new BITMAP();
+            string size = GetObject(icon.hbmMask, Marshal.SizeOf<BITMAP>(), ref mask) > 0
+                ? $"{mask.bmWidth}x{mask.bmHeight}"
+                : "?";
+            return $"mask={size} hotspot={icon.xHotspot},{icon.yHotspot}";
+        }
+        finally
+        {
+            if (icon.hbmMask != 0)
+            {
+                DeleteObject(icon.hbmMask);
+            }
+
+            if (icon.hbmColor != 0)
+            {
+                DeleteObject(icon.hbmColor);
+            }
+        }
+    }
+
+    /// <summary>One-line live cursor state for the env-gated diagnostics.</summary>
+    public static void LogCursorState(string label)
+    {
+        if (!CursorDiagEnabled)
+        {
+            return;
+        }
+        if (!CursorDiagEnabled)
+        {
+            return;
+        }
+
+        try
+        {
+            var info = new CURSORINFO { cbSize = Marshal.SizeOf<CURSORINFO>() };
+            GetCursorInfo(ref info);
+
+            nint blank = GetBlankCursor();
+            uint ourThread = GetCurrentThreadId();
+            nint under = WindowFromPoint(new POINT { X = info.ptScreenPos.X, Y = info.ptScreenPos.Y });
+            uint inputThread = under != 0 ? GetWindowThreadProcessId(under, out _) : 0;
+            bool attached = inputThread != 0 && inputThread != ourThread &&
+                            AttachThreadInput(ourThread, inputThread, true);
+            nint previous = SetCursor(blank);
+            if (attached)
+            {
+                AttachThreadInput(ourThread, inputThread, false);
+            }
+
+            var after = new CURSORINFO { cbSize = Marshal.SizeOf<CURSORINFO>() };
+            GetCursorInfo(ref after);
+
+            Diag(
+                $"{label} hidden={CursorHidden} before=0x{info.hCursor:X} under=0x{under:X} " +
+                $"inputThread={inputThread} attached={attached} blank=0x{blank:X} prev=0x{previous:X} " +
+                $"after=0x{after.hCursor:X} flagsAfter={after.flags} isBlankAfter={after.hCursor == blank} " +
+                $"hook=0x{_cursorHook:X} hookThread={_cursorHookThread} hits={_cursorHookHits} " +
+                $"subclassed={CursorHookedChildren.Count} childHits={_cursorChildHits}");
+        }
+        catch
+        {
+            Diag($"{label} state failed");
+        }
+    }
+
+    /// <summary>
+    /// Lazily created 1x1 fully transparent cursor. The AND mask keeps every
+    /// screen pixel and the XOR mask clears nothing, so the cursor paints
+    /// nothing at all while still being a valid handle.
+    /// </summary>
+    private static nint GetBlankCursor()
+    {
+        if (_blankCursor == 0)
+        {
+            _blankCursor = CreateCursor(
+                GetModuleHandle(null),
+                0,
+                0,
+                1,
+                1,
+                new byte[] { 0xFF },
+                new byte[] { 0x00 });
+        }
+
+        return _blankCursor;
+    }
+
+    private static nint _blankCursor;
+
+    [DllImport("user32.dll")]
+    private static extern int ShowCursor(bool show);
+
+    [DllImport("user32.dll")]
+    private static extern nint CreateCursor(
+        nint hInst,
+        int xHotSpot,
+        int yHotSpot,
+        int nWidth,
+        int nHeight,
+        byte[] pvANDPlane,
+        byte[] pvXORPlane);
+
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode)]
+    private static extern nint GetModuleHandle(string? lpModuleName);
+
+    [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    private static extern nint LoadImage(
+        nint hInst,
+        nint name,
+        int type,
+        int cx,
+        int cy,
+        uint fuLoad);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    private static extern bool GetIconInfo(nint hIcon, out ICONINFO info);
+
+    [DllImport("gdi32.dll", SetLastError = true)]
+    private static extern bool DeleteObject(nint handle);
+
+    [DllImport("gdi32.dll", EntryPoint = "GetObjectW")]
+    private static extern int GetObject(nint handle, int size, ref BITMAP value);
+
+    /// <summary>
+    /// True while the left mouse button is physically down. Used by the OSC
+    /// auto-hide logic so dragging a slider past the window edge cannot hide
+    /// the chrome mid-gesture.
+    /// </summary>
+    public static bool IsLeftButtonDown() => (GetKeyState(0x01) & 0x8000) != 0;
 
     /// <summary>Global key state for shortcut modifier detection.</summary>
     public static bool IsKeyDown(Windows.System.VirtualKey key)
@@ -208,6 +1493,39 @@ internal static class WindowInterop
         return false;
     }
 
+    /// <summary>
+    /// Cursor position in window-local DIPs, which is the space XAML hit
+    /// testing uses. Needed because WinUI drops PointerExited often enough that
+    /// "is the pointer still on the OSC?" has to be answered from the real
+    /// cursor position rather than from cached pointer events.
+    /// </summary>
+    public static bool TryGetCursorInWindow(Window window, out Windows.Foundation.Point point)
+    {
+        point = default;
+
+        try
+        {
+            nint hwnd = Microsoft.UI.Win32Interop.GetWindowFromWindowId(window.AppWindow.Id);
+            if (!GetCursorPos(out POINT cursor) || !ClientToScreen(hwnd, ref cursor))
+            {
+                return false;
+            }
+
+            double scale = window.Content?.XamlRoot?.RasterizationScale ?? 1.0;
+            if (scale <= 0)
+            {
+                scale = 1.0;
+            }
+
+            point = new Windows.Foundation.Point(cursor.X / scale, cursor.Y / scale);
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
     private sealed class Hook
     {
         private readonly nint _hwnd;
@@ -219,6 +1537,8 @@ internal static class WindowInterop
         private readonly Action? _windowResizeStarted;
         private readonly Action? _windowMoveEnded;
         private readonly Func<WindowRect, WindowRect>? _windowMoving;
+        private readonly Action? _windowMoveStarted;
+        private readonly Func<bool>? _isFullscreen;
         private readonly SubclassProc _proc;
         private bool _sizingGesture;
 
@@ -231,7 +1551,9 @@ internal static class WindowInterop
             Func<int, bool>? appCommand,
             Action? windowResizeStarted,
             Action? windowMoveEnded,
-            Func<WindowRect, WindowRect>? windowMoving)
+            Func<WindowRect, WindowRect>? windowMoving,
+            Action? windowMoveStarted,
+            Func<bool>? isFullscreen)
         {
             _hwnd = hwnd;
             _minWidthDip = minWidthDip;
@@ -242,6 +1564,8 @@ internal static class WindowInterop
             _windowResizeStarted = windowResizeStarted;
             _windowMoveEnded = windowMoveEnded;
             _windowMoving = windowMoving;
+            _windowMoveStarted = windowMoveStarted;
+            _isFullscreen = isFullscreen;
             _proc = WndProc;
         }
 
@@ -257,6 +1581,37 @@ internal static class WindowInterop
             nuint uIdSubclass,
             nint dwRefData)
         {
+            // While playback hides the pointer, keep the window from restoring
+            // the arrow: WinUI/DefWindowProc call SetCursor(IDC_ARROW) for every
+            // WM_SETCURSOR, which is exactly why ShowCursor alone looked broken.
+            // Returning TRUE means "handled", so the class cursor never returns.
+            if (msg == WM_SETCURSOR)
+            {
+                Diag($"setcursor hwnd=0x{hWnd:X} target=0x{_hwnd:X} hidden={CursorHidden}");
+
+                if (CursorHidden && hWnd == _hwnd)
+                {
+                    SetCursor(0);
+                    return 1;
+                }
+            }
+
+            // Some hosts stop sending WM_SETCURSOR while the pointer rests on a
+            // child surface (the mpv swapchain panel); re-assert on every move.
+            if (msg == WM_MOUSEMOVE && CursorHidden && hWnd == _hwnd)
+            {
+                SetCursor(GetBlankCursor());
+            }
+
+            if (msg == WM_NCHITTEST && _isFullscreen is not null && _isFullscreen())
+            {
+                // Fullscreen must present a borderless, immovable surface. Every
+                // point is reported as client area so the OS never treats an
+                // edge as a resize border or a drag region; moving or resizing
+                // the window would drop the fullscreen presenter.
+                return HTCLIENT;
+            }
+
             if (msg == WM_APPCOMMAND && _appCommand is not null)
             {
                 // GET_APPCOMMAND_LPARAM: HIWORD without the FAPPCOMMAND flag.
@@ -288,6 +1643,15 @@ internal static class WindowInterop
                 moving.Bottom = snapped.Bottom;
                 Marshal.StructureToPtr(moving, lParam, fDeleteOld: false);
                 return 1;
+            }
+
+            if (msg == WM_ENTERSIZEMOVE)
+            {
+                // A new drag/resize gesture starts; edge-snap state must not leak
+                // across gestures (the window may have been snapped elsewhere),
+                // and the frame margins are re-measured once for this gesture.
+                InvalidateFrameMargins(hWnd);
+                _windowMoveStarted?.Invoke();
             }
 
             if (msg == WM_SIZING && !_sizingGesture)

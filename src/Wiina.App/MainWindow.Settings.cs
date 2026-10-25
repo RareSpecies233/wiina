@@ -25,6 +25,14 @@ public sealed partial class MainWindow
 {
     private readonly List<MpvAudioDevice> _audioDevices = new();
 
+    /// <summary>
+    /// Audio output devices libmpv currently reports. The settings window renders
+    /// its 音频输出设备 dropdown from this list; it falls back to the last snapshot
+    /// while the player is starting up (or when no player exists yet).
+    /// </summary>
+    public IReadOnlyList<MpvAudioDevice> AudioDeviceList =>
+        _player?.GetAudioDevices() is { Count: > 0 } live ? live : _audioDevices;
+
     public string? CurrentTitle => _currentTitle;
 
     /// <summary>Opens files/URLs coming from the welcome window or another window.</summary>
@@ -36,12 +44,12 @@ public sealed partial class MainWindow
         _keyMap = KeyBindings.BuildKeyMap(_settings.KeyBindings, _settings.KeyBindingProfile);
     }
 
-    public void ToggleTechnicalOsd() => TogglePersistentOsd();
-
     public void ClearThumbnailCache()
     {
+        long freed = 0;
         try
         {
+            freed = _thumbnailService?.ClearDiskCache() ?? 0;
             _thumbnailService?.Dispose();
         }
         catch
@@ -50,7 +58,16 @@ public sealed partial class MainWindow
         }
 
         _thumbnailService = null;
+        _thumbnailPregenPath = null;
         HideTimePreview();
+
+        string title = Loc.T("settings.thumbnailsClearedTitle");
+        ShowOsd(
+            title,
+            freed > 0
+                ? Loc.T("settings.thumbnailsClearedBody").Replace(
+                    "{0}", FormatBytes(freed))
+                : Loc.T("settings.thumbnailsClearedEmpty"));
     }
 
     public string GetRendererInfo()
@@ -102,7 +119,17 @@ public sealed partial class MainWindow
                 _oscState.AutoHideEnabled = _settings.OscAutoHide;
                 ResetAutoHideTimer();
                 break;
+            case "ui.osc-autohide-seconds":
+                // Live apply: restart the idle window with the new delay so
+                // the next fade-out already uses it.
+                _oscState.AutoHideSeconds = _settings.OscAutoHideSeconds;
+                _autoHideTimer.Interval = TimeSpan.FromSeconds(_oscState.AutoHideSeconds);
+                ResetAutoHideTimer();
+                break;
             case "ui.blur-mode":
+                // Live-switchable: controls react through ChromeBlur.ModeChanged
+                // so the blurred frame, the opaque fallback and the capture
+                // thread all follow without a restart.
                 ChromeBlur.SetMode(_settings.ChromeBlurMode);
                 break;
             case "ui.osd-enabled":
@@ -116,23 +143,101 @@ public sealed partial class MainWindow
                 UpdateOsdPlacement();
                 UpdateFullscreenStatus();
                 break;
-            case "ui.osd-persistent":
-                if (_settings.OsdPersistent)
-                {
-                    ShowPersistentOsd();
-                }
-                else
-                {
-                    ClosePersistentOsd();
-                }
-
-                break;
-            case "ui.thumbnail-preview":
+            case "video.thumbnail-preview":
+                // Hard switch: the service refuses hover extraction,
+                // pre-generation, headless mpv creation and disk writes while
+                // this is off, and fails any queued job immediately.
+                _thumbnailService?.SetPreviewEnabled(_settings.ThumbnailPreviewEnabled);
                 if (!_settings.ThumbnailPreviewEnabled)
                 {
                     HideTimePreview();
+                    StopThumbnailPreGeneration();
+                }
+                else
+                {
+                    StartThumbnailPreGeneration();
                 }
 
+                break;
+            case "video.thumbnail-mode":
+                // Live apply: instant mode stops the background pass and drops
+                // queued hover positions; switching back restarts the walk for
+                // the file that is playing.
+                _thumbnailService?.SetMode(_settings.ThumbnailMode);
+                if (_settings.ThumbnailMode == ThumbnailMode.Instant)
+                {
+                    StopThumbnailPreGeneration();
+                }
+                else
+                {
+                    StartThumbnailPreGeneration();
+                }
+
+                break;
+            case "video.thumbnail-hover-delay":
+                // Only instant mode reads this, but applying it live keeps the
+                // next hover honest without a restart.
+                _thumbnailService?.SetHoverDelayMilliseconds(
+                    _settings.ThumbnailHoverDelayMs);
+                break;
+            case "video.thumbnail-preview-while-generating":
+                // Live apply: the service re-reads the flag on every hover, so
+                // turning it on shows partial results immediately and turning it
+                // back off re-hides previews until the current pass finishes.
+                _thumbnailService?.SetPreviewWhileGenerating(
+                    _settings.ThumbnailPreviewWhileGenerating);
+                break;
+            case "video.thumbnail-slow":
+                // Live apply: slow mode turns off whole-file pre-generation and
+                // throttles the single extraction worker; hover still reads the
+                // memory/disk caches, so nothing reloads. It also switches the
+                // effective mode to instant preview (hover delay + disk cache),
+                // which is what makes the first hover usable on a weak device.
+                _thumbnailService?.SetSlowMode(_settings.ThumbnailSlowMode);
+                if (_settings.ThumbnailSlowMode)
+                {
+                    StopThumbnailPreGeneration();
+                }
+                else
+                {
+                    StartThumbnailPreGeneration();
+                }
+
+                break;
+            case "video.thumbnail-keyframe-seek":
+                // Live apply: only the background pass and slow mode read it, the
+                // next queued job picks the cheaper seek up automatically.
+                _thumbnailService?.SetKeyframeSeek(_settings.ThumbnailKeyframeSeek);
+                break;
+            case "video.thumbnail-acceleration":
+                // Live apply: the extraction worker rebuilds its headless mpv
+                // instance on the next job, so a GPU-averse driver can be
+                // bypassed without restarting playback. Cached frames survive.
+                _thumbnailService?.SetAcceleration(_settings.ThumbnailAcceleration);
+                break;
+            case "video.thumbnail-cache-mb":
+                _thumbnailService?.SetDiskCacheLimit(
+                    Math.Clamp(_settings.ThumbnailCacheMegabytes, 0, 4096));
+                if (_settings.ThumbnailCacheMegabytes <= 0)
+                {
+                    StopThumbnailPreGeneration();
+                }
+                else
+                {
+                    StartThumbnailPreGeneration();
+                }
+
+                break;
+            case "video.thumbnail-cache-clear":
+                // The action row itself runs ClearThumbnailCache through the
+                // settings window; this keeps the row correct if it is ever
+                // applied without a picker (tests, settings import).
+                ClearThumbnailCache();
+                break;
+            case "control.media-keys":
+                // Registers or disposes the SMTC session (and the media-key
+                // handling that depends on it) without a restart.
+                App.ApplyMediaKeysSetting();
                 break;
 
             // ---- mpv-backed rows -------------------------------------------
@@ -146,6 +251,9 @@ public sealed partial class MainWindow
                 ApplyVideoFilters();
                 break;
             case "video.quality":
+            // Deband is now its own row; both funnel through the same apply so
+            // scale/dscale/cscale and deband never fight each other.
+            case "video.deband":
                 ApplyQualityPreset();
                 break;
             case "video.tone-mapping":

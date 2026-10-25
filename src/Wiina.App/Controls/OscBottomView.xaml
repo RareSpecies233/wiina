@@ -7,19 +7,17 @@
     xmlns:local="using:Wiina.App.Controls">
 
     <Grid>
-        <!-- Live Gaussian blur of the frame behind the OSC (video included).
-             BackdropBlur attaches a compositor child visual here; the acrylic
-             border below is collapsed when that succeeds. -->
-        <Border x:Name="BackdropBlurHost" IsHitTestVisible="False" />
-        <Border x:Name="OscBlurTintLayer"
-                Background="{ThemeResource OscBlurTintBrush}"
-                Visibility="Collapsed"
-                IsHitTestVisible="False" />
         <Border x:Name="OscAcrylicPanel"
-                Background="{ThemeResource OscAcrylicBrush}"
+                Background="{ThemeResource ChromeSolidBrush}"
                 BorderBrush="{ThemeResource PanelBorderBrush}"
                 BorderThickness="0,1,0,0"
                 MinHeight="64">
+        <Grid>
+            <Border x:Name="BackdropBlurHost" IsHitTestVisible="False" />
+            <Border x:Name="OscBlurTintLayer"
+                    Background="{ThemeResource OscBlurTintBrush}"
+                    Visibility="Collapsed"
+                    IsHitTestVisible="False" />
         <Grid Margin="16,0,12,0">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="Auto" />
@@ -77,6 +75,7 @@
                               Grid.Column="4"
                               Margin="6,0,0,0"
                               VerticalAlignment="Center" />
+        </Grid>
         </Grid>
         </Border>
     </Grid>

@@ -43,6 +43,13 @@ internal static class KeyChordMapper
         // so map the raw virtual-key codes (VK_OEM_*).
         return (int)key switch
         {
+            173 => AppKey.MediaMute,
+            174 => AppKey.MediaVolumeDown,
+            175 => AppKey.MediaVolumeUp,
+            176 => AppKey.MediaNext,
+            177 => AppKey.MediaPrevious,
+            178 => AppKey.MediaStop,
+            179 => AppKey.MediaPlayPause,
             186 => AppKey.Semicolon,
             187 => AppKey.Plus,
             188 => AppKey.Comma,

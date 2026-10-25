@@ -3,6 +3,7 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Controls.Primitives;
 using Microsoft.UI.Xaml.Input;
+using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Media.Animation;
 using Wiina.Core.State;
 using Wiina.App.Localization;
@@ -19,6 +20,8 @@ namespace Wiina.App.Controls;
 public sealed partial class MiniPlayerView : UserControl
 {
     private readonly DispatcherQueueTimer _volumeHideTimer;
+    private readonly Dictionary<Control, (bool IsTabStop, bool AllowFocusOnInteraction)> _keyboardState = new();
+    private bool _mouseOnlyKeyboard;
     private bool _controlsShown;
     private bool _updating;
     private bool _seeking;
@@ -77,7 +80,97 @@ public sealed partial class MiniPlayerView : UserControl
 
     public bool IsPlaylistExpanded => PlaylistPanel.Visibility == Visibility.Visible;
 
+    /// <summary>
+    /// Mini mode is mouse-only chrome: every button, slider and playlist row is
+    /// taken out of the keyboard focus track, so Tab cannot park focus on a
+    /// control and Space/Enter/arrow keys keep their player meaning. The
+    /// original values are restored when mini mode ends, because the same
+    /// controls are reused the next time mini mode is entered.
+    /// </summary>
+    public void SetKeyboardMouseOnly(bool mouseOnly)
+    {
+        if (mouseOnly == _mouseOnlyKeyboard)
+        {
+            return;
+        }
+
+        _mouseOnlyKeyboard = mouseOnly;
+        if (mouseOnly)
+        {
+            CaptureAndDisable(this);
+            // Rows are created lazily by the ListView; keep them out of the tab
+            // order as they appear.
+            PlaylistList.ContainerContentChanging -= OnPlaylistContainerChanging;
+            PlaylistList.ContainerContentChanging += OnPlaylistContainerChanging;
+        }
+        else
+        {
+            PlaylistList.ContainerContentChanging -= OnPlaylistContainerChanging;
+            RestoreKeyboardState();
+        }
+    }
+
+    private void OnPlaylistContainerChanging(ListViewBase sender, ContainerContentChangingEventArgs args)
+    {
+        if (_mouseOnlyKeyboard && args.ItemContainer is Control container)
+        {
+            CaptureAndDisable(container);
+        }
+    }
+
+    private void CaptureAndDisable(DependencyObject root)
+    {
+        if (root is Control control)
+        {
+            if (!_keyboardState.ContainsKey(control))
+            {
+                _keyboardState[control] = (control.IsTabStop, control.AllowFocusOnInteraction);
+            }
+
+            control.IsTabStop = false;
+            control.AllowFocusOnInteraction = false;
+        }
+
+        int count = VisualTreeHelper.GetChildrenCount(root);
+        for (int i = 0; i < count; i++)
+        {
+            CaptureAndDisable(VisualTreeHelper.GetChild(root, i));
+        }
+    }
+
+    private void RestoreKeyboardState()
+    {
+        foreach (KeyValuePair<Control, (bool IsTabStop, bool AllowFocusOnInteraction)> entry in _keyboardState)
+        {
+            entry.Key.IsTabStop = entry.Value.IsTabStop;
+            entry.Key.AllowFocusOnInteraction = entry.Value.AllowFocusOnInteraction;
+        }
+
+        _keyboardState.Clear();
+    }
+
     public void SetAnimationsEnabled(bool enabled) => _animationsEnabled = enabled;
+
+    /// <summary>
+    /// One-line snapshot of the surfaces that decide the mini-mode background
+    /// colour, written to the trace when mini mode is entered so a light-theme
+    /// regression can be attributed to a specific layer.
+    /// </summary>
+    public string DescribeThemeSurfaces()
+    {
+        static string ColorOf(Brush? brush) => brush switch
+        {
+            SolidColorBrush solid => solid.Color.ToString(),
+            LinearGradientBrush gradient => $"gradient({gradient.GradientStops.Count})",
+            null => "null",
+            _ => brush.GetType().Name,
+        };
+
+        return $"theme={ActualTheme} root={ColorOf(Root.Background)} " +
+            $"cover={ColorOf(FallbackCoverSurface.Background)} coverVisible={FallbackCover.Visibility} " +
+            $"info={ColorOf(InfoPanel.Background)} controls={ColorOf(ControlArea.Background)} " +
+            $"playlist={ColorOf(PlaylistPanel.Background)}";
+    }
 
     public void SetMedia(string? title, string? artist, string? album, bool hasAlbumArt)
     {

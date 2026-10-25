@@ -2,9 +2,47 @@
 <Window
     x:Class="Wiina.App.Views.VideoQualityWindow"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:views="using:Wiina.App.Views">
 
     <Grid x:Name="RootGrid" Background="{ThemeResource WindowTintBrush}">
+        <Grid.Resources>
+            <DataTemplate x:Key="ScalerItemTemplate" x:DataType="views:ScalerOption">
+                <TextBlock Text="{x:Bind Display}"
+                           ToolTipService.ToolTip="{x:Bind Tooltip}"
+                           TextWrapping="Wrap" />
+            </DataTemplate>
+            <DataTemplate x:Key="ProfileItemTemplate" x:DataType="views:ProfileOption">
+                <TextBlock Text="{x:Bind Display}"
+                           ToolTipService.ToolTip="{x:Bind Hint}"
+                           TextWrapping="Wrap" />
+            </DataTemplate>
+            <DataTemplate x:Key="ChoiceItemTemplate" x:DataType="views:ChoiceOption">
+                <TextBlock Text="{x:Bind Display}"
+                           ToolTipService.ToolTip="{x:Bind Tooltip}"
+                           TextWrapping="Wrap" />
+            </DataTemplate>
+            <Style x:Key="OptionLabelStyle" TargetType="TextBlock">
+                <Setter Property="FontSize" Value="13" />
+                <Setter Property="VerticalAlignment" Value="Center" />
+                <Setter Property="TextWrapping" Value="Wrap" />
+            </Style>
+            <Style x:Key="OptionHintStyle" TargetType="TextBlock">
+                <Setter Property="FontSize" Value="11.5" />
+                <Setter Property="Opacity" Value="0.6" />
+                <Setter Property="Margin" Value="180,0,0,0" />
+                <Setter Property="TextWrapping" Value="Wrap" />
+            </Style>
+            <Style x:Key="GroupHeaderStyle" TargetType="TextBlock">
+                <Setter Property="FontSize" Value="13" />
+                <Setter Property="FontWeight" Value="SemiBold" />
+            </Style>
+            <Style x:Key="GroupNoteStyle" TargetType="TextBlock">
+                <Setter Property="FontSize" Value="11.5" />
+                <Setter Property="Opacity" Value="0.6" />
+                <Setter Property="TextWrapping" Value="Wrap" />
+            </Style>
+        </Grid.Resources>
         <Grid.RowDefinitions>
             <RowDefinition Height="40" />
             <RowDefinition Height="Auto" />
@@ -20,58 +58,388 @@
 
         <StackPanel Grid.Row="1" Margin="20,12,20,4" Spacing="4">
             <TextBlock Text="画质预设" FontSize="20" FontWeight="SemiBold" />
-            <TextBlock Text="管理 mpv 缩放、色度缩放与去色带 profile；设置保存后会立即应用到当前播放窗口。"
+            <TextBlock Text="按用途分组的 23 个常用 mpv 画质选项；每项都标注取舍，并在标题后写出 mpv 原始键。默认预设与 mpv / IINA 的默认值一致。去色带是否生效由“设置 → 视频 → 画面”的总开关决定。"
                        FontSize="12" Opacity="0.65" TextWrapping="Wrap" />
         </StackPanel>
 
         <ScrollViewer Grid.Row="2" Margin="20,12,20,12" VerticalScrollBarVisibility="Auto">
             <StackPanel Spacing="12">
-                <Grid ColumnSpacing="10">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="Auto" />
-                        <ColumnDefinition Width="*" />
-                        <ColumnDefinition Width="Auto" />
-                    </Grid.ColumnDefinitions>
-                    <TextBlock Text="Profile" VerticalAlignment="Center" FontSize="13" />
-                    <ComboBox x:Name="ProfileBox" Grid.Column="1" HorizontalAlignment="Stretch"
-                              SelectionChanged="OnProfileSelected" />
-                    <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="4">
-                        <Button Content="新建" Click="OnAddClick" />
-                        <Button Content="重命名" Click="OnRenameClick" />
-                        <Button Content="删除" Click="OnDeleteClick" />
-                    </StackPanel>
-                </Grid>
+                <StackPanel Spacing="4">
+                    <Grid ColumnSpacing="10">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Text="预设" VerticalAlignment="Center" FontSize="13" />
+                        <ComboBox x:Name="ProfileBox" Grid.Column="1" HorizontalAlignment="Stretch"
+                                  ItemTemplate="{StaticResource ProfileItemTemplate}"
+                                  SelectionChanged="OnProfileSelected" />
+                        <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="4">
+                            <Button Content="新建" Click="OnAddClick" />
+                            <Button Content="重命名" Click="OnRenameClick" />
+                            <Button Content="删除" Click="OnDeleteClick" />
+                        </StackPanel>
+                    </Grid>
+                    <TextBlock x:Name="ProfileHintText" Margin="0,2,0,0" FontSize="11.5" Opacity="0.6"
+                               TextWrapping="Wrap" />
+                </StackPanel>
 
                 <Border Background="{ThemeResource SettingsCardWashBrush}" BorderBrush="{ThemeResource PanelBorderBrush}"
                         BorderThickness="1" CornerRadius="8" Padding="14">
-                    <StackPanel Spacing="10">
-                        <Grid ColumnSpacing="10">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="150" />
-                                <ColumnDefinition Width="*" />
-                            </Grid.ColumnDefinitions>
-                            <TextBlock Text="放大缩放 (scale)" VerticalAlignment="Center" />
-                            <ComboBox x:Name="ScaleBox" Grid.Column="1" HorizontalAlignment="Stretch" />
-                        </Grid>
-                        <Grid ColumnSpacing="10">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="150" />
-                                <ColumnDefinition Width="*" />
-                            </Grid.ColumnDefinitions>
-                            <TextBlock Text="缩小缩放 (dscale)" VerticalAlignment="Center" />
-                            <ComboBox x:Name="DscaleBox" Grid.Column="1" HorizontalAlignment="Stretch" />
-                        </Grid>
-                        <Grid ColumnSpacing="10">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="150" />
-                                <ColumnDefinition Width="*" />
-                            </Grid.ColumnDefinitions>
-                            <TextBlock Text="色度缩放 (cscale)" VerticalAlignment="Center" />
-                            <ComboBox x:Name="CscaleBox" Grid.Column="1" HorizontalAlignment="Stretch" />
-                        </Grid>
-                        <ToggleSwitch x:Name="DebandSwitch" Header="去色带 (deband)" OnContent="开" OffContent="关" />
+                    <StackPanel Spacing="14">
+
+                        <!-- 缩放 -->
+                        <StackPanel Spacing="8">
+                            <StackPanel Spacing="2">
+                                <TextBlock Text="缩放" Style="{StaticResource GroupHeaderStyle}" />
+                                <TextBlock Style="{StaticResource GroupNoteStyle}"
+                                           Text="放大 / 缩小画面时使用的重采样算法，直接决定锐度、平滑度与 GPU 开销。" />
+                            </StackPanel>
+                            <StackPanel Spacing="4">
+                                <Grid ColumnSpacing="10">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="170" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Text="放大缩放 · scale" Style="{StaticResource OptionLabelStyle}" />
+                                    <ComboBox x:Name="ScaleBox" Grid.Column="1" HorizontalAlignment="Stretch"
+                                              ItemTemplate="{StaticResource ScalerItemTemplate}" />
+                                </Grid>
+                                <TextBlock Style="{StaticResource OptionHintStyle}"
+                                           Text="片源比窗口小时使用（如 1080p→4K）。Lanczos 是 mpv 默认：锐利、开销适中；弱 GPU 或高帧率选 Bilinear。" />
+                            </StackPanel>
+                            <StackPanel Spacing="4">
+                                <Grid ColumnSpacing="10">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="170" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Text="缩小缩放 · dscale" Style="{StaticResource OptionLabelStyle}" />
+                                    <ComboBox x:Name="DscaleBox" Grid.Column="1" HorizontalAlignment="Stretch"
+                                              ItemTemplate="{StaticResource ScalerItemTemplate}" />
+                                </Grid>
+                                <TextBlock Style="{StaticResource OptionHintStyle}"
+                                           Text="片源比窗口大时使用（如 4K→1080p）。Hermite 是 mpv 默认：平滑、不易闪烁；要更锐选 Mitchell / Lanczos；弱 GPU 选 Bilinear。" />
+                            </StackPanel>
+                            <StackPanel Spacing="4">
+                                <Grid ColumnSpacing="10">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="170" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Text="放大抗振铃 · scale-antiring" Style="{StaticResource OptionLabelStyle}" />
+                                    <NumberBox x:Name="ScaleAntiringBox" Grid.Column="1" Width="160" HorizontalAlignment="Left"
+                                               Minimum="0" Maximum="1" SmallChange="0.05" LargeChange="0.25"
+                                               SpinButtonPlacementMode="Compact" />
+                                </Grid>
+                                <TextBlock Style="{StaticResource OptionHintStyle}"
+                                           Text="抑制放大锐化产生的白边 / 振铃。0 为 mpv 默认（关闭）；0.3–0.8 可减轻亮边，但画面会略软。" />
+                            </StackPanel>
+                            <StackPanel Spacing="4">
+                                <Grid ColumnSpacing="10">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="170" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Text="缩小抗振铃 · dscale-antiring" Style="{StaticResource OptionLabelStyle}" />
+                                    <NumberBox x:Name="DscaleAntiringBox" Grid.Column="1" Width="160" HorizontalAlignment="Left"
+                                               Minimum="0" Maximum="1" SmallChange="0.05" LargeChange="0.25"
+                                               SpinButtonPlacementMode="Compact" />
+                                </Grid>
+                                <TextBlock Style="{StaticResource OptionHintStyle}"
+                                           Text="缩小后边缘的振铃抑制。0 为 mpv 默认（关闭）；缩小后出现白边时可试 0.5。" />
+                            </StackPanel>
+                            <Grid ColumnSpacing="10">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="170" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="正确缩小 · correct-downscaling" Style="{StaticResource OptionLabelStyle}" />
+                                <CheckBox x:Name="CorrectDownscalingCheck" Grid.Column="1" Content="启用（mpv 默认）" />
+                            </Grid>
+                            <Grid ColumnSpacing="10">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="170" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="线性亮度缩放 · linear-downscaling" Style="{StaticResource OptionLabelStyle}" />
+                                <CheckBox x:Name="LinearDownscalingCheck" Grid.Column="1" Content="启用（mpv 默认）" />
+                            </Grid>
+                            <Grid ColumnSpacing="10">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="170" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="平滑放大 · sigmoid-upscaling" Style="{StaticResource OptionLabelStyle}" />
+                                <CheckBox x:Name="SigmoidUpscalingCheck" Grid.Column="1" Content="启用（mpv 默认）" />
+                            </Grid>
+                            <TextBlock Style="{StaticResource OptionHintStyle}"
+                                       Text="三个复选框：正确缩小会先线性缩小再缩放，避免缩小锯齿（多一次采样）；线性亮度让暗部过渡更自然；S 曲线抑制放大后的光晕。默认全开，弱 GPU 可关前两项。" />
+                        </StackPanel>
+
+                        <!-- 色度 -->
+                        <StackPanel Spacing="8">
+                            <StackPanel Spacing="2">
+                                <TextBlock Text="色度" Style="{StaticResource GroupHeaderStyle}" />
+                                <TextBlock Style="{StaticResource GroupNoteStyle}"
+                                           Text="色彩平面（4:2:0 等）的缩放，影响彩边锐度，不改变亮度细节。" />
+                            </StackPanel>
+                            <StackPanel Spacing="4">
+                                <Grid ColumnSpacing="10">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="170" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Text="色度缩放 · cscale" Style="{StaticResource OptionLabelStyle}" />
+                                    <ComboBox x:Name="CscaleBox" Grid.Column="1" HorizontalAlignment="Stretch"
+                                              ItemTemplate="{StaticResource ScalerItemTemplate}" />
+                                </Grid>
+                                <TextBlock Style="{StaticResource OptionHintStyle}"
+                                           Text="只缩放色彩平面。Bilinear 是 mpv 默认：最省；Bicubic / Spline36 彩边更清晰，开销略高。" />
+                            </StackPanel>
+                            <StackPanel Spacing="4">
+                                <Grid ColumnSpacing="10">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="170" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Text="色度抗振铃 · cscale-antiring" Style="{StaticResource OptionLabelStyle}" />
+                                    <NumberBox x:Name="CscaleAntiringBox" Grid.Column="1" Width="160" HorizontalAlignment="Left"
+                                               Minimum="0" Maximum="1" SmallChange="0.05" LargeChange="0.25"
+                                               SpinButtonPlacementMode="Compact" />
+                                </Grid>
+                                <TextBlock Style="{StaticResource OptionHintStyle}"
+                                           Text="抑制色彩边缘的振铃。0 为 mpv 默认（关闭）；彩边出现白边时可试 0.5。" />
+                            </StackPanel>
+                        </StackPanel>
+
+                        <!-- 抖动 -->
+                        <StackPanel Spacing="8">
+                            <StackPanel Spacing="2">
+                                <TextBlock Text="抖动（dither）" Style="{StaticResource GroupHeaderStyle}" />
+                                <TextBlock Style="{StaticResource GroupNoteStyle}"
+                                           Text="用微小噪点掩盖 8bit 渐变的色带；默认设置已适合大多数屏幕。" />
+                            </StackPanel>
+                            <StackPanel Spacing="4">
+                                <Grid ColumnSpacing="10">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="170" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Text="抖动算法 · dither" Style="{StaticResource OptionLabelStyle}" />
+                                    <ComboBox x:Name="DitherBox" Grid.Column="1" HorizontalAlignment="Stretch"
+                                              ItemTemplate="{StaticResource ChoiceItemTemplate}" />
+                                </Grid>
+                                <TextBlock Style="{StaticResource OptionHintStyle}"
+                                           Text="Fruit 是 mpv 默认、画质最好；Ordered 开销低；Error diffusion 更平滑但较慢；No 最省，可能出现色带。" />
+                            </StackPanel>
+                            <StackPanel Spacing="4">
+                                <Grid ColumnSpacing="10">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="170" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Text="抖动位深 · dither-depth" Style="{StaticResource OptionLabelStyle}" />
+                                    <ComboBox x:Name="DitherDepthBox" Grid.Column="1" HorizontalAlignment="Stretch"
+                                              ItemTemplate="{StaticResource ChoiceItemTemplate}" />
+                                </Grid>
+                                <TextBlock Style="{StaticResource OptionHintStyle}"
+                                           Text="按屏幕实际位深抖动。Auto 是 mpv 默认；8 / 10 / 12 bit 面板可手动指定；No 关闭抖动。" />
+                            </StackPanel>
+                            <StackPanel Spacing="4">
+                                <Grid ColumnSpacing="10">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="170" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Text="抖动范围 · dither-size-fruit" Style="{StaticResource OptionLabelStyle}" />
+                                    <NumberBox x:Name="DitherSizeFruitBox" Grid.Column="1" Width="160" HorizontalAlignment="Left"
+                                               Minimum="2" Maximum="8" SmallChange="1" LargeChange="2"
+                                               SpinButtonPlacementMode="Compact" />
+                                </Grid>
+                                <TextBlock Style="{StaticResource OptionHintStyle}"
+                                           Text="Fruit 抖动的采样范围，6 为 mpv 默认；越大越均匀但略慢，2–4 更省 GPU。" />
+                            </StackPanel>
+                            <Grid ColumnSpacing="10">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="170" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="时间抖动 · temporal-dither" Style="{StaticResource OptionLabelStyle}" />
+                                <CheckBox x:Name="TemporalDitherCheck" Grid.Column="1" Content="启用" />
+                            </Grid>
+                            <TextBlock Style="{StaticResource OptionHintStyle}"
+                                       Text="让噪点逐帧变化，静态渐变更平滑；会增加一点 GPU 开销。mpv 默认关闭。" />
+                        </StackPanel>
+
+                        <!-- 去色带 -->
+                        <StackPanel Spacing="8">
+                            <StackPanel Spacing="2">
+                                <TextBlock Text="去色带（deband）" Style="{StaticResource GroupHeaderStyle}" />
+                                <TextBlock Style="{StaticResource GroupNoteStyle}"
+                                           Text="由“设置 → 视频 → 画面”的“去色带”总开关控制；关闭时以下参数仍会保存，但不会应用到 mpv。" />
+                            </StackPanel>
+                            <StackPanel Spacing="4">
+                                <Grid ColumnSpacing="10">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="170" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Text="迭代次数 · deband-iterations" Style="{StaticResource OptionLabelStyle}" />
+                                    <NumberBox x:Name="DebandIterationsBox" Grid.Column="1" Width="160" HorizontalAlignment="Left"
+                                               Minimum="0" Maximum="16" SmallChange="1" LargeChange="4"
+                                               SpinButtonPlacementMode="Compact" />
+                                </Grid>
+                                <TextBlock Style="{StaticResource OptionHintStyle}"
+                                           Text="去色带强度，1 为 mpv 默认；越大色带越淡但越慢，4 以上收益递减。" />
+                            </StackPanel>
+                            <StackPanel Spacing="4">
+                                <Grid ColumnSpacing="10">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="170" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Text="阈值 · deband-threshold" Style="{StaticResource OptionLabelStyle}" />
+                                    <NumberBox x:Name="DebandThresholdBox" Grid.Column="1" Width="160" HorizontalAlignment="Left"
+                                               Minimum="0" Maximum="4096" SmallChange="1" LargeChange="16"
+                                               SpinButtonPlacementMode="Compact" />
+                                </Grid>
+                                <TextBlock Style="{StaticResource OptionHintStyle}"
+                                           Text="多大的色差算色带，48 为 mpv 默认；太高会误伤画面细节。" />
+                            </StackPanel>
+                            <StackPanel Spacing="4">
+                                <Grid ColumnSpacing="10">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="170" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Text="范围 · deband-range" Style="{StaticResource OptionLabelStyle}" />
+                                    <NumberBox x:Name="DebandRangeBox" Grid.Column="1" Width="160" HorizontalAlignment="Left"
+                                               Minimum="1" Maximum="64" SmallChange="1" LargeChange="4"
+                                               SpinButtonPlacementMode="Compact" />
+                                </Grid>
+                                <TextBlock Style="{StaticResource OptionHintStyle}"
+                                           Text="参与判断的像素半径，16 为 mpv 默认；越大越平滑但越慢。" />
+                            </StackPanel>
+                            <StackPanel Spacing="4">
+                                <Grid ColumnSpacing="10">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="170" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Text="颗粒 · deband-grain" Style="{StaticResource OptionLabelStyle}" />
+                                    <NumberBox x:Name="DebandGrainBox" Grid.Column="1" Width="160" HorizontalAlignment="Left"
+                                               Minimum="0" Maximum="4096" SmallChange="1" LargeChange="16"
+                                               SpinButtonPlacementMode="Compact" />
+                                </Grid>
+                                <TextBlock Style="{StaticResource OptionHintStyle}"
+                                           Text="去色带后补回的颗粒，32 为 mpv 默认；太大会显噪点，太小会重新出现色带。" />
+                            </StackPanel>
+                        </StackPanel>
+
+                        <!-- 插帧 -->
+                        <StackPanel Spacing="8">
+                            <StackPanel Spacing="2">
+                                <TextBlock Text="插帧" Style="{StaticResource GroupHeaderStyle}" />
+                                <TextBlock Style="{StaticResource GroupNoteStyle}"
+                                           Text="把低帧率片源补到屏幕刷新率；运动更顺，但明显增加 GPU 负载。" />
+                            </StackPanel>
+                            <Grid ColumnSpacing="10">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="170" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="插帧 · interpolation" Style="{StaticResource OptionLabelStyle}" />
+                                <CheckBox x:Name="InterpolationCheck" Grid.Column="1" Content="启用" />
+                            </Grid>
+                            <TextBlock Style="{StaticResource OptionHintStyle}"
+                                       Text="mpv 默认关闭。24fps 电影在 60/120Hz 屏上会更顺；弱 GPU 或高分辨率下不建议开启。" />
+                            <StackPanel Spacing="4">
+                                <Grid ColumnSpacing="10">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="170" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Text="时间缩放 · tscale" Style="{StaticResource OptionLabelStyle}" />
+                                    <ComboBox x:Name="TscaleBox" Grid.Column="1" HorizontalAlignment="Stretch"
+                                              ItemTemplate="{StaticResource ChoiceItemTemplate}" />
+                                </Grid>
+                                <TextBlock Style="{StaticResource OptionHintStyle}"
+                                           Text="插帧时的帧混合算法。Oversample 是 mpv 默认、最省；Mitchell / Lanczos 更平滑但更吃 GPU。" />
+                            </StackPanel>
+                        </StackPanel>
+
+                        <!-- 同步 -->
+                        <StackPanel Spacing="8">
+                            <StackPanel Spacing="2">
+                                <TextBlock Text="同步" Style="{StaticResource GroupHeaderStyle}" />
+                                <TextBlock Style="{StaticResource GroupNoteStyle}"
+                                           Text="音画同步策略；默认的 Audio 已适合本地播放，改错可能造成卡顿或音调变化。" />
+                            </StackPanel>
+                            <StackPanel Spacing="4">
+                                <Grid ColumnSpacing="10">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="170" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Text="视频同步 · video-sync" Style="{StaticResource OptionLabelStyle}" />
+                                    <ComboBox x:Name="VideoSyncBox" Grid.Column="1" HorizontalAlignment="Stretch"
+                                              ItemTemplate="{StaticResource ChoiceItemTemplate}" />
+                                </Grid>
+                                <TextBlock Style="{StaticResource OptionHintStyle}"
+                                           Text="Audio 是 mpv 默认；有可变刷新率或抖动时可试 display-resample，代价是音频重采样与更多 GPU。display-* 模式需要音频输出保持同步。" />
+                            </StackPanel>
+                            <StackPanel Spacing="4">
+                                <Grid ColumnSpacing="10">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="170" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Text="最大视频变速 · video-sync-max-video-change" Style="{StaticResource OptionLabelStyle}" />
+                                    <NumberBox x:Name="VideoSyncMaxVideoChangeBox" Grid.Column="1" Width="160" HorizontalAlignment="Left"
+                                               Minimum="0" Maximum="100" SmallChange="0.1" LargeChange="1"
+                                               SpinButtonPlacementMode="Compact" />
+                                </Grid>
+                                <TextBlock Style="{StaticResource OptionHintStyle}"
+                                           Text="允许播放速度临时偏移的百分比，1.0 为 mpv 默认；只在 display-* 同步模式下生效，过大音调会变。" />
+                            </StackPanel>
+                        </StackPanel>
+
+                        <!-- 其他 -->
+                        <StackPanel Spacing="8">
+                            <StackPanel Spacing="2">
+                                <TextBlock Text="其他" Style="{StaticResource GroupHeaderStyle}" />
+                            </StackPanel>
+                            <Grid ColumnSpacing="10">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="170" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="仅缩放时重采样 · scaler-resizes-only" Style="{StaticResource OptionLabelStyle}" />
+                                <CheckBox x:Name="ScalerResizesOnlyCheck" Grid.Column="1" Content="启用（mpv 默认）" />
+                            </Grid>
+                            <TextBlock Style="{StaticResource OptionHintStyle}"
+                                       Text="只在需要缩放时才走缩放器；关闭会始终重采样，通常没必要且更慢。" />
+                            <StackPanel Spacing="4">
+                                <Grid ColumnSpacing="10">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="170" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Text="GPU 精简模式 · gpu-dumb-mode" Style="{StaticResource OptionLabelStyle}" />
+                                    <ComboBox x:Name="GpuDumbModeBox" Grid.Column="1" HorizontalAlignment="Stretch"
+                                              ItemTemplate="{StaticResource ChoiceItemTemplate}" />
+                                </Grid>
+                                <TextBlock Style="{StaticResource OptionHintStyle}"
+                                           Text="Auto 是 mpv 默认。Yes 关闭高级渲染（部分着色器 / 字幕特效会失效）以省 GPU；一般保持 Auto。" />
+                            </StackPanel>
+                        </StackPanel>
                     </StackPanel>
                 </Border>
+
+                <TextBlock x:Name="UnknownOptionsText" FontSize="11.5" Opacity="0.7"
+                           TextWrapping="Wrap" Visibility="Collapsed" />
 
                 <TextBlock x:Name="StatusText" FontSize="12" Opacity="0.75" TextWrapping="Wrap" />
             </StackPanel>

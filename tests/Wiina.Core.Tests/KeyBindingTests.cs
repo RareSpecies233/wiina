@@ -13,13 +13,52 @@ public sealed class KeyBindingTests
         Assert.Contains(defaults, binding =>
             binding.Action == PlayerActions.PlayPause && binding.Chord == "Space");
         Assert.Contains(defaults, binding =>
-            binding.Action == PlayerActions.Settings && binding.Chord == "Ctrl+,");
+            binding.Action == PlayerActions.Screenshot && binding.Chord == "Ctrl+S");
         Assert.Contains(defaults, binding =>
-            binding.Action == PlayerActions.PictureInPicture && binding.Chord == "Ctrl+Shift+P");
+            binding.Action == PlayerActions.ChapterNext && binding.Chord == "Ctrl+Shift+.");
+        Assert.Contains(defaults, binding =>
+            binding.Action == PlayerActions.PlayPause && binding.Chord == "MediaPlayPause");
         Assert.All(defaults, binding => Assert.True(
             PlayerActionCatalog.IsKnown(binding.Action),
             binding.Action));
         Assert.All(defaults, binding => Assert.NotNull(KeyBindings.NormalizeChord(binding.Chord)));
+    }
+
+    [Fact]
+    public void DefaultProfileBindsPictureInPictureButNotMusicMode()
+    {
+        // PiP advertises Ctrl+Shift+P in the 窗口 menu, so the shipped profile
+        // must actually bind it; the mini/music mode is reachable only from
+        // Settings → 高级 → 模式 and gets no chord.
+        IReadOnlyList<KeyBindingSetting> defaults = KeyBindings.CreateDefaults();
+        Assert.Contains(defaults, binding =>
+            binding.Action == PlayerActions.PictureInPicture &&
+            string.Equals(
+                KeyBindings.NormalizeChord(binding.Chord),
+                "Ctrl+Shift+P",
+                StringComparison.OrdinalIgnoreCase));
+        Assert.DoesNotContain(defaults, binding =>
+            binding.Action == PlayerActions.MusicMode);
+        Assert.DoesNotContain(defaults, binding =>
+            string.Equals(
+                KeyBindings.NormalizeChord(binding.Chord),
+                "Ctrl+Shift+M",
+                StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public void ShortcutEditorOmitsMusicMode()
+    {
+        // Removing the catalog row also removes the 模式 category from the
+        // editor, so no shortcut row can lead back into the mini player.
+        Assert.DoesNotContain(
+            PlayerActionCatalog.All,
+            action => action.Action == PlayerActions.MusicMode);
+        Assert.Contains(
+            PlayerActionCatalog.All,
+            action => action.Action == PlayerActions.PictureInPicture);
+        Assert.False(PlayerActionCatalog.IsKnown(PlayerActions.MusicMode));
+        Assert.DoesNotContain("模式", PlayerActionCatalog.Categories);
     }
 
     [Fact]
@@ -110,13 +149,13 @@ public sealed class KeyBindingTests
             cleared,
             PlayerActions.PlayPause);
         Assert.Equal(
-            new[] { "P", "Space" },
+            new[] { "MediaPlayPause", "P", "Space" },
             reset
                 .Where(binding => binding.Action == PlayerActions.PlayPause)
                 .Select(binding => binding.Chord)
                 .OrderBy(chord => chord, StringComparer.Ordinal)
                 .ToArray());
-        Assert.Contains(reset, binding => binding.Action == PlayerActions.Open);
+        Assert.Contains(reset, binding => binding.Action == PlayerActions.Screenshot);
     }
 
     [Fact]
@@ -199,5 +238,45 @@ public sealed class KeyBindingTests
         }
 
         Assert.Equal("未知动作", PlayerActionCatalog.Label("unknown-action"));
+    }
+
+    [Fact]
+    public void RawMpvCommandsAreFirstClassBindings()
+    {
+        Assert.True(PlayerActionCatalog.IsKnown("mpv:cycle stats"));
+        Assert.True(PlayerActionCatalog.IsRawCommand("mpv:cycle stats"));
+        Assert.Equal("cycle stats", PlayerActionCatalog.RawCommand("mpv:cycle stats"));
+        Assert.Contains("mpv 命令", PlayerActionCatalog.Label("mpv:cycle stats"));
+        Assert.Equal("mpv 命令", PlayerActionCatalog.CategoryOf("mpv:cycle stats"));
+
+        var stored = new[]
+        {
+            new KeyBindingSetting("mpv:cycle stats", "Ctrl+Alt+X"),
+        };
+        IReadOnlyList<KeyBindingSetting> resolved = KeyBindings.Resolve(stored, "我的方案");
+        KeyBindingSetting only = Assert.Single(resolved);
+        Assert.Equal("mpv:cycle stats", only.Action);
+
+        KeyMap map = KeyBindings.BuildKeyMap(resolved, "我的方案");
+        Assert.True(map.TryGetAction(KeyChord.Parse("Ctrl+Alt+X"), out string? action));
+        Assert.Equal("mpv:cycle stats", action);
+    }
+
+    [Fact]
+    public void PrimaryChordsFollowTheEffectiveBindings()
+    {
+        IReadOnlyList<KeyBindingSetting> stored = KeyBindings.SetBinding(
+            KeyBindings.CreateDefaults(),
+            PlayerActions.Open,
+            "Ctrl+Shift+K");
+        IReadOnlyDictionary<string, KeyChord> map = KeyBindings.PrimaryChords(stored, "我的方案");
+
+        Assert.Equal(KeyChord.Parse("Ctrl+Shift+K"), map[PlayerActions.Open]);
+
+        // Built-in profiles ignore stored rows and resolve their own preset.
+        IReadOnlyDictionary<string, KeyChord> wiina =
+            KeyBindings.PrimaryChords(stored, KeyBindingProfiles.Wiina);
+        Assert.Equal(KeyChord.Parse("Space"), wiina[PlayerActions.PlayPause]);
+        Assert.Equal(KeyChord.Parse("Ctrl+S"), wiina[PlayerActions.Screenshot]);
     }
 }

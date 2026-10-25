@@ -9,20 +9,18 @@
     HorizontalAlignment="Left">
 
     <Grid>
-        <!-- Live Gaussian blur of the frame behind the floating OSC (video
-             included), clipped to the 8 DIP panel radius. -->
-        <Border x:Name="BackdropBlurHost" IsHitTestVisible="False" />
-        <Border x:Name="OscBlurTintLayer"
-                Background="{ThemeResource OscBlurTintBrush}"
-                CornerRadius="8"
-                Visibility="Collapsed"
-                IsHitTestVisible="False" />
         <Border x:Name="DragArea"
             Style="{StaticResource PanelBorderStyle}"
-            Background="{ThemeResource OscAcrylicBrush}"
-            MinHeight="64"
-            Padding="12,6">
+            Background="{ThemeResource ChromeSolidBrush}"
+            MinHeight="64">
         <Grid>
+            <Border x:Name="BackdropBlurHost" IsHitTestVisible="False" />
+            <Border x:Name="OscBlurTintLayer"
+                    Background="{ThemeResource OscBlurTintBrush}"
+                    CornerRadius="8"
+                    Visibility="Collapsed"
+                    IsHitTestVisible="False" />
+        <Grid Margin="12,6">
             <Grid.RowDefinitions>
                 <RowDefinition Height="*" />
                 <RowDefinition Height="Auto" MinHeight="18" />
@@ -43,12 +41,6 @@
                             Spacing="16"
                             HorizontalAlignment="Center"
                             VerticalAlignment="Center">
-                    <TextBlock x:Name="LeftSpeed"
-                               Text="{Binding SpeedText}"
-                               Visibility="{Binding ShowSpeed, Converter={StaticResource BoolToVisibility}}"
-                               Width="30"
-                               TextAlignment="Right"
-                               Style="{StaticResource CaptionTextStyle}" />
                     <Button Style="{StaticResource OscIconButtonStyle}"
                             Content="&#xE892;"
                             Command="{Binding PreviousCommand}"
@@ -99,6 +91,7 @@
                            TextAlignment="Center"
                            Style="{StaticResource CaptionTextStyle}" />
             </Grid>
+        </Grid>
         </Grid>
     </Border>
     </Grid>

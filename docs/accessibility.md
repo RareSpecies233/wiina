@@ -1,9 +1,42 @@
 # Accessibility, localization, DPI and motion
 
-This document records what Wiina v1.0.0 implements, how it was checked, and
+This document records what Wiina v1.3.9 implements, how it was checked, and
 what is intentionally limited. It is a summary, not a certification.
 
 ## 1. Keyboard and focus
+
+- The new "pre-generate using keyframes" switch
+  (`video.thumbnail-keyframe-seek`) is an ordinary ToggleSwitch and reachable
+  by keyboard. Rows hidden by a conditional availability gate (for example
+  "preview while generating" in slow mode) are disabled, dimmed, and state the
+  reason in their description instead of disappearing.- Thumbnail `Instant` mode and its hover-delay NumberBox are ordinary keyboard
+  reachable settings; the delay only affects hover previews, never playback.
+- Opening Settings from the menu while the window is already open only activates
+  it; it does not jump the page or steal focus. Explicit deep links (a page, a
+  row, or a search result) still navigate and focus the requested row.
+- Numeric settings rows are live: typed text is parsed and clamped, then applied
+  after a 200 ms debounce and flushed on focus loss, page change, search,
+  deactivation and close, so a screen-reader user does not have to press Enter
+  before closing the window. Invalid text is ignored and the last valid value is
+  restored on commit. The video-quality editor keeps its explicit Apply step.
+- The thumbnail "preview while generating" switch is a normal keyboard-reachable toggle;
+  while it is off, hover previews simply do not appear, and enabling it takes effect
+  immediately without a restart.
+
+- Picture-in-Picture keeps its transport buttons out of the Tab order and
+  handles the keys at the window root: Space play/pause, Enter fullscreen,
+  Escape back to the main window. Other keys are forwarded to the main player,
+  so screen-reader users keep the same shortcuts as in the main window. The
+  mini player remains deliberately mouse-only.
+- The dropped-frame notice is a transient, non-hit-testable card; it is not a
+  live region, so it is announced only if the screen reader happens to poll the
+  overlay. The statistics panel remains the readable surface.
+- The key binding editor is reachable from Controls → 快捷键 and from the
+  command palette; its search box, profile picker, category list and recorder
+  are keyboard friendly, and the conflict dialog is a normal ContentDialog
+  (Enter/Space to confirm, Esc to cancel).
+- The 系统媒体键 toggle is a standard ToggleSwitch row with an automation name
+  and an on/off state announcement; it applies without restart.
 
 - The main window root is a tab stop; `F11` toggles fullscreen and `Esc` leaves
   fullscreen / closes transient chrome (`MainWindow.xaml` accelerators).
@@ -19,6 +52,35 @@ what is intentionally limited. It is a summary, not a certification.
 - Focus visuals come from the Fluent control templates (`TitleBarButtonStyle`,
   `SettingsNavButtonStyle`, `OscIconButtonStyle`), not from a custom-drawn
   focus rectangle.
+- Settings rail pointer rule (1.2.3, tightened in 1.2.4): unselected items
+  are pixel-identical at rest and on hover (dim `SecondaryTextBrush`, no fill,
+  no border); only the selected item is tinted. Keyboard focus is a 2 px accent
+  ring (`UseSystemFocusVisuals=False` plus a custom visual). The rail uses a
+  custom `ControlTemplate` whose `PointerOver`/`Pressed` states are empty, and
+  the icon/label `Foreground` is bound to the button so no theme fallback colour
+  can read as a hover highlight.
+- Since 1.2.6 the audio-output-device row is a ComboBox (not a text box):
+  it is keyboard reachable, its automation name is the localized row title, and
+  the refresh button has a localized AutomationProperties.Name plus tooltip.
+  The unavailable-device placeholder is part of the item text, so it is read
+  out instead of being hidden.
+- Media chrome (OSC, title bar, mini player) is removed from the Tab order and from click focus since 1.3.2 (`IsTabStop=false` / `AllowFocusOnInteraction=false`), so Space/Enter always reach the player; Tab in mini/fullscreen is returned to the root grid. Every chrome action also has a keyboard shortcut.
+- The mini player is deliberately keyboard-inert. Since 1.3.3
+  `MiniPlayerView.SetKeyboardMouseOnly` clears `IsTabStop` and
+  `AllowFocusOnInteraction` on every focusable descendant (sliders and lazily
+  created playlist rows included) and restores the saved values on exit, so Tab
+  and Space no longer land on mini-player buttons. There is no keyboard path to
+  those controls; use the normal player window for keyboard operation.
+- The two mode actions added in 1.3.3 (Settings → Advanced → Modes) are ordinary
+  action rows: reachable with Tab/Enter, announced by their localized title and
+  description, and they close the settings window before switching mode. They
+  have no default shortcut, so they do not appear in the shortcut editor.
+- Since 1.3.1 the thumbnail-acceleration row is a two-item ComboBox
+  (Auto/CPU only), the previous/next-behaviour row is a ComboBox
+  (track skip / ±5 s), and screenshot-subtitles is a ToggleSwitch; all three use
+  the localized row title as their AutomationProperties.Name and are reachable
+  with Tab/arrow keys. Cursor hiding became functional in 1.3.2 (see `release/known-issues.md`) and is not an accessibility feature; it remains
+  a low-risk IAT hook rather than a documented accessibility guarantee.
 
 ## 2. Automation names
 
@@ -49,13 +111,24 @@ pressed, sliders, sidebar rows) resolve to Windows system colors:
   selection
 - `SystemColorButtonFaceColor` / `SystemColorButtonTextColor` for pressed state
 
-The acrylic sidebar falls back to a solid system window brush in high contrast.
-Standard WinUI controls (ComboBox, ToggleSwitch, ScrollBar, ContentDialog) use
-the system high-contrast templates automatically.
+The chrome over the video is either a Win2D blur of the video (固定 / 动态 /
+始终, whose tint brushes map to `SystemColorWindowColor` in high contrast) or
+the opaque `ChromeSolidBrush` (关闭毛玻璃 and every capture-failure fallback),
+which also maps to `SystemColorWindowColor`. See
+[ADR-0003](architecture/0003-acrylic.md) for the blur pipeline and
+[ADR-0004](architecture/0004-solid-chrome.md) for Solid mode. Standard WinUI controls
+(ComboBox, ToggleSwitch, ScrollBar, ContentDialog) use the system high-contrast
+templates automatically.
 
 Spot check (Windows 11, “Contrast themes → Aquatic”): panels/text/icons follow
 the theme; no hardcoded white-on-white text remains in the shell. Media frames
 are user content and are not recolored.
+
+
+- The mini player uses a fixed dark surface in every theme (product choice):
+  primary text is about 18:1 against the panel and secondary text about 9:1,
+  so it stays readable under High Contrast too (the tokens flatten to system
+  colours there).
 
 ## 4. Reduced motion
 
@@ -103,12 +176,13 @@ generic text containers mirror.
 
 ## 7. Localization coverage
 
-- Runtime catalog: 510 keys in `UiStringCatalog.cs`, each with a non-empty
+- Runtime catalog: 581 keys in `UiStringCatalog.cs`, each with a non-empty
   zh-Hans and English string. Coverage includes the title bar, OSC, OSD, menus,
-  sidebars, quick settings, all 11 settings pages (titles, summaries, section
-  headers, row titles/descriptions/choices), welcome/about/log/inspector/open-URL
+  sidebars, quick settings, all settings pages (11 pages, 133 rows;
+  page titles, summaries, section headers, row titles/descriptions/choices), welcome/about/log/inspector/open-URL
   dialogs, filter/equalizer windows, playlist/chapters, mini player, PiP badge,
-  and common errors.
+  the 1.2.6 audio-device labels (auto/refresh/unavailable), the 1.2.7 thumbnail-cache and administrator-association labels, the 1.3.1
+  thumbnail-acceleration/screenshot/prev-next labels, and common errors.
 - The language row is enabled; changing it applies immediately, re-renders the
   main shell and settings window, and persists `Language` in
   `%LOCALAPPDATA%\Wiina\settings.json`. Already-open auxiliary windows pick up
@@ -124,6 +198,10 @@ generic text containers mirror.
     `Wiina.Core/Filters`, `VideoFilters.cs`, `AudioFilters.cs`,
     `TrackInfo.cs`, `InspectorFormatter.cs`.
   - Log viewer raw lines and trace/crash logs.
+  - Playback statistics card row labels and group names (文件 / 视频 / 音频 /
+    播放 / 渲染) are fixed Chinese strings in `MainWindow.Stats.cs`; the card
+    title, subtitle, and close button are localized. Translating the row labels
+    is a known follow-up.
   - Plugin/online-subtitle rows remain disabled and explicitly say Stage 9/10
     are skipped; they are not presented as working features.
 
@@ -139,3 +217,5 @@ value. It also verifies the menu, OSD builders, and search-hit localization.
   glyph itself is not exposed as text.
 - The key-binding recorder's status text is not announced automatically.
 - No Arabic/Hebrew UI translation in v1 (see RTL above).
+- The settings rail deliberately does not brighten on pointer hover; rest and
+  hover are identical (see §1).

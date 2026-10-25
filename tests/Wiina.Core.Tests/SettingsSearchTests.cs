@@ -1,3 +1,4 @@
+using Wiina.Core.Menu;
 using Wiina.Core.Settings;
 using Xunit;
 
@@ -21,8 +22,8 @@ public sealed class SettingsSearchTests
                 SettingsPageId.Control,
                 SettingsPageId.KeyBindings,
                 SettingsPageId.Advanced,
+                SettingsPageId.Integration,
                 SettingsPageId.Plugin,
-                SettingsPageId.Utilities,
             },
             SettingsCatalog.Pages.Select(page => page.Id));
     }
@@ -73,8 +74,8 @@ public sealed class SettingsSearchTests
     {
         IReadOnlyList<SettingsSearchHit> hits =
             SettingsCatalog.SearchIndex.Search("thumbnail");
-        Assert.Contains(hits, hit => hit.Row?.Id == "ui.thumbnail-preview");
-        Assert.Contains(hits, hit => hit.Row?.Id == "ui.thumbnail-width");
+        Assert.Contains(hits, hit => hit.Row?.Id == "video.thumbnail-preview");
+        Assert.Contains(hits, hit => hit.Row?.Id == "video.thumbnail-width");
     }
 
     [Fact]
@@ -88,9 +89,238 @@ public sealed class SettingsSearchTests
     [Fact]
     public void SearchMatchesPageWhenNoRowMatches()
     {
-        IReadOnlyList<SettingsSearchHit> hits =
-            SettingsCatalog.SearchIndex.Search("工具");
-        Assert.Contains(hits, hit => hit.Page.Id == SettingsPageId.Utilities);
+        // A page whose summary matches but which has no rows at all still has to
+        // surface as a page-level hit (the old 工具 page used to cover this).
+        var page = new SettingsPageInfo(
+            SettingsPageId.Plugin, "插件", "尚未实现（Stage 9）", "\uEA86");
+        var index = new SettingsSearchIndex(
+            new[] { page },
+            Array.Empty<SettingsRowDefinition>());
+        IReadOnlyList<SettingsSearchHit> hits = index.Search("尚未实现");
+        SettingsSearchHit hit = Assert.Single(hits);
+        Assert.Null(hit.Row);
+        Assert.Equal(SettingsPageId.Plugin, hit.Page.Id);
+    }
+
+    [Fact]
+    public void ToolsRowsMovedToAdvancedAndUtilitiesPageIsGone()
+    {
+        Assert.DoesNotContain(
+            SettingsCatalog.Pages,
+            page => page.Id.ToString() == "Utilities");
+
+        foreach (string id in new[]
+                 {
+                     "utilities.log-viewer",
+                     "utilities.inspector",
+                     "utilities.about",
+                 })
+        {
+            SettingsRowDefinition row = Assert.Single(
+                SettingsCatalog.Rows,
+                row => row.Id == id);
+            Assert.Equal(SettingsPageId.Advanced, row.Page);
+            Assert.Equal("工具", row.Section);
+        }
+
+        Assert.DoesNotContain(SettingsCatalog.Rows, row => row.Id == "utilities.font");
+        Assert.Single(SettingsCatalog.Rows, row => row.Id == "subtitles.font");
+
+        SettingsRowDefinition openUrl = Assert.Single(
+            SettingsCatalog.Rows,
+            row => row.Id == "utilities.open-url");
+        Assert.Equal(SettingsPageId.General, openUrl.Page);
+
+        SettingsRowDefinition screenshot = Assert.Single(
+            SettingsCatalog.Rows,
+            row => row.Id == "general.screenshot-folder");
+        Assert.Equal(SettingsPageId.Video, screenshot.Page);
+    }
+
+    [Fact]
+    public void ThumbnailRowsLiveOnVideoPage()
+    {
+        foreach (SettingsRowDefinition row in SettingsCatalog.Rows
+                     .Where(row => row.Id.StartsWith("video.thumbnail", StringComparison.Ordinal)))
+        {
+            Assert.Equal(SettingsPageId.Video, row.Page);
+        }
+
+        // The Ui page no longer owns the thumbnail block.
+        Assert.DoesNotContain(SettingsCatalog.Rows, row => row.Id.StartsWith("ui.thumbnail", StringComparison.Ordinal));
+
+        // Maintenance keeps its clear-cache shortcut on the Advanced page.
+        SettingsRowDefinition clear = Assert.Single(
+            SettingsCatalog.Rows,
+            row => row.Id == "advanced.clear-thumbnails");
+        Assert.Equal(SettingsPageId.Advanced, clear.Page);
+        Assert.Equal(SettingsRowKind.Action, clear.Kind);
+
+        SettingsRowDefinition slow = Assert.Single(
+            SettingsCatalog.Rows,
+            row => row.Id == "video.thumbnail-slow");
+        Assert.Equal(SettingsRowKind.Toggle, slow.Kind);
+        var settings = new AppSettings();
+        Assert.False(settings.ThumbnailSlowMode);
+        slow.Apply(settings, true);
+        Assert.True(settings.ThumbnailSlowMode);
+        Assert.Equal(true, slow.Value(settings));
+    }
+
+    [Fact]
+    public void ThumbnailCacheFloorRowIsNoLongerExposed()
+    {
+        // The memory cache always covers every bucket of the current file, so
+        // a "minimum frames" row would be misleading. The property stays for
+        // old settings.json files but no catalog row may reference it.
+        Assert.DoesNotContain(
+            SettingsCatalog.Rows,
+            row => row.Id == "video.thumbnail-cache");
+        Assert.DoesNotContain(
+            SettingsCatalog.Rows,
+            row => row.Title.Contains("缓存下限", StringComparison.Ordinal));
+
+        // The remaining thumbnail rows are still there.
+        Assert.Contains(SettingsCatalog.Rows, row => row.Id == "video.thumbnail-preview");
+        Assert.Contains(SettingsCatalog.Rows, row => row.Id == "video.thumbnail-bucket");
+        Assert.Contains(SettingsCatalog.Rows, row => row.Id == "video.thumbnail-cache-mb");
+    }
+
+    [Fact]
+    public void ScreenshotFolderRowMatchesTheFolderTheAppWritesTo()
+    {
+        SettingsRowDefinition row = Assert.Single(
+            SettingsCatalog.Rows,
+            row => row.Id == "general.screenshot-folder");
+        var settings = new AppSettings { ScreenshotFolder = string.Empty };
+
+        string expected = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.MyPictures),
+            "Wiina");
+        Assert.Equal(expected, row.Value(settings) as string);
+    }
+
+    [Fact]
+    public void ThumbnailAccelerationRowDefaultsToAutoAndOnlyOffersCpuFallback()
+    {
+        SettingsRowDefinition row = Assert.Single(
+            SettingsCatalog.Rows,
+            row => row.Id == "video.thumbnail-acceleration");
+        Assert.Equal(SettingsPageId.Video, row.Page);
+        Assert.Equal(SettingsRowKind.Choice, row.Kind);
+        Assert.Equal(2, row.Choices.Count);
+
+        var settings = new AppSettings();
+        Assert.Equal(ThumbnailAcceleration.Auto, settings.ThumbnailAcceleration);
+        Assert.Equal(0, row.Value(settings));
+
+        row.Apply(settings, 1);
+        Assert.Equal(ThumbnailAcceleration.Cpu, settings.ThumbnailAcceleration);
+        Assert.Equal(1, row.Value(settings));
+
+        // Out-of-range values clamp to the CPU entry rather than throwing.
+        row.Apply(settings, 7);
+        Assert.Equal(ThumbnailAcceleration.Cpu, settings.ThumbnailAcceleration);
+
+        row.Apply(settings, 0);
+        Assert.Equal(ThumbnailAcceleration.Auto, settings.ThumbnailAcceleration);
+    }
+
+    [Fact]
+    public void ThumbnailModeRowDefaultsToPreGenerationAndOffersInstant()
+    {
+        SettingsRowDefinition row = Assert.Single(
+            SettingsCatalog.Rows,
+            row => row.Id == "video.thumbnail-mode");
+        Assert.Equal(SettingsPageId.Video, row.Page);
+        Assert.Equal("缩略图", row.Section);
+        Assert.Equal(SettingsRowKind.Choice, row.Kind);
+        Assert.Equal(new[] { "预生成（推荐）", "即时预览" }, row.Choices);
+
+        var settings = new AppSettings();
+        Assert.Equal(ThumbnailMode.PreGenerate, settings.ThumbnailMode);
+        Assert.Equal(0, row.Value(settings));
+
+        row.Apply(settings, 1);
+        Assert.Equal(ThumbnailMode.Instant, settings.ThumbnailMode);
+        Assert.Equal(1, row.Value(settings));
+
+        // An imported settings.json with a bogus index clamps instead of throwing.
+        row.Apply(settings, 9);
+        Assert.Equal(ThumbnailMode.Instant, settings.ThumbnailMode);
+
+        row.Apply(settings, 0);
+        Assert.Equal(ThumbnailMode.PreGenerate, settings.ThumbnailMode);
+    }
+
+    [Fact]
+    public void ThumbnailHoverDelayRowIsClampedToTwoSeconds()
+    {
+        SettingsRowDefinition row = Assert.Single(
+            SettingsCatalog.Rows,
+            row => row.Id == "video.thumbnail-hover-delay");
+        Assert.Equal(SettingsPageId.Video, row.Page);
+        Assert.Equal("缩略图", row.Section);
+        Assert.Equal(SettingsRowKind.Number, row.Kind);
+        Assert.Equal(0, row.Minimum);
+        Assert.Equal(2_000, row.Maximum);
+        Assert.Equal(50, row.Step);
+
+        var settings = new AppSettings();
+        Assert.Equal(250, settings.ThumbnailHoverDelayMs);
+        Assert.Equal(250d, row.Value(settings));
+
+        row.Apply(settings, 800);
+        Assert.Equal(800, settings.ThumbnailHoverDelayMs);
+
+        // Out-of-range values are clamped by the row, not merely by the control.
+        row.Apply(settings, 9_000);
+        Assert.Equal(2_000, settings.ThumbnailHoverDelayMs);
+        row.Apply(settings, -10);
+        Assert.Equal(0, settings.ThumbnailHoverDelayMs);
+    }
+
+    [Fact]
+    public void PreviewWhileGeneratingRowDefaultsOffAndRoundTrips()
+    {
+        SettingsRowDefinition row = Assert.Single(
+            SettingsCatalog.Rows,
+            row => row.Id == "video.thumbnail-preview-while-generating");
+        Assert.Equal(SettingsPageId.Video, row.Page);
+        Assert.Equal("缩略图", row.Section);
+        Assert.Equal(SettingsRowKind.Toggle, row.Kind);
+        Assert.Contains("IINA", row.Description);
+
+        var settings = new AppSettings();
+        Assert.False(settings.ThumbnailPreviewWhileGenerating);
+        Assert.False((bool)row.Value(settings)!);
+
+        row.Apply(settings, true);
+        Assert.True(settings.ThumbnailPreviewWhileGenerating);
+        Assert.True((bool)row.Value(settings)!);
+
+        row.Apply(settings, false);
+        Assert.False(settings.ThumbnailPreviewWhileGenerating);
+
+        // The label must be searchable, otherwise the new switch is hard to find.
+        Assert.Contains(
+            SettingsCatalog.SearchIndex.Search("生成完成前", 20),
+            hit => hit.RowId == "video.thumbnail-preview-while-generating");
+    }
+
+    [Fact]
+    public void MediaKeysRowIsAToggleThatDefaultsToOn()
+    {
+        SettingsRowDefinition row = Assert.Single(
+            SettingsCatalog.Rows,
+            row => row.Id == "control.media-keys");
+        Assert.Equal(SettingsRowKind.Toggle, row.Kind);
+        Assert.Equal(SettingsPageId.Control, row.Page);
+        var settings = new AppSettings();
+        Assert.True(settings.MediaKeysEnabled);
+        row.Apply(settings, false);
+        Assert.False(settings.MediaKeysEnabled);
+        Assert.Equal(false, row.Value(settings));
     }
 
     [Fact]
@@ -254,4 +484,31 @@ public sealed class SettingsSearchTests
             Assert.Contains(id, actions);
         }
     }
+
+    [Fact]
+    public void AdvancedModesSectionHasOneMiniPlayerEntry()
+    {
+        // Mini player and music mode are the same feature: one entry only, and
+        // it carries the "still in development" warning.
+        Assert.DoesNotContain(
+            SettingsCatalog.Rows, row => row.Id == "advanced.music-mode");
+
+        SettingsRowDefinition mini = Assert.Single(
+            SettingsCatalog.Rows, row => row.Id == "advanced.mini-player");
+        Assert.Equal(SettingsPageId.Advanced, mini.Page);
+        Assert.Equal("模式", mini.Section);
+        Assert.Equal(SettingsRowKind.Action, mini.Kind);
+        Assert.Null(mini.UnavailableReason);
+        Assert.Equal("enter-mini-player", mini.ActionId);
+        Assert.Contains("迷你播放器", mini.Title);
+        Assert.Contains("开发中", mini.Description);
+        Assert.Contains("测试", mini.Description);
+
+        // The menu catalogue must not expose these modes any more; only the
+        // settings entry above may route into them.
+        Assert.DoesNotContain(
+            MenuCatalog.Flatten(MenuCatalog.Build(new MenuState())),
+            item => item.Id is "video.music-mode" or "video.mini-player" or "window.music-mode");
+    }
 }
+

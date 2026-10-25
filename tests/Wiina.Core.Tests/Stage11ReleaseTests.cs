@@ -35,15 +35,16 @@ public class Stage11ReleaseTests
     public void Package_manifest_covers_the_documented_payload()
     {
         string version = BuildVersion();
-        Assert.Equal(version, PackageManifest.Version);
-        Assert.Equal($"wiina-{version}-win-x64.zip", PackageManifest.ArchiveFileName);
-        Assert.Equal(version, Branding.Version);
+        Assert.Equal(PackageManifest.Version, version);
+        Assert.Equal(PackageManifest.ArchiveFileName, $"wiina-{version}-win-x64.zip");
+        Assert.Equal(Branding.Version, version);
         Assert.Equal("Wiina.exe", PackageManifest.ExecutableFileName);
         Assert.Contains("libmpv-2.dll", PackageManifest.RequiredPayloadFiles);
         Assert.Contains("LICENSE", PackageManifest.RequiredPayloadFiles);
         Assert.Contains("NOTICE", PackageManifest.RequiredPayloadFiles);
         Assert.Contains("README.md", PackageManifest.RequiredPayloadFiles);
         Assert.Contains("SOURCE.txt", PackageManifest.RequiredPayloadFiles);
+        Assert.Contains(PackageManifest.UninstallerFileName, PackageManifest.RequiredPayloadFiles);
         Assert.All(PackageManifest.RequiredRootFiles,
             file => Assert.Contains(file, PackageManifest.RequiredPayloadFiles));
     }
@@ -51,7 +52,11 @@ public class Stage11ReleaseTests
     [Fact]
     public void Package_manifest_finds_missing_files_case_insensitively()
     {
-        var present = new[] { "wiina.EXE", @"libmpv-2.dll", "license", "NOTICE", "README.md", "SOURCE.TXT" };
+        var present = new[]
+        {
+            "wiina.EXE", "Uninstall Wiina.EXE", @"libmpv-2.dll", "license", "NOTICE", "README.md",
+            "SOURCE.TXT",
+        };
         Assert.Empty(PackageManifest.FindMissing(present));
 
         var missing = PackageManifest.FindMissing(new[] { "Wiina.exe" });

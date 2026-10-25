@@ -2,9 +2,11 @@ using System.Globalization;
 using System.IO;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Controls.Primitives;
 using Microsoft.UI.Xaml.Input;
+using Microsoft.UI.Xaml.Media;
 using Windows.ApplicationModel.DataTransfer;
 using Windows.Foundation;
 using Windows.Graphics;
@@ -48,6 +50,7 @@ public sealed partial class MainWindow
     private DispatcherQueueTimer? _clickTimer;
     private DispatcherQueueTimer? _suppressClickTimer;
     private DispatcherQueueTimer? _historyTimer;
+    private DispatcherQueueTimer? _dragPump;
 
     private string? _currentPath;
     private string? _currentTitle;
@@ -88,10 +91,33 @@ public sealed partial class MainWindow
             new KeyEventHandler(OnRootKeyDown),
             handledEventsToo: false);
 
-        VideoFrame.PointerPressed += OnVideoPointerPressed;
-        VideoFrame.PointerMoved += OnVideoPointerMoved;
-        VideoFrame.PointerReleased += OnVideoPointerReleased;
+        // Media chrome (OSC, titlebar, mini controls) must never own keyboard
+        // focus, otherwise Space/Enter activate the focused button instead of
+        // toggling playback or fullscreen. The recursive pass is only the
+        // first line of defence: lazily created containers and hidden chrome
+        // live outside it, so the keyboard-driven modes (mini player,
+        // fullscreen) also intercept keys in the tunneling preview phase,
+        // before a focused control can consume Space/Enter or move focus with
+        // Tab.
+        MakeMediaChromeKeyboardTransparent();
+        RootGrid.AddHandler(
+            UIElement.PreviewKeyDownEvent,
+            new KeyEventHandler(OnRootPreviewKeyDown),
+            handledEventsToo: true);
+        // Last line of defence for the keyboard-driven modes: whatever route
+        // focus took (Tab, UIA, automation, a template part created after the
+        // recursive pass), a chrome control must not keep it — Space/Enter
+        // would activate that control instead of toggling playback.
+        RootGrid.GotFocus += OnRootGotFocus;
+
+        // handledEventsToo: the video surface (SwapChainPanel) marks pointer input as
+        // handled once it owns the pointer, and a plain += subscription would then stop
+        // receiving PointerMoved — the content drag would start and immediately freeze.
+        VideoFrame.AddHandler(UIElement.PointerPressedEvent, new PointerEventHandler(OnVideoPointerPressed), handledEventsToo: true);
+        VideoFrame.AddHandler(UIElement.PointerMovedEvent, new PointerEventHandler(OnVideoPointerMoved), handledEventsToo: true);
+        VideoFrame.AddHandler(UIElement.PointerReleasedEvent, new PointerEventHandler(OnVideoPointerReleased), handledEventsToo: true);
         VideoFrame.PointerCaptureLost += OnVideoPointerCaptureLost;
+
         RootGrid.AddHandler(
             UIElement.PointerWheelChangedEvent,
             new PointerEventHandler(OnVideoPointerWheelChanged),
@@ -115,6 +141,14 @@ public sealed partial class MainWindow
         _suppressClickTimer.Interval = TimeSpan.FromMilliseconds(300);
         _suppressClickTimer.IsRepeating = false;
         _suppressClickTimer.Tick += (_, _) => _suppressClick = false;
+
+        // Content drag: poll the cursor while the mouse button is held. Moving the
+        // window drops the XAML pointer capture, so PointerMoved alone cannot keep
+        // the drag alive (the window stopped following the cursor after 1 px).
+        _dragPump = DispatcherQueue.CreateTimer();
+        _dragPump.Interval = TimeSpan.FromMilliseconds(16);
+        _dragPump.IsRepeating = true;
+        _dragPump.Tick += OnDragPumpTick;
 
         _historyTimer = DispatcherQueue.CreateTimer();
         _historyTimer.Interval = TimeSpan.FromSeconds(10);
@@ -152,6 +186,28 @@ public sealed partial class MainWindow
         _historyTimer?.Stop();
         _clickTimer?.Stop();
         _suppressClickTimer?.Stop();
+
+        // Unhook mpv callbacks before disposal: the event thread is still
+        // running and must not re-enter a window that is tearing down.
+        if (_player is { } player)
+        {
+            player.Log -= OnPlayerLog;
+            player.DisplaySwapChainChanged -= OnDisplaySwapChainChanged;
+            player.NumberPropertyChanged -= OnNumberPropertyChanged;
+            player.FlagPropertyChanged -= OnFlagPropertyChanged;
+            player.StringPropertyChanged -= OnStringPropertyChanged;
+            player.FileLoaded -= OnFileLoaded;
+            player.TrackListChanged -= OnTrackListChanged;
+            player.ChapterListChanged -= OnChapterListChanged;
+            player.PlaylistChanged -= OnPlaylistChanged;
+            player.AudioDeviceListChanged -= OnAudioDeviceListChanged;
+            player.PlaylistPositionChanged -= OnPlaylistPositionChanged;
+            player.ChapterChanged -= OnChapterChanged;
+            player.VideoSizeChanged -= OnVideoSizeChanged;
+            player.FileLoadFailed -= OnFileLoadFailed;
+            player.CommandFailed -= OnCommandFailed;
+            player.MetadataChanged -= OnMetadataChanged;
+        }
     }
 
     // ---------------------------------------------------------------- opening
@@ -336,9 +392,12 @@ public sealed partial class MainWindow
                 return;
             }
 
-            string name = $"wiina-{DateTime.Now:yyyyMMdd-HHmmss}.png";
+            string name = BuildScreenshotName(folder.Path);
             string path = Path.Combine(folder.Path, name);
-            SendPlayerCommandAsync("screenshot-to-file", path, "subtitles");
+            SendPlayerCommandAsync(
+                "screenshot-to-file",
+                path,
+                _settings.ScreenshotWithSubtitles ? "subtitles" : "video");
             ShowOsd(Loc.T("osd.screenshotSaved"), path);
         }
         catch (Exception ex)
@@ -381,6 +440,7 @@ public sealed partial class MainWindow
         // Opening a single video can pull the rest of its folder into the
         // playlist. The subtitle/audio sidecar helpers still run from the
         // regular open path, so only plain playable media is expanded here.
+        int startIndex = 0;
         if (distinctInputs.Count == 1 && playable.Count == 1)
         {
             string single = distinctInputs[0].Trim('"');
@@ -393,11 +453,31 @@ public sealed partial class MainWindow
                 {
                     bool recursive =
                         _settings.AutoPlaylistMode == AutoPlaylistMode.IncludeSubfolders;
-                    playable.AddRange(MediaFileTypes
+                    IReadOnlyList<string> candidates = MediaFileTypes
                         .ExpandFolder(folder, recursive)
                         .Where(MediaFileTypes.IsPlayableMedia)
-                        .Where(path => !string.Equals(
+                        .ToArray();
+
+                    // Use the whole naturally sorted folder as the queue and
+                    // start at the opened file, so "next" is the following
+                    // episode instead of the first file in the folder.
+                    PlaylistExpansion? expansion =
+                        PlaylistOrdering.ExpandSingleFile(single, candidates);
+                    if (expansion is not null)
+                    {
+                        playable = expansion.Entries.ToList();
+                        startIndex = expansion.CurrentIndex;
+                        Trace(
+                            $"auto playlist ({playable.Count}, current={startIndex}): " +
+                            string.Join(" | ", playable));
+                    }
+                    else
+                    {
+                        // The opened file was not in the listing (permission or
+                        // race); keep the old behavior and append the others.
+                        playable.AddRange(candidates.Where(path => !string.Equals(
                             path, single, StringComparison.OrdinalIgnoreCase)));
+                    }
                 }
             }
         }
@@ -405,6 +485,10 @@ public sealed partial class MainWindow
         playable = playable
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToList();
+        if (startIndex >= playable.Count)
+        {
+            startIndex = 0;
+        }
 
         if (playable.Count == 0)
         {
@@ -427,7 +511,7 @@ public sealed partial class MainWindow
 
         _pendingSubtitles.Clear();
         _pendingSubtitles.AddRange(subtitles.Distinct(StringComparer.OrdinalIgnoreCase));
-        PlayEntries(playable);
+        PlayEntries(playable, startIndex);
     }
 
     private void CollectMediaPaths(
@@ -528,15 +612,17 @@ public sealed partial class MainWindow
         errors.Add(Loc.F("osd.urlNotFound", input));
     }
 
-    private void PlayEntries(IReadOnlyList<string> entries)
+    private void PlayEntries(IReadOnlyList<string> entries, int startIndex = 0)
     {
         if (entries.Count == 0)
         {
             return;
         }
 
+        startIndex = Math.Clamp(startIndex, 0, entries.Count - 1);
+        string current = entries[startIndex];
+
         _resumeApplied = false;
-        _autoMiniPath = null;
         _abLoopStage = 0;
         _abLoopA = 0;
         _abLoopB = 0;
@@ -545,24 +631,41 @@ public sealed partial class MainWindow
         TitleBar.Title = Loc.T("osd.loading");
         Title = "Wiina";
         UpdateSmtc();
-        Trace($"play entries ({entries.Count}): {string.Join(" | ", entries)}");
+        Trace($"play entries ({entries.Count}, current={startIndex}): {string.Join(" | ", entries)}");
 
-        SendPlayerCommandAsync("loadfile", entries[0], "replace");
-        for (int i = 1; i < entries.Count; i++)
+        // Open the requested file first so playback starts there, then append
+        // the rest of the queue in order. The appends would otherwise leave the
+        // opened file at index 0; playlist-move restores the sorted queue
+        // underneath the playing item, so next/previous follow the folder.
+        SendPlayerCommandAsync("loadfile", current, "replace");
+        for (int i = 0; i < entries.Count; i++)
         {
+            if (i == startIndex)
+            {
+                continue;
+            }
+
             SendPlayerCommandAsync("loadfile", entries[i], "append");
         }
 
-        BeginStreamOpen(entries[0]);
-        if (IsUrlPath(entries[0]))
+        for (int i = 0; i < startIndex; i++)
         {
-            ShowOsd(OsdMessages.NetworkOpening(ShortStreamName(entries[0]), Loc.CurrentLanguage));
+            SendPlayerCommandAsync(
+                "playlist-move",
+                (i + 1).ToString(CultureInfo.InvariantCulture),
+                i.ToString(CultureInfo.InvariantCulture));
+        }
+
+        BeginStreamOpen(current);
+        if (IsUrlPath(current))
+        {
+            ShowOsd(OsdMessages.NetworkOpening(ShortStreamName(current), Loc.CurrentLanguage));
         }
         else
         {
             ShowOsd(
                 entries.Count > 1 ? Loc.F("osd.openingCount", entries.Count) : Loc.T("osd.opening"),
-                entries.Count > 1 ? Path.GetFileName(entries[0]) : null);
+                entries.Count > 1 ? Path.GetFileName(current) : null);
         }
     }
 
@@ -862,6 +965,33 @@ public sealed partial class MainWindow
         SendPlayerCommandAsync("playlist-next");
     }
 
+    /// <summary>
+    /// OSC transport arrows. The default is playlist skip; when the user picks
+    /// 快退/快进 in settings they seek inside the current file instead, with
+    /// Ctrl stretching the step to 30 seconds.
+    /// </summary>
+    private void OscPrevious()
+    {
+        if (_settings.OscPrevNextMode == OscPrevNextMode.Seek)
+        {
+            SeekRelative(WindowInterop.IsKeyDown(VirtualKey.Control) ? -30 : -5);
+            return;
+        }
+
+        PlaylistPrevious();
+    }
+
+    private void OscNext()
+    {
+        if (_settings.OscPrevNextMode == OscPrevNextMode.Seek)
+        {
+            SeekRelative(WindowInterop.IsKeyDown(VirtualKey.Control) ? 30 : 5);
+            return;
+        }
+
+        PlaylistNext();
+    }
+
     private void CycleAbLoop()
     {
         if (!HasMedia())
@@ -993,11 +1123,12 @@ public sealed partial class MainWindow
         try
         {
             string folder = GetScreenshotFolder();
-            string path = Path.Combine(
-                folder,
-                $"wiina-{DateTime.Now:yyyyMMdd-HHmmss}.png");
+            string path = Path.Combine(folder, BuildScreenshotName(folder));
             Trace($"screenshot -> {path}");
-            SendPlayerCommandAsync("screenshot-to-file", path, "subtitles");
+            SendPlayerCommandAsync(
+                "screenshot-to-file",
+                path,
+                _settings.ScreenshotWithSubtitles ? "subtitles" : "video");
             ShowOsd(Loc.T("osd.screenshotSaved"), path);
         }
         catch (Exception ex)
@@ -1005,6 +1136,22 @@ public sealed partial class MainWindow
             Trace("screenshot failed: " + ex);
             ShowOsd(Loc.T("osd.screenshotFailed"), ex.Message);
         }
+    }
+
+    /// <summary>
+    /// Names a capture after the playing video plus the playback position to
+    /// the millisecond (<c>xxx-1-28-39-980.png</c>), so a folder of screenshots
+    /// can be sorted back into the film. Falls back to the legacy
+    /// <c>wiina-yyyyMMdd-HHmmss.png</c> name when nothing is playing.
+    /// </summary>
+    private string BuildScreenshotName(string folder)
+    {
+        double position = _player?.GetPropertyDouble("time-pos") ?? 0;
+        return ScreenshotNaming.BuildUniqueFileName(
+            _currentPath,
+            position,
+            DateTimeOffset.Now,
+            candidate => File.Exists(Path.Combine(folder, candidate)));
     }
 
     private string GetScreenshotFolder()
@@ -1221,13 +1368,15 @@ public sealed partial class MainWindow
         string preferred = _settings.PreferredSubtitleLanguage;
         _ = Task.Run(() =>
         {
-            SubtitleCandidate? subtitle = null;
+            IReadOnlyList<SubtitleCandidate> subtitles = Array.Empty<SubtitleCandidate>();
             ExternalAudioCandidate? audio = null;
             try
             {
                 if (findSubtitle)
                 {
-                    subtitle = SmartSubtitleFinder.FindBest(mediaPath, preferred);
+                    // Every same-episode sidecar, best (assfonts) first. Listing all
+                    // of them keeps the plain variant selectable next to assfonts.
+                    subtitles = SmartSubtitleFinder.Find(mediaPath, preferred);
                 }
 
                 if (findAudio)
@@ -1240,14 +1389,14 @@ public sealed partial class MainWindow
                 Trace("sidecar discovery failed: " + ex.Message);
             }
 
-            if (subtitle is null && audio is null)
+            if (subtitles.Count == 0 && audio is null)
             {
                 Trace("smart sidecar discovery found nothing");
                 return;
             }
 
             Trace(
-                $"smart sidecar discovery: subtitle={subtitle?.Path ?? "<none>"} " +
+                $"smart sidecar discovery: subtitles=[{string.Join(", ", subtitles.Select(item => item.FileName))}] " +
                 $"audio={audio?.Path ?? "<none>"} preferred={preferred}");
 
             DispatcherQueue.TryEnqueue(() =>
@@ -1257,9 +1406,9 @@ public sealed partial class MainWindow
                     return;
                 }
 
-                if (subtitle is not null)
+                if (subtitles.Count > 0)
                 {
-                    ApplyAutoSubtitle(subtitle.Path);
+                    ApplyAutoSubtitles(subtitles);
                 }
 
                 if (audio is not null)
@@ -1270,75 +1419,136 @@ public sealed partial class MainWindow
         });
     }
 
-    private void ApplyAutoSubtitle(string path)
+    /// <summary>
+    /// Adds every same-episode sidecar to the subtitle list, selecting the best one
+    /// (assfonts, because the fonts travel inside the file) and leaving the plain
+    /// variant selectable behind it. Tracks mpv's own <c>sub-auto</c> already added
+    /// are reused instead of duplicated; a track the user/another feature selected is
+    /// never overridden.
+    /// </summary>
+    private void ApplyAutoSubtitles(IReadOnlyList<SubtitleCandidate> candidates)
     {
-        if (!_settings.AutoLoadSmartSubtitles || _pendingSubtitles.Count > 0)
+        if (!_settings.AutoLoadSmartSubtitles || _pendingSubtitles.Count > 0 || candidates.Count == 0)
         {
             return;
         }
 
-        string fullPath = SafeFullPath(path);
-        if (string.Equals(_autoLoadedSubtitlePath, fullPath, StringComparison.OrdinalIgnoreCase))
+        SubtitleCandidate preferredCandidate = candidates[0];
+        string preferredFullPath = SafeFullPath(preferredCandidate.Path);
+        if (string.Equals(_autoLoadedSubtitlePath, preferredFullPath, StringComparison.OrdinalIgnoreCase))
         {
             return;
         }
 
-        // mpv's sub-auto may already have added this exact sidecar. Select the
-        // existing track instead of adding a duplicate, so the preferred
-        // language still wins when mpv picked a different sidecar first.
-        string fileName = Path.GetFileName(path);
-        string mediaBase = Path.GetFileNameWithoutExtension(_currentPath ?? string.Empty);
         IReadOnlyList<TrackInfo> tracks = _player?.GetTracks() ?? _trackList;
-        Trace(
-            $"smart subtitle candidate {fileName}; " +
-            "external=" + string.Join(
-                " | ",
-                tracks.Where(track => track.Type == TrackType.Subtitle && track.IsExternal)
-                      .Select(track => $"#{track.Id} '{track.Title}' sel={track.IsSelected}")));
-        TrackInfo? existing = tracks.FirstOrDefault(track =>
-            track.Type == TrackType.Subtitle &&
-            track.IsExternal &&
-            !string.IsNullOrWhiteSpace(track.Title) &&
-            (string.Equals(track.Title, fileName, StringComparison.OrdinalIgnoreCase) ||
-             (mediaBase.Length > 0 &&
-              string.Equals(
-                  fileName,
-                  mediaBase + "." + track.Title,
-                  StringComparison.OrdinalIgnoreCase))));
-        if (existing is not null)
-        {
-            Trace($"smart subtitle use existing sid={existing.Id} selected={existing.IsSelected}");
-            _autoLoadedSubtitlePath = fullPath;
-            if (!existing.IsSelected)
-            {
-                if (_player?.TrySetPropertyString("sid", existing.Id.ToString()) == true)
-                {
-                    ShowOsd(Loc.F("osd.autoSubtitleLoaded", fileName));
-                }
-                else
-                {
-                    Trace($"smart sid switch failed for {path}");
-                }
-            }
-            else
-            {
-                ShowOsd(Loc.F("osd.autoSubtitleLoaded", fileName));
-            }
+        List<TrackInfo> external = tracks
+            .Where(track => track.Type == TrackType.Subtitle && track.IsExternal)
+            .ToList();
 
-            return;
+        // Map mpv's existing external subtitle tracks back to our candidates: the
+        // external-filename property is exact, while the title libmpv derives is only
+        // the language suffix ("chs.ass"), which MatchTrack understands too.
+        var existingByCandidate = new Dictionary<string, TrackInfo>(StringComparer.OrdinalIgnoreCase);
+        var externalFiles = new Dictionary<int, string?>();
+        foreach (TrackInfo track in external)
+        {
+            string? externalFile = _player?.GetPropertyString($"track-list/{track.Id}/external-filename");
+            SubtitleCandidate? candidate = SmartSubtitleFinder.MatchTrack(candidates, externalFile)
+                ?? SmartSubtitleFinder.MatchTrack(candidates, track.Title);
+            if (candidate is not null)
+            {
+                existingByCandidate.TryAdd(candidate.FileName, track);
+                externalFiles[track.Id] = externalFile;
+            }
         }
 
-        if (HasSelectedExternalTrack(TrackType.Subtitle))
+        Trace(
+            "smart subtitle candidates: " +
+            string.Join(" | ", candidates.Select(item =>
+                $"{item.FileName}{(item.IsAssFonts ? " [assfonts]" : string.Empty)}")) +
+            "; external tracks: " +
+            string.Join(
+                " | ",
+                external.Select(track =>
+                    $"#{track.Id} '{track.Title}' sel={track.IsSelected}" +
+                    (externalFiles.TryGetValue(track.Id, out string? mappedFile) && mappedFile is not null
+                        ? $" file='{mappedFile}'"
+                        : string.Empty))));
+
+        // A subtitle somebody else selected (embedded preference handled elsewhere, or
+        // an external track that is not one of our candidates) keeps priority: add
+        // nothing and switch nothing, exactly like before.
+        var candidateTrackIds = new HashSet<int>(existingByCandidate.Values.Select(track => track.Id));
+        if (external.Any(track => track.IsSelected && !candidateTrackIds.Contains(track.Id)))
         {
             Trace("smart subtitle skipped: another external subtitle is active");
             return;
         }
 
-        _autoLoadedSubtitlePath = fullPath;
-        Trace($"smart sub-add {path}");
-        SendPlayerCommandAsync("sub-add", path, "select");
-        _wantSubtitleSelection = true;
-        ShowOsd(Loc.F("osd.autoSubtitleLoaded", Path.GetFileName(path)));
+        bool preferredSelected = false;
+        bool preferredAdded = false;
+        foreach (SubtitleCandidate candidate in candidates)
+        {
+            bool isPreferred = ReferenceEquals(candidate, preferredCandidate) ||
+                string.Equals(candidate.Path, preferredCandidate.Path, StringComparison.OrdinalIgnoreCase);
+
+            if (existingByCandidate.TryGetValue(candidate.FileName, out TrackInfo? existing))
+            {
+                if (!isPreferred)
+                {
+                    continue;
+                }
+
+                preferredAdded = true;
+                if (existing.IsSelected)
+                {
+                    preferredSelected = true;
+                    continue;
+                }
+
+                if (_player?.TrySetPropertyString("sid", existing.Id.ToString()) == true)
+                {
+                    preferredSelected = true;
+                }
+                else
+                {
+                    Trace($"smart sid switch failed for {candidate.Path}");
+                }
+
+                continue;
+            }
+
+            if (_player is null)
+            {
+                Trace($"smart sub-add skipped (no player) for {candidate.Path}");
+                continue;
+            }
+
+            // The preferred candidate is selected; the others only enter the list so
+            // the user can switch to the plain variant from the subtitle menu.
+            if (isPreferred)
+            {
+                Trace($"smart sub-add {candidate.Path} select");
+                SendPlayerCommandAsync("sub-add", candidate.Path, "select");
+                preferredAdded = true;
+                preferredSelected = true;
+            }
+            else
+            {
+                Trace($"smart sub-add {candidate.Path}");
+                SendPlayerCommandAsync("sub-add", candidate.Path);
+            }
+        }
+
+        if (!preferredAdded)
+        {
+            Trace("smart subtitle: no candidate could be added");
+            return;
+        }
+
+        _autoLoadedSubtitlePath = preferredFullPath;
+        _wantSubtitleSelection |= preferredSelected;
+        ShowOsd(Loc.F("osd.autoSubtitleLoaded", preferredCandidate.FileName));
     }
 
     private void ApplyAutoAudio(string path)
@@ -1492,7 +1702,6 @@ public sealed partial class MainWindow
 
             RefreshSidebarTracks();
             UpdateAlbumArtState();
-            MaybeAutoEnterMini();
             UpdateMiniPlayerState();
         });
     }
@@ -1727,6 +1936,7 @@ public sealed partial class MainWindow
         if (name == "duration")
         {
             UpdateSmtc();
+            StartThumbnailPreGeneration();
         }
     }
 
@@ -1784,8 +1994,8 @@ public sealed partial class MainWindow
             UpdateAlbumArtState();
             UpdateMiniPlayerState();
             UpdateMiniPlaylist();
-            MaybeAutoEnterMini();
             UpdateSmtc();
+            StartThumbnailPreGeneration();
         }
         catch (Exception ex)
         {
@@ -1915,6 +2125,160 @@ public sealed partial class MainWindow
         return focused is TextBox or PasswordBox or RichEditBox or AutoSuggestBox or NumberBox;
     }
 
+    /// <summary>
+    /// Removes keyboard focusability from the media chrome (OSC, titlebar, mini
+    /// player) so Space/Enter keep their player meaning: with a focused button,
+    /// Space presses that button instead of pausing playback. Buttons stay fully
+    /// clickable, and every chrome action also has a keyboard shortcut, so
+    /// nothing becomes unreachable.
+    /// </summary>
+    private void MakeMediaChromeKeyboardTransparent()
+    {
+        foreach (FrameworkElement root in new FrameworkElement[] { OscBottom, OscFloating, TitleBar, MiniPlayer })
+        {
+            MakeNonFocusable(root);
+            // Items created by templates/lists appear after layout.
+            root.Loaded += (_, _) => MakeNonFocusable(root);
+        }
+    }
+
+    private static void MakeNonFocusable(DependencyObject root)
+    {
+        if (root is Button button)
+        {
+            button.IsTabStop = false;
+            button.AllowFocusOnInteraction = false;
+        }
+        else if (root is Slider slider)
+        {
+            // Sliders must stay draggable; they only need to stay out of the
+            // Tab order (a focused slider still lets Space bubble to the player).
+            slider.IsTabStop = false;
+        }
+        else if (root is Control control)
+        {
+            // Containers such as ListView, ScrollViewer and realised items are
+            // tab stops in their own right, and a lazily created item never
+            // passes through this walk in time. The preview handler is the
+            // backstop; this just keeps every realised control out of the order.
+            control.IsTabStop = false;
+        }
+
+        int count = VisualTreeHelper.GetChildrenCount(root);
+        for (int i = 0; i < count; i++)
+        {
+            MakeNonFocusable(VisualTreeHelper.GetChild(root, i));
+        }
+    }
+
+    /// <summary>
+    /// Mini mode and fullscreen are keyboard-driven, so no chrome control may
+    /// keep focus or see a key before the player does. This runs in the
+    /// tunneling preview phase: Tab is swallowed and focus is forced back to
+    /// the root, while every other key goes through the same key map as the
+    /// root handler, so Space/Enter keep pausing/entering fullscreen even when
+    /// WinUI managed to focus a button or a lazily realised playlist container.
+    /// </summary>
+    private void OnRootPreviewKeyDown(object sender, KeyRoutedEventArgs e)
+    {
+        if (!InMiniMode && !IsFullscreen)
+        {
+            return;
+        }
+
+        if (IsTextInputFocused())
+        {
+            return;
+        }
+
+        if (e.Key == VirtualKey.Tab)
+        {
+            Trace($"mini tab: before={DescribeFocusedElement()}");
+            e.Handled = true;
+            RootGrid.Focus(FocusState.Programmatic);
+            Trace($"mini tab: after={DescribeFocusedElement()}");
+            return;
+        }
+
+        Trace($"key down {e.Key} (preview)");
+        if (TryExecuteShortcut(e.Key))
+        {
+            // Keep the key away from whatever still holds focus: a button would
+            // treat Space/Enter as "press me" and a list would scroll instead.
+            e.Handled = true;
+        }
+    }
+
+    /// <summary>
+    /// Focus guard for the keyboard-driven modes. Whatever moved focus onto a
+    /// chrome control (Tab in a lazily realised list, automation, a template
+    /// part created after the recursive pass), the player keeps the keyboard:
+    /// focus is pushed back to the root so Space/Enter can never press the
+    /// focused button. Pointer input is unaffected: a click still reaches the
+    /// control, it just does not keep keyboard focus.
+    /// </summary>
+    private void OnRootGotFocus(object sender, RoutedEventArgs e)
+    {
+        if (!InMiniMode && !IsFullscreen)
+        {
+            return;
+        }
+
+        object? focused = FocusManager.GetFocusedElement(RootGrid.XamlRoot);
+        if (focused is null || ReferenceEquals(focused, RootGrid))
+        {
+            return;
+        }
+
+        if (focused is not Control control || control is TextBox or RichEditBox or AutoSuggestBox or NumberBox)
+        {
+            // Panels and non-focusable elements (or a legitimate text editor)
+            // are not the problem this guard is about.
+            return;
+        }
+
+        if (control.FocusState == FocusState.Pointer)
+        {
+            // The user just clicked this control. WinUI focuses a button on the
+            // pointer press and cancels the click when focus moves away before
+            // the release, so "guarding" pointer focus broke every clickable
+            // control that is not declared AllowFocusOnInteraction=false (the
+            // sidebar tabs, toggles, combos, ...). Keyboard focus is still
+            // intercepted by OnRootPreviewKeyDown, which is what this guard is
+            // actually for.
+            return;
+        }
+
+        Trace($"focus guard: {DescribeFocusedElement()} -> RootGrid");
+        RootGrid.Focus(FocusState.Programmatic);
+    }
+
+    private string DescribeFocusedElement()
+    {
+        try
+        {
+            object? focused = FocusManager.GetFocusedElement(RootGrid.XamlRoot);
+            if (focused is null)
+            {
+                return "<null>";
+            }
+
+            if (focused is FrameworkElement element)
+            {
+                string name = string.IsNullOrEmpty(element.Name) ? "-" : element.Name;
+                string id = AutomationProperties.GetAutomationId(element);
+                id = string.IsNullOrEmpty(id) ? "-" : id;
+                return $"{element.GetType().Name} name={name} id={id}";
+            }
+
+            return focused.GetType().Name;
+        }
+        catch (Exception ex)
+        {
+            return $"<{ex.GetType().Name}>";
+        }
+    }
+
     private void OnRootKeyDown(object sender, KeyRoutedEventArgs e)
     {
         if (IsTextInputFocused())
@@ -1922,15 +2286,15 @@ public sealed partial class MainWindow
             return;
         }
 
-        if (e.Key == VirtualKey.Escape && Osd.IsPersistentShowing)
-        {
-            ClosePersistentOsd();
-            e.Handled = true;
-            return;
-        }
-
         Trace($"key down {e.Key}");
-        KeyModifiers modifiers = KeyModifiers.None;
+        if (TryExecuteShortcut(e.Key))
+        {
+            e.Handled = true;
+        }
+    }
+
+    private bool TryExecuteShortcut(VirtualKey key)
+    {        KeyModifiers modifiers = KeyModifiers.None;
         if (WindowInterop.IsKeyDown(VirtualKey.Control))
         {
             modifiers |= KeyModifiers.Control;
@@ -1952,27 +2316,25 @@ public sealed partial class MainWindow
             modifiers |= KeyModifiers.Windows;
         }
 
-        if (e.Key == VirtualKey.I &&
-            (modifiers == KeyModifiers.None ||
-             modifiers == (KeyModifiers.Control | KeyModifiers.Alt)))
-        {
-            TogglePersistentOsd();
-            e.Handled = true;
-            return;
-        }
-
-        if (!KeyChordMapper.TryMap(e.Key, modifiers, out KeyChord chord) ||
+        if (!KeyChordMapper.TryMap(key, modifiers, out KeyChord chord) ||
             !_keyMap.TryGetAction(chord, out string? action) ||
             string.IsNullOrEmpty(action))
         {
-            return;
+            return false;
         }
 
-        if (ExecuteAction(action))
-        {
-            e.Handled = true;
-        }
+        Trace($"action {action} ({chord})");
+        return ExecuteAction(action);
     }
+
+    /// <summary>
+    /// Task-58: the picture-in-picture window forwards keys here so a focused PiP
+    /// surface shares this window's key map and action executor instead of
+    /// keeping a second copy of the binding table. Returns true when a binding
+    /// ran (the caller marks the key handled); false means the key is unbound and
+    /// must stay untouched for IME / system shortcuts.
+    /// </summary>
+    internal bool TryForwardShortcutKey(VirtualKey key) => TryExecuteShortcut(key);
 
     private bool ExecuteAction(string action)
     {
@@ -2148,7 +2510,7 @@ public sealed partial class MainWindow
                 Close();
                 return true;
             default:
-                return false;
+                return TryExecuteShortcutAction(action);
         }
     }
 
@@ -2239,6 +2601,25 @@ public sealed partial class MainWindow
             return;
         }
 
+        // PiP mode: the main window is a placeholder, not a video surface.
+        // This handler runs with handledEventsToo:true, so without this guard a
+        // press on the placeholder's restore button also starts a drag gesture
+        // and focuses RootGrid, which cancels the button's pointer capture and
+        // the Click never fires (issue 8).
+        if (InPipMode)
+        {
+            return;
+        }
+
+        // Fullscreen has no draggable frame: moving or resizing the window would
+        // make Windows drop the fullscreen presenter, so a drag on the video
+        // must stay a click. (Clicks/taps are handled by Tapped, not here.)
+        if (IsFullscreen)
+        {
+            RootGrid.Focus(FocusState.Pointer);
+            return;
+        }
+
         _suppressClick = false;
         _windowDragCandidate = true;
         _windowDragging = false;
@@ -2246,41 +2627,124 @@ public sealed partial class MainWindow
         WindowInterop.TryGetCursorPosition(out _dragStartCursorX, out _dragStartCursorY);
         _windowStartX = AppWindow.Position.X;
         _windowStartY = AppWindow.Position.Y;
+        // The video surface is a second drag path (issue 4); it shares the edge
+        // magnet with the native title-bar drag, starting from a clean gesture.
+        _snapSession.Reset();
         RootGrid.Focus(FocusState.Pointer);
+        _dragPump?.Start();
     }
 
     private void OnVideoPointerMoved(object sender, PointerRoutedEventArgs e)
     {
-        if (!_windowDragCandidate)
+        if (!_windowDragCandidate && !_windowDragging)
         {
             return;
         }
 
-        Point current = e.GetCurrentPoint(RootGrid).Position;
+        DragWindowFromCursor();
+    }
+
+    /// <summary>
+    /// One content-drag step, driven either by a pointer message or by the drag
+    /// pump. Moving the window can make the XAML pointer lose its capture, so the
+    /// drag must not depend on receiving any further PointerMoved messages: the
+    /// pump keeps polling the cursor while the left button is down.
+    /// </summary>
+    private void DragWindowFromCursor()
+    {
+        // Mode may have switched to fullscreen mid-gesture (shortcut, OSC, or
+        // media end); never move the window from a fullscreen frame.
+        if (IsFullscreen)
+        {
+            _windowDragCandidate = false;
+            _windowDragging = false;
+            _dragPump?.Stop();
+            return;
+        }
+
+        if (!WindowInterop.TryGetCursorPosition(out int cursorX, out int cursorY))
+        {
+            return;
+        }
+
         if (!_windowDragging)
         {
-            double dx = current.X - _dragStartPoint.X;
-            double dy = current.Y - _dragStartPoint.Y;
-            if (Math.Sqrt((dx * dx) + (dy * dy)) < 3)
+            double dx = cursorX - _dragStartCursorX;
+            double dy = cursorY - _dragStartCursorY;
+            double threshold = 3 * Math.Max(0.1, DisplayScale);
+            if (Math.Sqrt((dx * dx) + (dy * dy)) < threshold)
             {
                 return;
             }
 
             _windowDragging = true;
-            VideoFrame.CapturePointer(e.Pointer);
             Trace("window drag started");
+
+            // A maximized window must restore like a native title-bar drag; the
+            // video surface is our own drag path, so it has to restore itself.
+            // The restore rebases the gesture, so the delta is taken afterwards.
+            TryRestoreFromMaximized(cursorX, cursorY);
         }
 
-        if (WindowInterop.TryGetCursorPosition(out int cursorX, out int cursorY))
+        int x = _windowStartX + (cursorX - _dragStartCursorX);
+        int y = _windowStartY + (cursorY - _dragStartCursorY);
+        SizeInt32 size = AppWindow.Size;
+        if (_settings.EdgeSnapping)
         {
-            AppWindow.Move(new PointInt32(
-                _windowStartX + (cursorX - _dragStartCursorX),
-                _windowStartY + (cursorY - _dragStartCursorY)));
+            EdgeSnapResult snap = _snapSession.Apply(
+                new WindowRect(x, y, x + size.Width, y + size.Height),
+                WorkAreaUnderPointer(),
+                DisplayScale,
+                margins: SnapMargins());
+            x = snap.Rect.Left;
+            y = snap.Rect.Top;
+            ApplySnapFrame(snap.IsSnapped);
         }
+        else
+        {
+            _snapSession.Reset();
+            ApplySnapFrame(false);
+        }
+
+        // Do not re-issue Move while the magnet holds the window in place:
+        // an unchanged position is already on screen, and moving it again
+        // would only add work (and a chance of a DWM flicker) per pointer
+        // message.
+        PointInt32 currentPosition = AppWindow.Position;
+        if (x != currentPosition.X || y != currentPosition.Y)
+        {
+            AppWindow.Move(new PointInt32(x, y));
+        }
+    }
+
+    /// <summary>
+    /// Keeps the content drag alive across the window moves it performs: those
+    /// moves drop the XAML pointer capture, so waiting for PointerMoved alone
+    /// made the window stop following the cursor after the first pixel.
+    /// </summary>
+    private void OnDragPumpTick(DispatcherQueueTimer sender, object args)
+    {
+        if (!_windowDragCandidate && !_windowDragging)
+        {
+            sender.Stop();
+            return;
+        }
+
+        if (!WindowInterop.IsKeyDown(VirtualKey.LeftButton))
+        {
+            sender.Stop();
+            _windowDragCandidate = false;
+            _windowDragging = false;
+            return;
+        }
+
+        DragWindowFromCursor();
     }
 
     private void OnVideoPointerReleased(object sender, PointerRoutedEventArgs e)
     {
+        _dragPump?.Stop();
+
         if (_windowDragging)
         {
             _suppressClick = true;
@@ -2302,8 +2766,16 @@ public sealed partial class MainWindow
 
     private void OnVideoPointerCaptureLost(object sender, PointerRoutedEventArgs e)
     {
+        // The drag itself moves the window, which drops the XAML pointer capture;
+        // that must not cancel an in-flight drag. The drag pump owns the gesture
+        // from now on and finishes when the left button is released.
+        if (_windowDragging)
+        {
+            return;
+        }
+
         _windowDragCandidate = false;
-        _windowDragging = false;
+        _dragPump?.Stop();
     }
 
     private void OnVideoPointerWheelChanged(object sender, PointerRoutedEventArgs e)
@@ -2344,3 +2816,6 @@ public sealed partial class MainWindow
         e.Handled = true;
     }
 }
+
+
+

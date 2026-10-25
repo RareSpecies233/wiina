@@ -15,9 +15,9 @@ namespace Wiina.App.Controls;
 public enum QuickSettingKey
 {
     Theme,
-    Animations,
     Layout,
     AlwaysOnTop,
+    Speed,
     LockAspect,
     OscPosition,
     OscAutoHide,
@@ -25,7 +25,6 @@ public enum QuickSettingKey
     OsdPosition,
     OsdSize,
     OsdDuration,
-    OsdPersistent,
     FullscreenClock,
     FullscreenBattery,
     FullscreenTitle,
@@ -44,6 +43,7 @@ public enum QuickSettingKey
     FlipVertical,
     Deinterlace,
     HardwareDecode,
+    ScreenshotWithSubtitles,
     Zoom,
     PanX,
     PanY,
@@ -87,6 +87,13 @@ public sealed class QuickSettingChangedEventArgs : EventArgs
 /// </summary>
 public sealed partial class QuickSettingsView : UserControl
 {
+    /// <summary>
+    /// The video page slider is continuous between 0.5× and 4×; discrete
+    /// presets live in the expanded OSC menu instead of the quick menu.
+    /// </summary>
+    private const double MinSpeed = 0.5;
+    private const double MaxSpeed = 4;
+
     private readonly List<TrackInfo> _tracks = new();
     private bool _loading;
     private bool _hasMedia;
@@ -111,6 +118,26 @@ public sealed partial class QuickSettingsView : UserControl
 
     public QuickSettingsPage CurrentPage => _page;
 
+    /// <summary>
+    /// Mirrors the player's current rate into the video-page slider without
+    /// raising a change event; the shell owns the mpv rate.
+    /// </summary>
+    public void SetSpeed(double speed)
+    {
+        double clamped = Math.Clamp(speed, MinSpeed, MaxSpeed);
+        _loading = true;
+        try
+        {
+            SpeedSlider.Value = clamped;
+        }
+        finally
+        {
+            _loading = false;
+        }
+
+        UpdateRangeLabels();
+    }
+
     private void SetupStaticOptions()
     {
         // Set the range in code so Minimum is never applied while Maximum is
@@ -119,6 +146,9 @@ public sealed partial class QuickSettingsView : UserControl
         SidebarWidthSlider.Minimum = 300;
         OsdSizeSlider.Maximum = 500;
         OsdSizeSlider.Minimum = 1;
+        SpeedSlider.Maximum = 4;
+        SpeedSlider.Minimum = 0.5;
+        SpeedSlider.StepFrequency = 0.05;
 
         ApplyLocalizedChoices();
 
@@ -187,7 +217,6 @@ public sealed partial class QuickSettingsView : UserControl
         try
         {
             ThemeBox.SelectedIndex = Math.Clamp((int)settings.Theme, 0, 2);
-            AnimationsSwitch.IsOn = settings.AnimationsEnabled;
             LayoutBox.SelectedIndex = settings.Layout == WindowLayoutMode.Docked ? 1 : 0;
             AlwaysOnTopSwitch.IsOn = settings.AlwaysOnTop;
             LockAspectSwitch.IsOn = settings.LockAspectRatio;
@@ -198,7 +227,6 @@ public sealed partial class QuickSettingsView : UserControl
             OsdPositionBox.SelectedIndex = OsdPositions.ToIndex(settings.OsdPosition);
             OsdSizeSlider.Value = OsdSettings.ClampSize(settings.OsdSizePercent);
             OsdDurationBox.Value = OsdSettings.ClampDuration(settings.OsdDurationSeconds);
-            OsdPersistentSwitch.IsOn = settings.OsdPersistent;
             FullscreenClockSwitch.IsOn = settings.FullscreenClockEnabled;
             FullscreenBatterySwitch.IsOn = settings.FullscreenBatteryEnabled;
             FullscreenTitleSwitch.IsOn = settings.FullscreenTitleEnabled;
@@ -213,6 +241,7 @@ public sealed partial class QuickSettingsView : UserControl
             FlipVerticalSwitch.IsOn = settings.VideoFlipVertical;
             DeinterlaceSwitch.IsOn = settings.VideoDeinterlace;
             HardwareDecodeSwitch.IsOn = settings.VideoHardwareDecode;
+            ScreenshotSubtitlesSwitch.IsOn = settings.ScreenshotWithSubtitles;
             ZoomSlider.Value = QuickSettings.ClampZoom(settings.VideoZoom);
             PanXSlider.Value = QuickSettings.ClampPan(settings.VideoPanX);
             PanYSlider.Value = QuickSettings.ClampPan(settings.VideoPanY);
@@ -447,6 +476,10 @@ public sealed partial class QuickSettingsView : UserControl
     public void ShowPage(QuickSettingsPage page)
     {
         _page = page;
+        // Only one page block is visible at a time, but the scroll viewer is
+        // shared: without rewinding it the next page opens at the previous
+        // page's offset.
+        PageScroll.ChangeView(null, 0, null, disableAnimation: true);
         LayoutPage.Visibility = page == QuickSettingsPage.Layout
             ? Visibility.Visible
             : Visibility.Collapsed;
@@ -591,6 +624,7 @@ public sealed partial class QuickSettingsView : UserControl
         SubtitleDelayText.Text = Loc.F("quick.seconds", $"{SubtitleDelaySlider.Value:+0.0;-0.0;0.0}");
         SubtitlePositionText.Text = $"{Math.Round(SubtitlePositionSlider.Value)}";
         SubtitleScaleText.Text = $"{SubtitleScaleSlider.Value:0.00}×";
+        SpeedValueText.Text = $"{SpeedSlider.Value:0.##}×";
     }
 
     private static double SidebarStateWidth(double width) =>
@@ -765,9 +799,6 @@ public sealed partial class QuickSettingsView : UserControl
 
         switch (element.Name)
         {
-            case nameof(AnimationsSwitch):
-                Raise(QuickSettingKey.Animations, flag: AnimationsSwitch.IsOn);
-                break;
             case nameof(AlwaysOnTopSwitch):
                 Raise(QuickSettingKey.AlwaysOnTop, flag: AlwaysOnTopSwitch.IsOn);
                 break;
@@ -783,9 +814,6 @@ public sealed partial class QuickSettingsView : UserControl
             case nameof(OsdEnabledSwitch):
                 Raise(QuickSettingKey.OsdEnabled, flag: OsdEnabledSwitch.IsOn);
                 break;
-            case nameof(OsdPersistentSwitch):
-                Raise(QuickSettingKey.OsdPersistent, flag: OsdPersistentSwitch.IsOn);
-                break;
             case nameof(FullscreenClockSwitch):
                 Raise(QuickSettingKey.FullscreenClock, flag: FullscreenClockSwitch.IsOn);
                 break;
@@ -800,6 +828,11 @@ public sealed partial class QuickSettingsView : UserControl
                 break;
             case nameof(FlipHorizontalSwitch):
                 Raise(QuickSettingKey.FlipHorizontal, flag: FlipHorizontalSwitch.IsOn);
+                break;
+            case nameof(ScreenshotSubtitlesSwitch):
+                Raise(
+                    QuickSettingKey.ScreenshotWithSubtitles,
+                    flag: ScreenshotSubtitlesSwitch.IsOn);
                 break;
             case nameof(FlipVerticalSwitch):
                 Raise(QuickSettingKey.FlipVertical, flag: FlipVerticalSwitch.IsOn);
@@ -863,6 +896,9 @@ public sealed partial class QuickSettingsView : UserControl
         {
             case nameof(SidebarWidthSlider):
                 Raise(QuickSettingKey.SidebarWidth, number: SidebarWidthSlider.Value);
+                break;
+            case nameof(SpeedSlider):
+                Raise(QuickSettingKey.Speed, number: SpeedSlider.Value);
                 break;
             case nameof(OsdSizeSlider):
                 Raise(QuickSettingKey.OsdSize, number: OsdSizeSlider.Value);

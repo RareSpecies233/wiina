@@ -118,7 +118,6 @@ public static class UiStrings
     public const string ui_timelineThumbs = "ui.timelineThumbs";
     public const string ui_fullscreenBattery = "ui.fullscreenBattery";
     public const string ui_settings = "ui.settings";
-    public const string ui_persistentOsd = "ui.persistentOsd";
     public const string ui_window = "ui.window";
     public const string ui_windowSize = "ui.windowSize";
     public const string ui_alwaysOnTop = "ui.alwaysOnTop";
@@ -168,6 +167,8 @@ public static class UiStrings
     public const string ui_on = "ui.on";
     public const string ui_clear = "ui.clear";
     public const string ui_deinterlace = "ui.deinterlace";
+    public const string ui_screenshot = "ui.screenshot";
+    public const string ui_screenshotSubtitles = "ui.screenshotSubtitles";
     public const string ui_fullscreen = "ui.fullscreen";
     public const string ui_fullscreenShortcut = "ui.fullscreenShortcut";
     public const string ui_osdPreview = "ui.osdPreview";
@@ -232,6 +233,9 @@ public static class UiStrings
     public const string settings_openKeyBindings = "settings.openKeyBindings";
     public const string settings_keyBindingsHint = "settings.keyBindingsHint";
     public const string settings_choose = "settings.choose";
+    public const string settings_audioDeviceAuto = "settings.audioDeviceAuto";
+    public const string settings_audioDeviceRefresh = "settings.audioDeviceRefresh";
+    public const string settings_audioDeviceUnavailable = "settings.audioDeviceUnavailable";
     public const string settings_open = "settings.open";
     public const string settings_reset = "settings.reset";
     public const string settings_clear = "settings.clear";
@@ -239,6 +243,9 @@ public static class UiStrings
     public const string settings_install = "settings.install";
     public const string settings_toggle = "settings.toggle";
     public const string settings_run = "settings.run";
+    public const string settings_enter = "settings.enter";
+    public const string settings_miniDevTitle = "settings.miniDevTitle";
+    public const string settings_miniDevBody = "settings.miniDevBody";
     public const string settings_unavailable = "settings.unavailable";
     public const string settings_searchEmpty = "settings.searchEmpty";
     public const string settings_pressKeys = "settings.pressKeys";
@@ -275,6 +282,9 @@ public static class UiStrings
     public const string common_copy = "common.copy";
     public const string settings_clearHistoryTitle = "settings.clearHistoryTitle";
     public const string settings_clearHistoryBody = "settings.clearHistoryBody";
+    public const string settings_thumbnailsClearedTitle = "settings.thumbnailsClearedTitle";
+    public const string settings_thumbnailsClearedBody = "settings.thumbnailsClearedBody";
+    public const string settings_thumbnailsClearedEmpty = "settings.thumbnailsClearedEmpty";
     public const string settings_resetAllTitle = "settings.resetAllTitle";
     public const string settings_resetAllBody = "settings.resetAllBody";
     public const string keybindings_conflictTitle = "keybindings.conflictTitle";
@@ -289,6 +299,15 @@ public static class UiStrings
     public const string keybindings_imported = "keybindings.imported";
     public const string keybindings_importedPartial = "keybindings.importedPartial";
     public const string keybindings_exported = "keybindings.exported";
+    public const string keybindings_searchPlaceholder = "keybindings.searchPlaceholder";
+    public const string keybindings_searchEmpty = "keybindings.searchEmpty";
+    public const string keybindings_unsavedTitle = "keybindings.unsavedTitle";
+    public const string keybindings_unsavedBody = "keybindings.unsavedBody";
+    public const string keybindings_discard = "keybindings.discard";
+    public const string keybindings_builtInHint = "keybindings.builtInHint";
+    public const string keybindings_copyToCustom = "keybindings.copyToCustom";
+    public const string keybindings_copiedToCustom = "keybindings.copiedToCustom";
+    public const string keybindings_save = "keybindings.save";
     public const string menu_noRecent = "menu.noRecent";
     public const string menu_clearRecent = "menu.clearRecent";
     public const string menu_recentCleared = "menu.recentCleared";
@@ -311,8 +330,11 @@ public static class UiStrings
     public const string menu_subtitleFont = "menu.subtitleFont";
     public const string menu_loadExternalAudio = "menu.loadExternalAudio";
     public const string menu_keyboardProfile = "menu.keyboardProfile";
+    public const string menu_shortcutEditor = "menu.shortcutEditor";
+    public const string menu_deband = "menu.deband";
     public const string menu_profileDefault = "menu.profileDefault";
-    public const string menu_profileIina = "menu.profileIina";
+    public const string menu_profileWiina = "menu.profileWiina";
+    public const string menu_profileMpv = "menu.profileMpv";
     public const string menu_profileCustom = "menu.profileCustom";
     public const string osd_controlsHint = "osd.controlsHint";
     public const string osd_controlsHintSecondary = "osd.controlsHintSecondary";
@@ -366,6 +388,9 @@ public static class UiStrings
     public const string osd_videoFilters = "osd.videoFilters";
     public const string osd_softwareDecode = "osd.softwareDecode";
     public const string osd_engineFailed = "osd.engineFailed";
+    public const string osd_deviceLost = "osd.deviceLost";
+    public const string osd_deviceRecovered = "osd.deviceRecovered";
+    public const string osd_deviceLostFailed = "osd.deviceLostFailed";
     public const string osd_miniOnTopOn = "osd.miniOnTopOn";
     public const string osd_miniOnTopOff = "osd.miniOnTopOff";
     public const string osd_fullscreenOnTop = "osd.fullscreenOnTop";
@@ -408,8 +433,6 @@ public static class UiStrings
     public const string osd_videoNotLoaded = "osd.videoNotLoaded";
     public const string osd_auto = "osd.auto";
     public const string osd_mutedSuffix = "osd.mutedSuffix";
-    public const string osd_persistentTitle = "osd.persistentTitle";
-    public const string osd_persistentBody = "osd.persistentBody";
     public const string osd_status = "osd.status";
     public const string osd_position = "osd.position";
     public const string osd_labelVolume = "osd.labelVolume";
@@ -606,9 +629,7 @@ public static class UiStrings
         Add("ui.copy", "复制", "Copy");
         Add("ui.video", "视频", "Video");
         Add("ui.qualityPreset", "视频画质", "Video quality");
-        Add("ui.qualityAuto", "自动（IINA 默认）", "Auto (IINA default)");
-        Add("ui.qualityBalanced", "均衡", "Balanced");
-        Add("ui.qualityHigh", "高质量", "High quality");
+        Add("ui.qualityAuto", "默认", "Default");
         Add("ui.qualityPerformance", "性能优先", "Performance first");
         Add("ui.removeSelected", "移除所选", "Remove selected");
         Add("ui.about", "关于 Wiina", "About Wiina");
@@ -699,11 +720,61 @@ public static class UiStrings
         Add("ui.timelineThumbs", "时间轴缩略图", "Timeline thumbnails");
         Add("ui.fullscreenBattery", "全屏电量", "Fullscreen battery");
         Add("ui.settings", "设置", "Settings");
-        Add("ui.persistentOsd", "持久技术信息 OSD", "Persistent technical OSD");
         Add("ui.window", "窗口", "Window");
         Add("ui.windowSize", "窗口尺寸", "Window size");
         Add("ui.alwaysOnTop", "窗口置顶", "Always on top");
-        Add("ui.mpvStats", "mpv 统计信息", "mpv statistics");
+        Add("ui.mpvStats", "播放统计面板", "Playback statistics");
+        Add("stats.title", "统计信息", "Statistics");
+        Add("stats.subtitle", "mpv 实时播放统计", "Live mpv playback statistics");
+        Add("stats.close", "关闭统计信息", "Close statistics");
+        Add("settings.associate", "关联", "Associate");
+        Add("settings.unassociate", "取消关联", "Unregister");
+        Add("settings.associateAdmin", "管理员关联", "Associate as admin");
+        Add("settings.openSettings", "打开设置", "Open settings");
+        Add("integration.statusNone", "未关联", "Not registered");
+        Add("integration.statusVideo", "视频已注册（音频未注册）", "Video registered (audio not)");
+        Add("integration.statusAudio", "音频已注册（视频未注册）", "Audio registered (video not)");
+        Add("integration.statusBoth", "视频与音频均已注册", "Video and audio registered");
+        Add(
+            "integration.registeredTitle",
+            "已写入文件关联",
+            "File associations registered");
+        Add(
+            "integration.registeredBody",
+            "Wiina 已成为这些格式的候选打开方式。Windows 不会允许应用静默抢占默认程序，请在随后打开的“默认应用”页中确认。",
+            "Wiina is now an eligible handler. Windows does not allow an app to silently take over defaults; confirm Wiina in the Default Apps page.");
+        Add(
+            "integration.removedTitle",
+            "已取消关联",
+            "Associations removed");
+        Add(
+            "integration.removedBody",
+            "只删除了 Wiina 自己写入的 ProgID 与 OpenWith 项，其他播放器的关联未受影响。",
+            "Only Wiina's own ProgIDs and OpenWith entries were removed; other players are untouched.");
+        Add(
+            "integration.adminRegisteredTitle",
+            "已写入系统级关联",
+            "System-level associations written");
+        Add(
+            "integration.adminRegisteredBody",
+            "已写入系统级 ProgID、扩展名默认值与 RegisteredApplications，并清除了用户级 UserChoice。请打开一个支持的文件确认；Windows 仍可能要求你确认默认应用，这是系统保护。",
+            "Machine-level ProgIDs, extension defaults, and RegisteredApplications were written and per-user UserChoice was cleared. Open a supported file to confirm; Windows may still ask you to confirm the default app.");
+        Add(
+            "integration.adminCanceledTitle",
+            "已取消管理员关联",
+            "Admin association canceled");
+        Add(
+            "integration.adminCanceledBody",
+            "没有获得管理员权限，系统级关联未写入。你可以重试，或继续使用普通的“关联”按钮。",
+            "Administrator rights were not granted, so no machine-level associations were written. Retry, or keep using the normal Associate buttons.");
+        Add(
+            "integration.adminFailedTitle",
+            "管理员关联失败",
+            "Admin association failed");
+        Add(
+            "integration.adminFailedBody",
+            "写入系统级关联时出错。请确认已允许 UAC，或改用普通的“关联”按钮。",
+            "Writing the machine-level associations failed. Confirm the UAC prompt was accepted, or use the normal Associate buttons.");
         Add("ui.flipV", "垂直翻转", "Flip vertically");
         Add("ui.panY", "垂直平移", "Pan vertically");
         Add("ui.positionY", "垂直位置", "Vertical position");
@@ -722,7 +793,7 @@ public static class UiStrings
         Add("ui.pluginStage9Hint", "插件 API 与 WebView2 宿主在 Stage 9 实装", "Plugin API and WebView2 host arrive in Stage 9");
         Add("ui.zeroItemsShort", "0 项", "0 items");
         Add("ui.eq10", "10 段均衡器", "10-band equalizer");
-        Add("ui.autohide25", "2.5 秒自动隐藏", "Auto-hide after 2.5 s");
+        Add("ui.autohide25", "自动隐藏", "Auto-hide");
         Add("ui.eqRange", "31 Hz – 16 kHz · 每段 −12…+12 dB", "31 Hz – 16 kHz · −12…+12 dB per band");
         Add("ui.installPluginStage9", "安装插件…（Stage 9）", "Install plugin… (Stage 9)");
         Add("ui.dragHint", "把文件、文件夹或 URL 拖到窗口中即可播放。", "Drag files, folders, or URLs into the window to play.");
@@ -750,6 +821,8 @@ public static class UiStrings
         Add("ui.on", "开", "On");
         Add("ui.clear", "清除", "Clear");
         Add("ui.deinterlace", "去隔行", "Deinterlace");
+        Add("ui.screenshot", "截图", "Screenshots");
+        Add("ui.screenshotSubtitles", "截图包含字幕", "Include subtitles in screenshots");
         Add("ui.fullscreen", "全屏", "Fullscreen");
         Add("ui.fullscreenShortcut", "全屏 (F11)", "Fullscreen (F11)");
         Add("ui.osdPreview", "OSD 与预览", "OSD & previews");
@@ -807,6 +880,9 @@ public static class UiStrings
         Add("settings.openKeyBindings", "编辑键位…", "Edit key bindings…");
         Add("settings.keyBindingsHint", "在独立窗口中录制、清除、重置或导入导出快捷键。", "Record, clear, reset, import, or export shortcuts in a dedicated window.");
         Add("settings.choose", "选择…", "Choose…");
+        Add("settings.audioDeviceAuto", "跟随系统默认 (auto)", "Follow system default (auto)");
+        Add("settings.audioDeviceRefresh", "刷新设备列表", "Refresh device list");
+        Add("settings.audioDeviceUnavailable", "当前设备不可用：{0}", "Current device unavailable: {0}");
         Add("settings.open", "打开", "Open");
         Add("settings.reset", "重置", "Reset");
         Add("settings.clear", "清空", "Clear");
@@ -814,6 +890,11 @@ public static class UiStrings
         Add("settings.install", "安装", "Install");
         Add("settings.toggle", "切换", "Toggle");
         Add("settings.run", "执行", "Run");
+        Add("settings.enter", "进入", "Enter");
+        Add("settings.miniDevTitle", "迷你播放器（开发中）", "Mini player (in development)");
+        Add("settings.miniDevBody",
+            "迷你播放器与音乐模式是同一功能，目前仍在开发中，稳定性有限，建议仅在测试时使用。\n\n进入后设置窗口会关闭。",
+            "The mini player and music mode are the same feature. It is still in development and stability is limited, so use it for testing only.\n\nThe settings window closes when you continue.");
         Add("settings.unavailable", "不可用：{0}", "Unavailable: {0}");
         Add("settings.searchEmpty", "没有匹配的设置。", "No matching settings.");
         Add("settings.pressKeys", "请按下快捷键…", "Press shortcut keys…");
@@ -840,7 +921,7 @@ public static class UiStrings
         Add("keybindings.conflict", "该组合键已被“{0}”使用。", "That combination is already used by “{0}”.");
         Add("keybindings.windowTitle", "按键绑定", "Key Bindings");
         Add("keybindings.profile", "键盘方案", "Keyboard profile");
-        Add("keybindings.profileHint", "方案决定默认组合键。修改任意动作会自动切换到“自定义”并立即保存。", "The profile supplies the default chords. Editing any action switches to Custom and saves immediately.");
+        Add("keybindings.profileHint", "方案决定默认组合键。修改任意动作会自动切换到“自定义”，点“保存更改”后生效。", "The profile supplies the default chords. Editing any action switches to Custom; click Save changes to apply.");
         Add("keybindings.profileChanged", "已切换到“{0}”方案。", "Switched to the “{0}” profile.");
         Add("keybindings.cancelRecording", "取消录制", "Cancel recording");
         Add("common.save", "保存", "Save");
@@ -855,6 +936,9 @@ public static class UiStrings
         Add("common.copy", "复制", "Copy");
         Add("settings.clearHistoryTitle", "清空播放历史", "Clear playback history");
         Add("settings.clearHistoryBody", "将删除最近文件列表与断点续播记录。此操作不可撤销。", "This removes the recent-files list and resume positions. It cannot be undone.");
+        Add("settings.thumbnailsClearedTitle", "缩略图缓存已清空", "Thumbnail cache cleared");
+        Add("settings.thumbnailsClearedBody", "已释放 {0} 的磁盘空间。", "Freed {0} of disk space.");
+        Add("settings.thumbnailsClearedEmpty", "没有可清除的缩略图缓存。", "There was no thumbnail cache to clear.");
         Add("settings.resetAllTitle", "重置所有设置", "Reset all settings");
         Add("settings.resetAllBody", "所有页面恢复默认值（按键绑定、窗口位置与播放历史不受影响）。", "All pages return to defaults (key bindings, window position, and playback history are unaffected).");
         Add("keybindings.conflictTitle", "快捷键冲突", "Shortcut conflict");
@@ -869,6 +953,15 @@ public static class UiStrings
         Add("keybindings.imported", "已导入 {0} 条绑定。", "Imported {0} bindings.");
         Add("keybindings.importedPartial", "已导入 {0} 条绑定；{1}", "Imported {0} bindings; {1}");
         Add("keybindings.exported", "已导出 {0}", "Exported {0}");
+        Add("keybindings.searchPlaceholder", "搜索动作或 mpv 命令…", "Search actions or mpv commands…");
+        Add("keybindings.searchEmpty", "没有匹配的动作。", "No matching actions.");
+        Add("keybindings.unsavedTitle", "未保存的更改", "Unsaved changes");
+        Add("keybindings.unsavedBody", "当前键盘方案有尚未保存的更改。关闭前要保存吗？", "The current keyboard profile has unsaved changes. Save before closing?");
+        Add("keybindings.discard", "不保存", "Discard");
+        Add("keybindings.builtInHint", "内置方案为只读；要修改请先“复制为自定义”。", "Built-in profiles are read-only. Choose “Copy to custom” to edit.");
+        Add("keybindings.copyToCustom", "复制为自定义", "Copy to custom");
+        Add("keybindings.copiedToCustom", "已从“{0}”复制出自定义方案。", "Copied “{0}” into a custom profile.");
+        Add("keybindings.save", "保存更改", "Save changes");
         Add("menu.noRecent", "（暂无记录）", "(No recent files)");
         Add("menu.clearRecent", "清除最近记录", "Clear recent files");
         Add("menu.recentCleared", "最近记录已清空", "Recent files cleared");
@@ -891,8 +984,11 @@ public static class UiStrings
         Add("menu.subtitleFont", "字幕字体", "Subtitle font");
         Add("menu.loadExternalAudio", "加载外部音频…", "Load External Audio…");
         Add("menu.keyboardProfile", "键盘方案", "Keyboard Profile");
+        Add("menu.shortcutEditor", "快捷键编辑器…", "Shortcut Editor…");
+        Add("menu.deband", "去色带", "Deband");
         Add("menu.profileDefault", "默认", "Default");
-        Add("menu.profileIina", "IINA", "IINA");
+        Add("menu.profileWiina", "Wiina 默认", "Wiina Default");
+        Add("menu.profileMpv", "mpv", "mpv");
         Add("menu.profileCustom", "自定义", "Custom");
         Add("osd.controlsHint", "按 Ctrl+O 打开文件", "Press Ctrl+O to open a file");
         Add("osd.controlsHintSecondary", "也可以拖放文件、文件夹或 URL", "You can also drop files, folders, or a URL");
@@ -946,6 +1042,9 @@ public static class UiStrings
         Add("osd.videoFilters", "视频滤镜", "Video filters");
         Add("osd.softwareDecode", "已切换为软件解码以应用滤镜", "Switched to software decoding to apply filters");
         Add("osd.engineFailed", "播放引擎启动失败", "The playback engine failed to start");
+        Add("osd.deviceLost", "显示设备已重置，正在恢复视频输出…", "The display device was reset; recovering video output…");
+        Add("osd.deviceRecovered", "视频输出已恢复", "Video output restored");
+        Add("osd.deviceLostFailed", "视频输出无法恢复，播放继续进行但没有画面", "Video output could not be restored; playback continues without video");
         Add("osd.miniOnTopOn", "迷你播放器：置顶已开启", "Mini player: always on top enabled");
         Add("osd.miniOnTopOff", "迷你播放器：置顶已关闭", "Mini player: always on top disabled");
         Add("osd.fullscreenOnTop", "全屏中，置顶设置将在退出全屏后生效", "Always on top applies after leaving fullscreen");
@@ -988,8 +1087,6 @@ public static class UiStrings
         Add("osd.videoNotLoaded", "未加载视频", "No video loaded");
         Add("osd.auto", "自动", "Auto");
         Add("osd.mutedSuffix", "（静音）", " (muted)");
-        Add("osd.persistentTitle", "持久 OSD（Stage 5）", "Persistent OSD (Stage 5)");
-        Add("osd.persistentBody", "持久 OSD（Stage 5）\n• 普通 OSD 在持久 OSD 打开期间被抑制。\n• 自动隐藏已停用；点击 × 或按 Esc 关闭。\n• 附件/插件视图与窗口增长后的多显示器适配留到后续阶段。", "Persistent OSD (Stage 5)\n• Regular OSD is suppressed while persistent OSD is open.\n• Auto-hide is disabled; click × or press Esc to close.\n• Attachment/plugin views and multi-monitor growth after window changes were deferred.");
         Add("osd.status", "状态", "Status");
         Add("osd.position", "位置", "Position");
         Add("osd.labelVolume", "音量", "Volume");

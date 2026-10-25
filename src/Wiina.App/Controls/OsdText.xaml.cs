@@ -1,27 +1,28 @@
 using Microsoft.UI.Dispatching;
-using Microsoft.UI.Text;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Media.Animation;
+using Wiina.App.Interop;
 using Wiina.Core.Osd;
+using Wiina.Core.Settings;
 
 namespace Wiina.App.Controls;
 
 /// <summary>
 /// Stage 5 OSD: one coalesced message at a time with an icon, optional
-/// secondary line, progress bar and a persistent technical variant.
+/// secondary line and a progress bar.
 /// </summary>
 public sealed partial class OsdText : UserControl
 {
     private readonly DispatcherQueueTimer _timer;
     private readonly OsdQueue _queue = new();
     private Storyboard? _fade;
+    private ChromeBlurLayer? _blur;
     private bool? _systemAnimationsEnabled;
     private bool _appAnimationsEnabled = true;
     private bool _enabled = true;
     private bool _showing;
-    private bool _persistent;
     private double _scalePercent = 100;
     private double _progressValue;
     private TimeSpan _duration = TimeSpan.FromSeconds(1);
@@ -33,16 +34,13 @@ public sealed partial class OsdText : UserControl
         _timer.Interval = _duration;
         _timer.IsRepeating = false;
         _timer.Tick += (_, _) => FadeOut();
+        Loaded += OnLoaded;
+        Unloaded += OnUnloaded;
+        ActualThemeChanged += (_, _) => ApplyBlurVisuals();
         ApplyScale();
     }
 
-    public event Action? PersistentCloseRequested;
-
-    public event Action<bool>? PersistentVisibilityChanged;
-
     public bool IsShowing => _showing;
-
-    public bool IsPersistentShowing => _persistent;
 
     public bool AnimationsEnabled => _appAnimationsEnabled && SystemAnimationsEnabled;
 
@@ -51,7 +49,7 @@ public sealed partial class OsdText : UserControl
     public void SetEnabled(bool enabled)
     {
         _enabled = enabled;
-        if (!enabled && !_persistent)
+        if (!enabled)
         {
             Hide();
         }
@@ -83,11 +81,6 @@ public sealed partial class OsdText : UserControl
     public void Show(OsdMessage message, TimeSpan? duration = null)
     {
         ArgumentNullException.ThrowIfNull(message);
-        if (_persistent)
-        {
-            return;
-        }
-
         if (!_enabled && !message.AlwaysShow)
         {
             return;
@@ -103,61 +96,10 @@ public sealed partial class OsdText : UserControl
         _queue.Enqueue(message);
         ApplyMessage(message);
 
-        _persistent = false;
         IsHitTestVisible = false;
-        CloseButton.Visibility = Visibility.Collapsed;
-        PersistentContent.Visibility = Visibility.Collapsed;
-        PersistentBodyScroller.Visibility = Visibility.Collapsed;
         OsdRoot.MaxWidth = 460;
         OsdRoot.IsHitTestVisible = false;
         Reveal(message.Duration ?? duration ?? _duration);
-    }
-
-    /// <summary>
-    /// Shows the persistent technical OSD. Normal messages are suppressed until
-    /// this is closed with the button, Esc, or <see cref="HidePersistent"/>.
-    /// </summary>
-    public void ShowPersistent(
-        string title,
-        string? subtitle = null,
-        IReadOnlyList<(string Label, string Value)>? details = null,
-        string? body = null)
-    {
-        _timer.Stop();
-        _fade?.Stop();
-        _queue.Clear();
-
-        OsdMessage message = OsdMessages.Persistent(title, subtitle);
-        ApplyMessage(message);
-        BuildDetails(details);
-
-        PersistentBody.Text = body ?? string.Empty;
-        PersistentBodyScroller.Visibility = string.IsNullOrWhiteSpace(body)
-            ? Visibility.Collapsed
-            : Visibility.Visible;
-        bool hasExtra = (details is { Count: > 0 }) || !string.IsNullOrWhiteSpace(body);
-        PersistentContent.Visibility = hasExtra ? Visibility.Visible : Visibility.Collapsed;
-        CloseButton.Visibility = Visibility.Visible;
-        OsdRoot.MaxWidth = 520;
-        OsdRoot.Padding = new Thickness(16, 12, 16, 12);
-        OsdRoot.IsHitTestVisible = true;
-
-        _persistent = true;
-        IsHitTestVisible = true;
-        ShowRoot();
-        PersistentVisibilityChanged?.Invoke(true);
-    }
-
-    public void HidePersistent()
-    {
-        if (!_persistent)
-        {
-            return;
-        }
-
-        _persistent = false;
-        PersistentVisibilityChanged?.Invoke(false);
-        Hide();
     }
 
     public void Hide()
@@ -166,13 +108,10 @@ public sealed partial class OsdText : UserControl
         _fade?.Stop();
         _fade = null;
         _showing = false;
-        _persistent = false;
         IsHitTestVisible = false;
         OsdRoot.Visibility = Visibility.Collapsed;
         OsdRoot.Opacity = 0;
         OsdRoot.IsHitTestVisible = false;
-        CloseButton.Visibility = Visibility.Collapsed;
-        PersistentContent.Visibility = Visibility.Collapsed;
     }
 
     private void Reveal(TimeSpan duration)
@@ -230,11 +169,6 @@ public sealed partial class OsdText : UserControl
         _fade.Children.Add(animation);
         _fade.Completed += (_, _) =>
         {
-            if (_persistent)
-            {
-                return;
-            }
-
             _showing = false;
             OsdRoot.Visibility = Visibility.Collapsed;
             OsdRoot.Opacity = 0;
@@ -275,7 +209,7 @@ public sealed partial class OsdText : UserControl
         TitleRow.FlowDirection = direction;
 
         ApplyScale();
-        OsdRoot.Padding = new Thickness(16, 8, 16, 8);
+        OsdContent.Padding = new Thickness(16, 8, 16, 8);
     }
 
     private void OnProgressSizeChanged(object sender, SizeChangedEventArgs e) =>
@@ -295,58 +229,63 @@ public sealed partial class OsdText : UserControl
         OsdMessageText.FontSize = main;
         OsdSecondaryText.FontSize = OsdSettings.SecondaryFontSize(_scalePercent);
         OsdIcon.FontSize = OsdSettings.IconFontSize(_scalePercent);
-        CloseButton.FontSize = Math.Clamp(11 * _scalePercent / 100, 9, 24);
     }
 
-    private void BuildDetails(IReadOnlyList<(string Label, string Value)>? details)
+    private void OnLoaded(object sender, RoutedEventArgs e)
     {
-        PersistentDetails.Children.Clear();
-        if (details is null)
+        ChromeBlur.ModeChanged += OnBlurModeChanged;
+        EnsureAttached();
+        ApplyBlurVisuals();
+    }
+
+    private void EnsureAttached()
+    {
+        if (_blur is not null || XamlRoot is null)
         {
             return;
         }
 
-        foreach ((string label, string value) in details)
-        {
-            if (string.IsNullOrWhiteSpace(value))
-            {
-                continue;
-            }
-
-            var row = new Grid { ColumnSpacing = 10 };
-            row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(92) });
-            row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-
-            var labelBlock = new TextBlock
-            {
-                Text = label,
-                Style = (Style)Application.Current.Resources["CaptionTextStyle"],
-                VerticalAlignment = VerticalAlignment.Top,
-            };
-            var valueBlock = new TextBlock
-            {
-                Text = value,
-                Style = (Style)Application.Current.Resources["BodyTextStyle"],
-                TextWrapping = TextWrapping.Wrap,
-                IsTextSelectionEnabled = true,
-            };
-            valueBlock.FontWeight = FontWeights.Normal;
-            Grid.SetColumn(valueBlock, 1);
-            row.Children.Add(labelBlock);
-            row.Children.Add(valueBlock);
-            PersistentDetails.Children.Add(row);
-        }
-    }
-
-    private void OnCloseClick(object sender, RoutedEventArgs e)
-    {
-        if (!_persistent)
+        // Same 12 DIP radius as the rounded card so the blurred crop cannot
+        // bleed past its corners.
+        if (!ChromeBlur.TryAttach(BackdropBlurHost, 12, out ChromeBlurLayer layer))
         {
             return;
         }
 
-        PersistentCloseRequested?.Invoke();
-        HidePersistent();
+        _blur = layer;
+        _blur.FirstFrame += OnFirstBlurFrame;
+        _blur.RaiseFirstFrameIfReady();
+    }
+
+    private void OnBlurModeChanged(object? sender, EventArgs e)
+    {
+        EnsureAttached();
+        ApplyBlurVisuals();
+    }
+
+    private void OnFirstBlurFrame(object? sender, EventArgs e) => ApplyBlurVisuals();
+
+    private void ApplyBlurVisuals()
+    {
+        bool live = ChromeBlur.Current.Mode != ChromeBlurMode.Solid;
+        if (_blur is not null)
+        {
+            _blur.Visibility = live ? Visibility.Visible : Visibility.Collapsed;
+        }
+
+        bool blurred = live && _blur is { HasFrame: true };
+        OsdBlurTintLayer.Visibility = blurred ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    private void OnUnloaded(object sender, RoutedEventArgs e)
+    {
+        ChromeBlur.ModeChanged -= OnBlurModeChanged;
+        if (_blur is not null)
+        {
+            _blur.FirstFrame -= OnFirstBlurFrame;
+        }
+
+        _blur = null;
     }
 
     private bool SystemAnimationsEnabled

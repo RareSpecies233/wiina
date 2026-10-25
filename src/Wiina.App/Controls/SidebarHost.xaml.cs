@@ -45,10 +45,14 @@ public sealed partial class SidebarHost : UserControl
     private double _animFromOpacity;
     private double _animToOpacity;
     private long _animStart;
+    private ChromeBlurLayer? _blur;
 
     public SidebarHost()
     {
         InitializeComponent();
+        Loaded += OnLoaded;
+        Unloaded += OnUnloaded;
+        ActualThemeChanged += (_, _) => ApplyBlurVisuals();
         _animTimer = DispatcherQueue.CreateTimer();
         _animTimer.Interval = TimeSpan.FromMilliseconds(15);
         _animTimer.IsRepeating = true;
@@ -70,21 +74,24 @@ public sealed partial class SidebarHost : UserControl
             new PointerEventHandler(OnGripPointerReleased),
             handledEventsToo: true);
         RootGrid.PointerCaptureLost += OnGripPointerCaptureLost;
-        Loaded += OnLoaded;
-        Unloaded += OnUnloaded;
     }
 
-    private ChromeBlurLayer? _blur;
-
     private void OnLoaded(object sender, RoutedEventArgs e)
+    {
+        ChromeBlur.ModeChanged += OnBlurModeChanged;
+        EnsureAttached();
+        ApplyBlurVisuals();
+    }
+
+    private void EnsureAttached()
     {
         if (_blur is not null || XamlRoot is null)
         {
             return;
         }
 
-        // Real blurred frame behind the sidebar; the acrylic panel only stays
-        // until the first blurred frame is available.
+        // Real blurred frame behind the sidebar; the opaque panel paint stays
+        // until the first blurred frame is available, and in Solid mode.
         if (!ChromeBlur.TryAttach(BackdropBlurHost, 0, out ChromeBlurLayer layer))
         {
             return;
@@ -95,14 +102,32 @@ public sealed partial class SidebarHost : UserControl
         _blur.RaiseFirstFrameIfReady();
     }
 
-    private void OnFirstBlurFrame(object? sender, EventArgs e)
+    private void OnBlurModeChanged(object? sender, EventArgs e)
     {
-        PanelBorder.Background = null;
-        SidebarBlurTintLayer.Visibility = Visibility.Visible;
+        EnsureAttached();
+        ApplyBlurVisuals();
+    }
+
+    private void OnFirstBlurFrame(object? sender, EventArgs e) => ApplyBlurVisuals();
+
+    private void ApplyBlurVisuals()
+    {
+        bool live = ChromeBlur.Current.Mode != ChromeBlurMode.Solid;
+        if (_blur is not null)
+        {
+            _blur.Visibility = live ? Visibility.Visible : Visibility.Collapsed;
+        }
+
+        // The layer and tint live inside PanelBorder, above its opaque
+        // ChromeSolidBrush, so the Background is never cleared and the XAML
+        // ThemeResource keeps resolving on theme/accent changes.
+        bool blurred = live && _blur is { HasFrame: true };
+        SidebarBlurTintLayer.Visibility = blurred ? Visibility.Visible : Visibility.Collapsed;
     }
 
     private void OnUnloaded(object sender, RoutedEventArgs e)
     {
+        ChromeBlur.ModeChanged -= OnBlurModeChanged;
         if (_blur is not null)
         {
             _blur.FirstFrame -= OnFirstBlurFrame;
@@ -195,7 +220,29 @@ public sealed partial class SidebarHost : UserControl
         ChaptersPageTab.IsChecked = false;
         PluginsPageTab.IsChecked = false;
 
+        // Destinations reuse the same host and WinUI restores a scroll offset
+        // after a visibility cycle, so rewind every list before showing the
+        // next one.
+        ResetScrollOffsets(this);
         UpdatePageChecks(SettingsContent.CurrentPage, type ?? SidebarType.Settings);
+    }
+
+    /// <summary>
+    /// Sets the vertical offset of every <see cref="ScrollViewer"/> in the
+    /// subtree back to zero without animating.
+    /// </summary>
+    private static void ResetScrollOffsets(DependencyObject root)
+    {
+        for (int index = 0; index < VisualTreeHelper.GetChildrenCount(root); index++)
+        {
+            DependencyObject child = VisualTreeHelper.GetChild(root, index);
+            if (child is ScrollViewer viewer)
+            {
+                viewer.ChangeView(null, 0, null, disableAnimation: true);
+            }
+
+            ResetScrollOffsets(child);
+        }
     }
 
     public void SetPage(QuickSettingsPage page)
@@ -291,6 +338,13 @@ public sealed partial class SidebarHost : UserControl
             ? Visibility.Visible
             : Visibility.Collapsed;
     }
+
+    /// <summary>
+    /// True while the panel is sliding out. The host stays Visible at its full
+    /// width until the animation ends, so the shell must not treat it as
+    /// covering the video surface during that window.
+    /// </summary>
+    public bool IsHiding => _hiding;
 
     public void ShowInstant()
     {
@@ -425,6 +479,16 @@ public sealed partial class SidebarHost : UserControl
 
         if (Enum.TryParse(tag, out QuickSettingsPage page))
         {
+            // The four quick-settings pages are hosted by the settings slot.
+            // While playlist/chapters/plugins is on screen, swapping only the
+            // hidden page leaves the rail on the other surface, so switch the
+            // slot first and let the shell re-apply the type before the page
+            // below is shown. Toggle state is rebuilt by SetType/SetPage.
+            if (_currentType != SidebarType.Settings)
+            {
+                TabRequested?.Invoke(this, new SidebarTabRequestedEventArgs(SidebarType.Settings));
+            }
+
             SetPage(page);
             PageRequested?.Invoke(this, page);
             return;

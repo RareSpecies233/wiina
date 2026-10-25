@@ -1,31 +1,532 @@
-# Known issues — Wiina v1.2.2
+# Known issues — Wiina v1.3.9
 
-Nothing here is hidden; these are known limitations of the v1 build.
+Nothing here is hidden; these are known limitations of the v1.3.9 build. The full decision list (with fix cost and checkboxes) lives in [../reports/known-issues-1.3.1.md](../reports/known-issues-1.3.1.md).
+
+## What changed in 1.3.9
+
+- Mini/PiP now park the chrome blur (counted suspension, Solid while parked,
+  persisted mode re-applied on exit). A hidden main window no longer pulls a
+  frame every 125 ms.
+- Slow thumbnail mode is really instant preview now: no pre-generation, disk
+  cache kept, hover delay applies. The mode row shows the effective mode and
+  "preview while generating" is disabled because it has no meaning there.
+- New `video.thumbnail-keyframe-seek` (default off) makes the background pass
+  and slow mode seek to the preceding keyframe; a frame can land up to one GOP
+  early, while hover previews stay exact.
+- The hover bubble distinguishes a forbidden preview from a pending decode: the
+  old black flash on every pointer move and the stale frame after switching
+  files are gone.
+- All same-episode sidecars are added (assfonts selected first), matched by
+  `external-filename` and the short libmpv title; another selected external
+  subtitle is never replaced.
+
+## Limits specific to 1.3.9
+
+- `Always` blur mode still captures at ~8 Hz while the window is visible.
+- Keyframe pre-generation frames can be one GOP earlier than the label.
+- The settings availability gate is re-evaluated when settings change; a row
+  already rendered updates on the next refresh.
+- Mixed-DPI hover placement and small-window geometry were not tested.
+- Cursor hiding is unchanged and still unsolved.
+
+## What changed in 1.3.8
+
+- Opening Settings while it is already open no longer resets the page: a plain
+  request only activates the window; explicit page/row requests still navigate.
+  Scroll position is preserved while the window stays open, but is not persisted
+  across close/reopen.
+- The fullscreen sidebar dead zone was a real mouse bug, not just a mechanism
+  issue: the 1.3.7 focus guard stole focus on pointer press and WinUI cancelled
+  the click. Pointer focus is now left alone; keyboard Tab is still intercepted.
+  Verified on a single 2560x1325 @ 100% DPI monitor only.
+- The PiP placeholder's restore button works: the video drag handler no longer
+  runs in PiP. Same single-monitor limit.
+- The mini player's sidebar was not re-run separately (same focus guard).
+- Thumbnails: 1.3.8 shipped a plan only (../reports/thumbnails-v1.3.8-plan.md);
+  slow-mode rework, the keyframe switch and the instant-mode UX landed in
+  1.3.9, while the 20 ms poll floor is still unchanged. Cursor hiding is
+  unchanged and still unsolved in 1.3.8.
+- Cursor hiding is still unsolved and unchanged in 1.3.8.
+## What changed in 1.3.7
+
+- The fullscreen sidebar dead zone was fixed at the mechanism level (caption
+  region re-cleared on every fullscreen layout pass, sidebar hosts raised and
+  kept hit-testable). The defect never reproduced on the development machine;
+  if clicks still fail, the next suspect is DPI/island hit-testing.
+- The mini player's restore button is only covered when the playlist is
+  expanded; the panel now leaves the 72 DIP control row free.
+- Numeric settings commit while typing (200 ms debounce plus flush on focus
+  loss, page change, search, deactivation and close). The video-quality
+  editor's nine spinners still require the explicit Apply step, by design.
+- Thumbnail optimisation is a report, not a change: the 20 ms `Task.Delay(20)`
+  poll floor, scaling in mpv, keyframe seeks and a redefined slow mode are
+  documented with a P0/P1/P2 route for a later decision.
+- Cursor hiding is still unsolved and unchanged in 1.3.7.
+
+## What changed in 1.3.6
+
+- The chrome blur now extends over the whole chrome band by repeating the video
+  edge pixels, so windows whose aspect does not match the video no longer show
+  unstretched tint bands. PiP and non-100 % DPI were not re-measured.
+- Timeline thumbnails gained a "preview while generating" switch, default off.
+  While the background pass runs, hover previews are suppressed unless it is
+  enabled; `Instant` mode ignores it.
+- The PiP placeholder text now follows the theme (light / dark / high contrast).
+- Cursor hiding did **not** change in 1.3.6 and remains unsolved.
+
+## What changed in 1.3.5
+
+- The chrome blur follows the actual video rectangle now (letterbox/pillarbox
+  bars keep the plain tint); PiP was not verified separately and 150 % DPI was
+  not tested on hardware.
+- Timeline thumbnails no longer burn in subtitles; this was a confirmed bug in
+  the headless extraction instance, now fixed and checked pixel-by-pixel.
+- The mini player is deliberately dark in every theme; it no longer follows the
+  light theme (a product choice, not a regression).
+- A thumbnail `Instant` mode and a hover delay were added; they trade the fast
+  hover of pre-generation for zero background work and zero disk writes.
+- Edge snapping no longer jitters; the fix is measured at 100 % DPI on a single
+  monitor.
+- Cursor hiding did **not** change in 1.3.5 and is still not solved.
+
+## What changed in 1.3.4
+
+- An unfocused window no longer shows the OSC on hover: the pointer handlers
+  return while `!_windowActive && !_chromeShown`, and focus loss still hides the
+  chrome. Docked layout and an open sidebar keep their existing exemptions.
+- The "mini window" defects were Picture-in-Picture: Tab no longer enters its
+  transport buttons, Space pauses, Enter leaves PiP for fullscreen, Escape
+  restores the main window, and all other keys are forwarded to the main window.
+- Light theme: the PiP background follows `AppBackgroundBrush`; the mini player
+  uses theme brushes plus `MicaBackdrop` and restores the old background on exit.
+- The dropped-frame notice is a native WinUI card in the centre of the picture
+  (2.2 s, 180 ms fade). The ASS/`show-text` path is gone.
+- Settings -> Advanced keeps one mini-player entry, with a development warning
+  and a confirmation dialog (default cancel).
+- Cursor hiding did **not** change in 1.3.4 and is not considered fixed.
+
+## What changed in 1.3.3
+
+- Opening an OSC or title-bar menu no longer hides the chrome or the cursor:
+  every chrome flyout is registered with `TrackChromeFlyout`, the auto-hide
+  timer is parked while any popup is open, and the countdown resumes one
+  dispatcher tick after the last one closes.
+- The mini player is mouse-only: Tab and Space no longer reach its controls.
+  This is intentional; there is no keyboard path to mini-player buttons.
+- The light-theme mini player uses theme brushes instead of hard-coded dark
+  ones (`MiniCoverFallbackBrush`, `MiniCoverScrimBrush`).
+- The frame-drop notice moved to the centre of the picture; see below.
+- Music and mini mode are reachable only from Settings → Advanced → Modes, and
+  neither has a default shortcut.
+
+## What changed in 1.3.2
+
+- Cursor hiding was attempted with an in-process IAT hook (`CursorHider`); see
+  the section below for evidence and residual risks. **Superseded: still not
+  solved as of 1.3.4.**
+- Fullscreen no longer shows the 1-3 px top strip, and dragging in fullscreen
+  never exits fullscreen.
+- OSC/menu polish: media chrome no longer takes keyboard focus, the screenshot
+  subtitle switch moved into the Video submenu, auto-hide gained hover
+  keep-alive / immediate hide / jitter handling, and the frame-drop notice moved
+  to the left edge, vertically centred (ASS `\an4`; moved to the centre in 1.3.3).
+- Screenshot names are `name-h-m-s-ms.png`; collisions are numbered.
+- Turning thumbnail previews off stops all thumbnail work (no headless mpv, no
+  disk writes); the cache-count settings row was removed and the memory cache
+  always covers the whole file.
+- The uninstaller asks for UAC once at launch and no longer shows an
+  "incomplete uninstall" dialog; silent runs stay unelevated.
+- Close path measured at 170-179 ms; DXGI device-loss recovery is implemented
+  but has not been exercised by a real TDR.
+
+## What changed in 1.3.1
+
+
+- Key-binding profiles: `Wiina` + `mpv`; the IINA preset was removed and old
+  values migrate to Wiina.
+- OSC: duplicate Video/Window entries merged, speed presets only in the expanded
+  menu, ±5 s previous/next option, immediate hide on pointer leave.
+- Thumbnails: optional GPU decode (`video.thumbnail-acceleration`), whole-file
+  memory cache (≈41 MB/hour).
+- Screenshots: one subtitle switch shared by settings, the quick-settings video
+  page and the OSC 更多 -> 视频 submenu.
+- Uninstaller: it raises UAC once at launch (re-launching itself elevated),
+  removes HKCU and HKLM associations, and only asks whether to keep the config.
+  Setup itself stays per-user.
+
+## Settings layout in 1.3.0
+
+The 1.3.0 reshuffle is a layout change, not a behaviour change: row ids and
+settings keys are unchanged, so existing `settings.json` files and deep links
+keep working. The snapshot in `../reference/settings-layout.md` is the
+authoritative map; update it whenever the catalog changes.
+
+## Key binding editor
+
+- One chord per action; modifier+key only, no multi-stroke sequences.
+- Conflict handling is Wiina's own (mpv itself is last-wins). The IINA preset
+  was removed in 1.3.1; Wiina and mpv remain, and old `IINA` values migrate to
+  Wiina. `../reference/iina-shortcuts.md` records the history and deviations.
+- Built-in profiles are read-only by design; edits always land in a custom
+  profile.
+
+## System media keys
+
+SMTC integration means Windows can route media keys to Wiina only while Wiina
+is running. There is no per-device testing matrix here; hardware media keys
+were verified on one keyboard.
+
+## mpv.net configuration export
+
+`resources/mpvnet/` is a plain-text export of options and bindings. It is
+version-specific (mpv.net bundles its own libmpv), Wiina-only features are
+absent, and the Wiina side-panel commands are commented out because mpv.net has
+no side panels. Nothing is installed or patched by Wiina.
+
+## Frame-drop card
+
+Dropped-frame numbers come from mpv counters and are estimates; the rate is
+measured over a 3-second window with a 12-second cooldown, so a single bad
+frame does not spam the card. 1.3.2 showed it left-middle, 1.3.3 moved it to the
+exact centre with ASS tags; since 1.3.4 it is a native WinUI `Border` in the
+overlay layer (`FrameDropNotice`), centred, non-hit-testable, visible for 2.2 s
+with a 180 ms fade-out. The text is produced by `FrameDropNotice.Describe()` and
+a unit test rejects ASS markup. The statistics panel remains the detailed view.
+
+## Screenshot file names
+
+- Screenshots are named `media-hour-minute-second-millisecond.png`
+  (`movie-1-28-39-980.png`); a collision gets ` (2)`, ` (3)`, ... appended.
+- Illegal Windows filename characters are replaced, and the media-name part is
+  capped at 100 characters.
+- With no media loaded (folder picker path) the legacy
+  `wiina-yyyyMMdd-HHmmss.png` name is kept.
+- The subtitle include/exclude switch is shared by settings, the quick-settings
+  video page and the OSC 更多 -> 视频 submenu; the file is always PNG via mpv
+  `screenshot-raw` flags `subtitles` or `video`.
+
+## Cursor hiding (still not solved)
+
+Status: **not solved.** The 1.3.2 hook below is the last attempt; it still loses to the WinUI input stack in some configurations, and 1.3.4 - 1.3.8 changed nothing here. Treat the measurements as historical evidence for the technique, not as a fix.
+
+The desktop pointer over a WinUI 3 client area is driven by the input thread
+inside Microsoft.UI.Input.dll / Microsoft.InputStateManager.dll /
+Windows.UI.Immersive.dll, not by the window procedure or the XAML thread. Those
+modules re-apply `SetCursor(arrow)` themselves, so every application-side
+`SetCursor`, `ShowCursor`, `WM_SETCURSOR` or `ProtectedCursor` attempt was
+overwritten within milliseconds (this is why the 1.3.0 and 1.3.1 attempts were
+reported as unverified).
+
+1.3.2 adds `src/Wiina.App/Interop/CursorHider.cs`, which walks the import
+address table of a fixed candidate list (`Microsoft.UI.Input.dll`,
+`Microsoft.InputStateManager.dll`, `CoreMessaging.dll`, `Microsoft.UI.Content.dll`,
+`Microsoft.UI.Xaml.dll`, `Microsoft.UI.Windowing.Core.dll`,
+`Windows.UI.Immersive.dll`) and redirects their `user32!SetCursor` entries to a
+`UnmanagedCallersOnly` detour that calls `SetCursor(NULL)` while the pointer is
+supposed to be hidden. Only IAT pointers are rewritten, never code, and the
+original pointer is kept alive so unhide and pass-through still work.
+
+Measured: after hiding, 20/20 `GetCursorInfo` samples returned
+`hCursor=0, flags=0` and stayed that way for 4.75 s; after moving the pointer,
+54/54 samples returned `flags=1`. `WIINA_CURSOR_HOOK=0` disables the hook,
+`WIINA_CURSOR_HOOK=scan` only enumerates importing modules, and a failed
+installation keeps the pre-1.3.2 fallback in place.
+
+Residual risks: some antivirus engines treat IAT patching as suspicious
+(behaviour is equivalent to a themed cursor, but the technique is unusual), and
+a future Windows App SDK could rename the input modules, in which case the hook
+finds no import and falls back. Hardware cursors never appear in screenshots,
+so `GetCursorInfo` flags are the documented evidence rather than a captured
+image.
+
+## Slow thumbnail mode
+
+Single-worker mode trades first-hover latency for lower CPU: pre-generation is
+skipped, and each hovered bucket is generated on demand (cache hits are still
+instant). The default mode (pre-generation) is unchanged.
 
 ## Scope decisions
 
 - **Plugins (Stage 9) are not implemented.** There is no plugin API, no
   WebView2 host, and no working plugin installation. The Plugins settings page
-  and menu item are disabled with a Stage 9 explanation. See
-  [../plugins/README.md](../plugins/README.md).
+  is an honest placeholder and the menu item is disabled with a Stage 9
+  explanation. See [../plugins/README.md](../plugins/README.md).
 - **Online subtitles / yt-dlp (Stage 10) are not implemented.** No
   OpenSubtitles search/download, no yt-dlp invocation, no bundled yt-dlp, no
   related network consent or permissions. The corresponding menu entries are
   disabled and say Stage 10.
-- Optional: `installer/wiina.iss` exists for Inno Setup packaging; the portable
-  zip remains the official v1 distribution. `scripts/release.ps1` compiles the
-  installer only when Inno Setup 6 is installed locally. No MSIX package is
-  produced.
+- **Two distribution forms, one payload.** `scripts/package.ps1` produces the
+  portable zip with `Uninstall Wiina.exe`; `scripts/release.ps1` compiles
+  `installer/wiina.iss` into a per-user installer when Inno Setup 6 is
+  available. No MSIX package and no auto-update are produced. See
+  [../installer.md](../installer.md).
 
-## Blur over video
+## OSC auto-hide and placement
 
-- Chrome over the video (titlebar, OSC, sidebar, OSD) uses a real Win2D
-  Gaussian blur of the current libmpv frame, refreshed at 8 fps. It lags the
-  video by up to one 125 ms frame and is a 320 px-wide resample, so it looks
-  slightly softer than the video at very large window sizes. Capture costs
-  roughly a third of one CPU core at 720p and more for 4K.
-- Secondary windows keep the Windows desktop-acrylic material. See
-  [../architecture/0003-acrylic.md](../architecture/0003-acrylic.md).
+- **The delay is configurable only in non-docked layouts.** Settings → 界面 →
+  窗口与 OSC → 自动隐藏延时 accepts 0.5–30 s (default 2.5). Docked layout keeps
+  its titlebar and bottom bar permanently visible by design.
+- **Sub-5-DIP jitter does not count as activity.** A hand resting on the mouse
+  no longer keeps the chrome awake, and a pointer resting over the fullscreen
+  bottom bar hides on schedule. If that is undesirable (screen readers, remote
+  desktop), disable auto-hide instead of holding the pointer over the bar.
+- **Deactivation hides immediately** except in Docked layout or while a sidebar
+  is open. A left click on the video hides the chrome only when press and
+  release stay put; a drag never hides it.
+- **The floating OSC avoids a sidebar only when it would be covered.** The
+  clamp uses the rectangle of the visible leading/trailing panel and an 8 DIP
+  gap; panels that do not vertically overlap the OSC leave it untouched. PiP
+  and mini layouts never show an OSC.
+- **Open chrome menus keep the OSC alive.** Every OSC/title-bar menu is tracked
+  with `TrackChromeFlyout`: while a popup is open the countdown is parked, and it
+  restarts one dispatcher tick after the last popup closes. Nested submenus do
+  not multiply the count, and the pointer-outside event raised by the popup
+  itself is ignored, so picking a menu item no longer makes the chrome vanish.
+
+## Timeline thumbnails
+
+- Thumbnails are now pre-generated after a file loads and cached on disk
+  (`%LOCALAPPDATA%\Wiina\thumbnails\v2`, format v2): one JPEG per 5 s bucket plus
+  an atomically rewritten `index.json`; the default budget is 512 MB (Ui →
+  Thumbnails → Thumbnail cache, 0 disables it) and eviction is byte-based LRU.
+  Hovering reads disk/memory first; misses are queued to the single extraction
+  worker and jump ahead of the pre-generation backlog.
+- **1.3.1:** thumbnails can decode on the GPU (`video.thumbnail-acceleration`:
+  Auto keeps `hwdec=auto-safe`, CPU only forces `hwdec=no`; measured 29 ms wall /
+  15.6 ms CPU vs 104 ms / 461 ms per frame), and the **memory** cache now keeps
+  every 5-second bucket of the current file (≈57.6 KB per bucket, ≈41 MB/hour).
+- **1.3.2:** the cache-count settings row is gone (the memory cache always covers the whole file); turning previews off skips all thumbnail work - no headless mpv instance, no disk writes, no cache sizing.
+- **1.3.5:** thumbnails no longer contain subtitles (headless
+  `sub-visibility=no`, `sub-auto=no`, `sid=no`, `secondary-sid=no`, `osd-bar=no`,
+  and `screenshot-raw` explicitly requests the `video` flag). New
+  `video.thumbnail-mode` (`Pre-generate` default / `Instant`) and
+  `video.thumbnail-hover-delay` (0–2000 ms, default 250) rows: Instant skips
+  pre-generation, the disk cache and the whole-file memory cache, decoding only
+  the hovered point after the delay. Turning previews off still does no work.
+- Limits: the cache key includes file size and mtime, so an in-place replacement
+  with identical size/mtime can hit a stale frame; dragging the timeline is not
+  throttled (only stale results are dropped); network/UNC sources are
+  memory-only; old files are reclaimed lazily by the LRU trim.
+- Measured on a 1080p 23:40 HEVC file: cold pre-generation 14.1–14.9 s for 285
+  buckets, warm start 0.3 s, hover 73 ms cold / 4 ms warm, 1.70 MB on disk.
+  Research comparison with IINA: [../reference/iina-thumbnails.md](../reference/iina-thumbnails.md).
+
+## Audio output device
+
+- The dropdown is fed by mpv's `audio-device-list`. Before the first player
+  starts it contains only "跟随系统默认"; the refresh button re-reads the cached
+  list rather than polling mpv.
+- A saved device mpv no longer reports is shown as "不可用（<name>）" and kept
+  verbatim until you pick another device, so settings are never silently
+  rewritten.
+- Device labels are mpv's descriptions; the raw name (`wasapi/...` on Windows)
+  is only in the tooltip. Changing devices mid-playback re-initialises the audio
+  output, which can produce a short glitch or a brief silence.
+
+## Picture-in-Picture keyboard and focus
+
+- The PiP transport buttons are out of the Tab order (`IsTabStop=False`,
+  `AllowFocusOnInteraction=False`), and the window root handles `PreviewKeyDown`:
+  Tab is swallowed, Space toggles playback, Enter leaves PiP and enters
+  fullscreen, Escape restores the main window.
+- Every other key is forwarded to the main window (`TryForwardShortcutKey`);
+  a key is only marked handled when the main window really executed a binding,
+  so unbound keys still fall through to the system.
+- The PiP window is a borderless `WS_POPUP` window, but DWM still reserves an
+  8 px non-client border: `GetWindowRect` is 8 px larger than the client area on
+  every side and that strip shows the desktop behind the window. WinUI 3 has no
+  supported way to remove it, so 1.3.4 documents it instead of faking a fix.
+  At 100 % DPI the visible gap is 8 px; higher DPI was not re-measured.
+- Keys are forwarded only when the main window actually executes a binding;
+  otherwise the key falls through to the system (so global OS shortcuts keep
+  working, and nothing is silently swallowed).- The mini player keeps its own rule: it is mouse-only, and Tab cycles the main
+  window instead of landing on mini controls.
+
+## Mini player
+
+- The mini player is deliberately mouse-only. `MiniPlayerView.SetKeyboardMouseOnly`
+  clears `IsTabStop`/`AllowFocusOnInteraction` on every focusable descendant
+  (sliders and lazily created playlist rows included) and restores the saved
+  values on exit, so Tab cycles the main window instead of landing on mini
+  controls. This is a design trade-off, not a regression.
+- **Fixed dark chrome in every theme (1.3.5, product choice).** The mini player
+  forces `ElementTheme.Dark`, pins its root to `#FF08090A` and suspends the system
+  backdrop while open; all three are restored on exit. Contrast is about 18:1
+  for primary text and 9:1 for secondary text, and light/dark mini screenshots
+  hash identically. It deliberately does not follow the light theme; a
+  theme-following mini player would need its own light token set.
+- Auto-entering the mini player for audio files is disabled. `AutoSwitchToMusicMode`
+  is still stored in `settings.json` for compatibility but no longer triggers a
+  mode change.
+
+## Mode entry points
+
+- The only entry for music/mini mode is the single row on Settings -> Advanced
+  -> Modes (`advanced.mini-player`), which warns that the feature is still in
+  development and asks for confirmation (default cancel). `advanced.music-mode`
+  was removed in 1.3.4; the settings window closes before the mode switch.
+- There is no default shortcut and the shortcut editor no longer lists these
+  actions. Picture-in-picture still has `Ctrl+Shift+P` (shipped Wiina profile),
+  and the 窗口 menu label is derived from that profile rather than hard-coded.
+
+## Chrome blur over video
+
+- **The three glass modes cost a capture readback.** In 固定 / 动态 / 始终 the
+  chrome samples one libmpv frame (`screenshot-raw`) every 125 ms (≈8 fps),
+  box-downscales it to 320 px and blurs it with Win2D. That is roughly 45 ms
+  and 3.7 MB per 1280×720 frame — about a third of one CPU core at 720p, more
+  at 4K. **关闭毛玻璃（纯色）** does none of this: no capture thread, no Win2D
+  device, only the opaque accent-tinted fill.
+- **Fixed vs Dynamic vs Always**: Fixed captures one frame per chrome
+  visibility cycle and holds it; Dynamic captures only while the chrome is
+  visible; Always keeps capturing even when the chrome is hidden. In all three
+  the blur trails the video by up to 125 ms and is a 320 px-scaled approximation.
+- **Solid has no see-through by design.** The opaque `ChromeSolidBrush` (16 %
+  system accent, dark base `#FF202227` since 1.2.5) is the point of that mode:
+  it never shows the video behind it. Since 1.2.5 the panels do not assign
+  `Background` from code at all - the blur/tint layers are children toggled by
+  `Visibility` - so Solid cannot become translucent.
+- **The OSD card follows the same mode**: glass in 固定 / 动态 / 始终, opaque in
+  Solid, and it never takes input. A Docked layout keeps the titlebar opaque
+  because its video is below the bar, not behind it.
+- `WIINA_BLUR_DISABLE=1` forces the Solid fallback; Win2D/capture failures also
+  degrade to Solid instead of crashing. The last blurred frame can stay visible
+  while playback is paused or the player is idle.
+
+- **Since 1.3.5 the blur is drawn inside the actual video rectangle**, not the
+  whole swap chain: mpv's `osd-dimensions` margins are converted to DIP, and a
+  2 px / 2 % check falls back to a plain aspect-fit rectangle. Bars keep the
+  plain tint, so a tall window with 16:9 content no longer stretches the blur.
+  Limits: 150 % DPI and PiP were not verified, and panscan/zoom with negative
+  margins uses the aspect-fit fallback.
+
+## Live theme switching
+
+- Settings, the quick-settings menu and the player window now apply a theme
+  change immediately in every open window (player titlebar + floating OSC,
+  settings, sidebar, PiP, about, log viewer, inspector, filters, key bindings,
+  welcome, quality editor). `ThemeMode.System` follows the current Windows app
+  theme; the WinUI `ElementTheme.Default` value does not, so the app resolves a
+  concrete dark/light value itself.
+- Limitation: `DesktopAcrylicBackdrop` (Mica/acrylic) window material may lag one
+  paint behind the XAML content on some systems. Switching between light and dark
+  while **High contrast** is on was not visually verified in this cycle.
+- The change is a one-off recolour of the chrome brushes plus a theme push per
+  window; it does not affect measured playback cost.
+
+## Quality presets
+
+- The editor exposes **23 mpv video-quality options** in seven groups (缩放 /
+  色度 / 抖动 / 去色带 / 插帧 / 同步 / 其他). Values are stored as raw mpv
+  strings, so a profile can name an option this build does not know; unknown
+  imported keys are preserved in JSON and shown as “未识别（保留原值）”, but are
+  deliberately **not applied**.
+- Only two built-in presets exist: **默认** and **性能优先**. Legacy names
+  (`自动（IINA 默认）`, `均衡`, `高质量`, enum values `Balanced` /
+  `HighQuality`) normalize to 默认 on import.
+- The **去色带** master switch lives in 设置 → 视频 → 画面 (`video.deband`,
+  default off). The profile deband iterations/threshold/range/grain are always
+  saved but reach mpv only while that switch is on.
+
+## Statistics panel
+
+- The native statistics card is now the only statistics surface; the
+  persistent technical OSD feature was removed in 1.2.4.
+- Its row labels and group names (文件 / 视频 / 音频 / 播放 / 渲染) are fixed
+  Chinese strings; the card title, subtitle and close button are localized.
+- The separate dropped-frame switch still exists and shows a transient
+  `show-text` notice only while the card is closed.
+- The card follows the OSD placement setting; moving it to a corner may
+  overlap other chrome on small windows.
+
+## Edge snapping
+
+- Snapping uses the DWM **visible** frame, queried per window and cached per
+  DPI (`WindowInterop.TryGetFrameMargins`). If the query fails (very old
+  Windows builds, unusual theme hooks) the code falls back to zero margins,
+  which restores the old small-gap behaviour rather than misplacing the window.
+- 10 DIP snap / 22 DIP breakaway, scaled by the monitor DPI. Moving a window
+  across monitors with **different** scale factors was reviewed in code but is
+  still a manual check — the margin cache is keyed by DPI and invalidated on
+  `WM_DPICHANGED`, not exercised as an automated test.
+- Snapping applies to the native titlebar (`WM_MOVING`), the video-area drag,
+  the mini player and PiP. Maximized/fullscreen windows are not snapped.
+
+- **1.3.5** removes the snap jitter: `EdgeSnap.Apply` accepts only the raw
+  proposed rectangle (no `fromApplied`, no accumulated offset), works in integer
+  physical pixels and keeps 10 DIP snap / 22 DIP breakaway. The main window and
+  PiP follow an anchor plus cursor delta, skip `Move` when unchanged, set DWM
+  state only on transitions, and a 16 ms drag pump keeps tracking when pointer
+  capture is lost. Measured with a CSV capture: 0 visible gap on the edge, 35
+  static frames constant, breakaway at 23 px of visible movement.
+- Limits: the snapping measurements are 100 % DPI, single monitor; the 16 ms
+  pump can lag one or two frames on a very slow machine.
+
+## File associations
+
+- Two modes exist. **Per-user** (default, no admin): `HKCU\Software\Classes`
+  ProgIDs, `OpenWithProgids`, Capabilities and `RegisteredApplications`.
+  **Machine-wide** (Settings → File associations → "Associate as
+  administrator…"): relaunches Wiina elevated and writes the same structures
+  under `HKLM\Software\Classes`, then best-effort clears the per-extension
+  `UserChoice`. Both make Wiina an eligible handler; Windows still asks the user
+  to confirm in **Settings → Apps → Default apps**, and defaults may be reset
+  after a feature update.
+- **Wiina never silently takes over a default handler.** The page offers
+  associate video / audio / all, a status line, "在默认应用中确认…", unregister,
+  and the admin action. Dismissing the UAC prompt is handled as a cancellation,
+  not an error loop.
+- Unregister removes only Wiina's own `Wiina.Video` / `Wiina.Audio` ProgIDs,
+  their `OpenWithProgids` values, `RegisteredApplications\Wiina` and
+  `HKCU\Software\Wiina`, in both HKCU and (when removable) HKLM. Other players'
+  registrations are untouched. `UserChoice` is a protected key: if Windows
+  denies the delete, the system default is simply left for the user to change.
+- Machine-wide registration affects every user on the PC; portable copies that
+  move after registering keep stale paths until re-registered or unregistered.
+
+## Installer and portable uninstaller
+
+- The installer is unsigned, so SmartScreen may warn. It installs per user
+  under `%LOCALAPPDATA%\Programs\Wiina` (no administrator needed); a machine-wide
+  install is not offered.
+- The **portable** `Uninstall Wiina.exe` always elevates (`requireAdministrator`
+  in `src/Wiina.Uninstall/app.manifest`). Since 1.3.2 the Inno uninstaller of the
+  installed copy also raises UAC once at launch: `InitializeUninstall` re-launches
+  itself with `runas` and the original instance exits. The old PowerShell
+  elevation helper is gone, and no "uninstall was incomplete" dialog is shown.
+  Declining UAC still removes the HKCU keys and the app folder; HKLM leftovers
+  are written to the log for a later administrator.
+- Any uninstaller prompts before force-closing a running Wiina, always removes
+  both HKCU and HKLM associations, and only asks whether to keep the
+  configuration.
+- The uninstaller asks 「是否保留配置文件？」 and defaults to **keep**; a silent
+  uninstall also keeps settings. Only an explicit “否” (or
+  `--remove-config`) deletes `%LOCALAPPDATA%\Wiina` and `HKCU\Software\Wiina`;
+  associations are removed either way.
+- The portable `Uninstall Wiina.exe` cannot delete its own running image, so it
+  starts a detached batch file that retries for ~30 s. If another process holds
+  a file in the folder (antivirus, an open log), deletion may fail and the exe
+  reports that the folder must be removed manually (exit code 1).
+- The installed copy intentionally does not contain `Uninstall Wiina.exe`;
+  use Settings → Apps → Wiina → Uninstall there.
+
+## Fullscreen frame and drag
+
+- The 1-3 px strip at the top of fullscreen was the WinUI XAML island child
+  window (`Microsoft.UI.Content.DesktopChildSiteBridge`) sitting at (0,1).
+  `WindowInterop.CoverClientArea` covers the client area at startup and after
+  presenter changes, so the first pixel row is video.
+- Dragging the video area in fullscreen returns immediately, `WM_NCHITTEST`
+  answers `HTCLIENT` for the caption band, and the title-bar drag path is
+  suspended while fullscreen, so a drag cannot pull the window out of the
+  presenter.
+
+## Windows 10 title bar
+
+- `AppWindowTitleBar` customization is capability-guarded. On Windows 10 builds
+  where the APIs are unavailable, Wiina keeps the system caption instead of the
+  custom titlebar; the rest of the window still works, but the chrome looks
+  different from Windows 11.
 
 ## HDR
 
@@ -50,6 +551,9 @@ Nothing here is hidden; these are known limitations of the v1 build.
 - The key-binding recorder's status text is not announced automatically.
 - Custom `FontIcon` glyphs are conveyed through the button's automation name,
   not as text.
+- The settings rail: rest and hover are identical (dim), only the selected item
+  is highlighted, and keyboard focus is a 2 px accent ring. This is deliberate;
+  the rail does not change colour on pointer hover.
 
 ## DPI / display / power
 
@@ -62,13 +566,18 @@ Nothing here is hidden; these are known limitations of the v1 build.
 
 ## Packaging / runtime
 
-- Portable, unpackaged app: no auto-update, no MSIX identity, no Store
-  distribution.
+- Portable and installed forms are both unpackaged: no MSIX identity, no Store
+  distribution, no auto-update.
 - x64 only; ARM64 is unverified and not shipped.
 - libmpv is dynamically linked and must match the pinned API level. The
-  packaged build includes `libmpv-2.dll`; replacing it with an incompatible
-  newer mpv may break playback.
-- The packaged executable is unsigned; Windows SmartScreen may warn.
+  packaged build includes `libmpv-2.dll` next to `Wiina.exe`; replacing it with
+  an incompatible newer mpv may break playback.
+- Win2D ships again for the glass modes (`Microsoft.Graphics.Canvas.dll` and
+  `Microsoft.Graphics.Canvas.Interop.dll`); Solid mode does not need it.
+- Both executables are unsigned; Windows SmartScreen may warn.
+- The quality editor window grew to 23 options; its 9 numeric fields are compact
+  `NumberBox` controls with spin buttons (1.2.5 fixed a layout bug where the
+  spinner column was missing and the buttons overlapped the label).
 
 ## Network
 
@@ -81,3 +590,28 @@ Nothing here is hidden; these are known limitations of the v1 build.
 - Startup/memory numbers were measured with synthetic AVI clips (see
   `docs/performance.md`), not a representative codec matrix. Real-world 4K
   HEVC/AV1 files may use more memory/GPU and were not benchmarked here.
+
+## Shutdown path and hang analysis (R1 shipped, R2 implemented)
+
+- Closing now stops UI timers first, saves settings once, detaches the video
+  panel before disposing mpv, stops the statistics refresh while the card is
+  hidden (`MainWindow.xaml.cs` `OnClosed`, 2690+), and calls
+  `ChromeBlur.SetActive(false)` + `ChromeBlur.Shutdown()` (worker joined for up
+  to one second) before the player is disposed, so the 8 Hz screenshot thread
+  can no longer touch a disposed mpv handle.
+- **1.3.2:** close path measured at 170-179 ms (process exit 362-426 ms), one settings save, no watchdog. R2 now has `src/Wiina.Core/Playback/DeviceLoss.cs` (classifies `0x887A0005/0x887A0006/0x887A0007/0x887A0020`, bounded `video-reload` recovery, 2 min window / 5 s cooldown). A real TDR has not been reproduced on hardware, so the recovery is code-verified only.
+- **Still open**: there is no per-event mpv callback detach step
+  (`MpvPlayer.Dispose()` stops its own event thread), and the staging-texture
+  flush buffer described in the task does not exist in the code. The report in
+  [../reports/hang-analysis-1.2.7.md](../reports/hang-analysis-1.2.7.md)
+  recommends these as the next step.
+- The two recorded `AppHangB1` events (1.2.5 and 1.2.6) both occurred during
+  shutdown while the GPU was in a `DXGI_ERROR_DEVICE_REMOVED` loop; no dumps
+  were captured.
+
+## Unsigned downloads
+
+- Neither artifact is code-signed, so SmartScreen and some antivirus heuristics
+  will warn. README explains "More info → Run anyway", unblocking the zip/setup,
+  and how to compare SHA-256 with the acceptance page. A warning means "unknown
+  publisher", not "malware detected".

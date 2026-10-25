@@ -4,7 +4,8 @@
     Builds the portable Wiina v1 package.
 
 .DESCRIPTION
-    Publishes Wiina.App as a self-contained win-x64 Release build into a
+    Publishes Wiina.App as a self-contained win-x64 Release build and the small
+    trimmed, single-file portable uninstaller (src/Wiina.Uninstall) into a
     temporary staging directory under %TEMP%, adds the dynamically linked
     libmpv binary plus license/source files, verifies the required payload,
     and writes artifacts/wiina-<version>-win-x64.zip.
@@ -24,7 +25,7 @@
 [CmdletBinding()]
 param(
     [string]$Configuration = 'Release',
-    [string]$Version = '1.2.2'
+    [string]$Version = '1.3.9'
 )
 
 $ErrorActionPreference = 'Stop'
@@ -33,11 +34,13 @@ Set-StrictMode -Version Latest
 $root = Split-Path -Parent $PSScriptRoot
 $runtime = 'win-x64'
 $project = Join-Path $root 'src\Wiina.App\Wiina.App.csproj'
+$uninstallerProject = Join-Path $root 'src\Wiina.Uninstall\Wiina.Uninstall.csproj'
+$uninstallerExeName = 'Uninstall Wiina.exe'
 $libmpvSource = Join-Path $root 'third_party\libmpv\libmpv-2.dll'
 $artifactsDir = Join-Path $root 'artifacts'
 $archivePath = Join-Path $artifactsDir "wiina-$Version-$runtime.zip"
 $requiredRootFiles = @('LICENSE', 'NOTICE', 'README.md')
-$requiredPayloadFiles = @('Wiina.exe', 'libmpv-2.dll') + $requiredRootFiles + @('SOURCE.txt')
+$requiredPayloadFiles = @('Wiina.exe', 'libmpv-2.dll', $uninstallerExeName) + $requiredRootFiles + @('SOURCE.txt')
 
 $dotnet = Join-Path $env:USERPROFILE '.dotnet\dotnet.exe'
 if (-not (Test-Path -LiteralPath $dotnet)) {
@@ -46,6 +49,9 @@ if (-not (Test-Path -LiteralPath $dotnet)) {
 
 if (-not (Test-Path -LiteralPath $project)) {
     throw "Project not found: $project"
+}
+if (-not (Test-Path -LiteralPath $uninstallerProject)) {
+    throw "Portable uninstaller project not found: $uninstallerProject"
 }
 if (-not (Test-Path -LiteralPath $libmpvSource)) {
     throw "libmpv-2.dll not found at $libmpvSource. Run tools/fetch-libmpv.ps1 first; the binary is intentionally not committed."
@@ -62,6 +68,22 @@ $payloadDir = Join-Path $staging 'payload'
 
 try {
     New-Item -ItemType Directory -Path $payloadDir -Force | Out-Null
+
+    # The portable uninstaller is built first and in isolation: it is tiny,
+    # independent of the WinUI build, and fails fast if src/Wiina.Uninstall is
+    # broken. It is published single-file/trimmed (see its csproj).
+    Write-Host "Publishing $uninstallerProject ($Configuration, $runtime, single-file trimmed)..."
+    $uninstallerDir = Join-Path $staging 'uninstaller'
+    & $dotnet publish $uninstallerProject -c $Configuration -r $runtime --self-contained true `
+        -p:Version=$Version -p:DebugType=None -p:DebugSymbols=false -o $uninstallerDir
+    if ($LASTEXITCODE -ne 0) {
+        throw "Uninstaller publish failed with exit code $LASTEXITCODE"
+    }
+
+    $uninstallerExe = Join-Path $uninstallerDir 'Wiina.Uninstall.exe'
+    if (-not (Test-Path -LiteralPath $uninstallerExe)) {
+        throw "Published uninstaller not found: $uninstallerExe"
+    }
 
     Write-Host "Building $project ($Configuration, $runtime, self-contained)..."
     # Build the exact x64 target we copy below. Without Platform=x64 the build
@@ -93,6 +115,14 @@ try {
     Copy-Item -LiteralPath $libmpvSource -Destination (Join-Path $payloadDir 'libmpv-2.dll') -Force
     foreach ($file in $requiredRootFiles) {
         Copy-Item -LiteralPath (Join-Path $root $file) -Destination (Join-Path $payloadDir $file) -Force
+    }
+
+    # The portable uninstall entry point sits next to Wiina.exe under a
+    # user-facing name; the build output assembly name stays Wiina.Uninstall.
+    Copy-Item -LiteralPath $uninstallerExe -Destination (Join-Path $payloadDir $uninstallerExeName) -Force
+    $uninstallerSize = (Get-Item -LiteralPath (Join-Path $payloadDir $uninstallerExeName)).Length
+    if ($uninstallerSize -lt 1MB) {
+        throw "Packaged $uninstallerExeName looks truncated ($uninstallerSize bytes)."
     }
 
     # Verify the payload we are about to zip, not a sibling build output: an

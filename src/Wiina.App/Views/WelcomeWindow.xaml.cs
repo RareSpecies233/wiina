@@ -29,13 +29,7 @@ public sealed partial class WelcomeWindow : Window
     {
         InitializeComponent();
         Title = Loc.T("welcome.title");
-        bool dark = App.Settings.Theme != ThemeMode.Light;
-        RootGrid.RequestedTheme = App.Settings.Theme switch
-        {
-            ThemeMode.Dark => ElementTheme.Dark,
-            ThemeMode.Light => ElementTheme.Light,
-            _ => ElementTheme.Default,
-        };
+        RootGrid.RequestedTheme = App.ResolveTheme();
 
         WindowShell.Prepare(
             this,
@@ -44,7 +38,7 @@ public sealed partial class WelcomeWindow : Window
             resizable: true,
             extendTitleBar: true,
             titleBar: DragRegion,
-            dark: dark,
+            dark: App.IsDarkTheme,
             minWidth: 480,
             minHeight: 360);
         RestoreWindowBounds();
@@ -168,7 +162,8 @@ public sealed partial class WelcomeWindow : Window
     private void OnAboutClick(object sender, RoutedEventArgs e) => App.ShowAboutWindow();
 
     private void OnSettingsClick(object sender, RoutedEventArgs e) =>
-        App.ShowSettingsWindow(SettingsPageId.General, null);
+        // Plain open: keep the page an already-open settings window is showing.
+        App.ShowSettingsWindow();
 
     private void OnOpenDataFolderClick(object sender, RoutedEventArgs e) =>
         App.OpenFolder(App.DataFolder);

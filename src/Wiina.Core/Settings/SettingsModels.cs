@@ -12,8 +12,8 @@ public enum SettingsPageId
     Control,
     KeyBindings,
     Advanced,
+    Integration,
     Plugin,
-    Utilities,
 }
 
 /// <summary>Static page metadata used by navigation, search and headers.</summary>
@@ -37,6 +37,12 @@ public enum SettingsRowKind
 
     /// <summary>Editable TextBox (string).</summary>
     Text,
+
+    /// <summary>
+    /// ComboBox of the audio output devices libmpv reports (<c>audio-device-list</c>);
+    /// the value is the mpv device name, "auto" meaning "follow the system default".
+    /// </summary>
+    AudioDevice,
 
     /// <summary>Button that runs <see cref="SettingsRowDefinition.ActionId"/>.</summary>
     Action,
@@ -88,6 +94,17 @@ public sealed class SettingsRowDefinition
     /// <summary>Non-null disables the row and explains why (spec §12.3).</summary>
     public string? UnavailableReason { get; init; }
 
+    /// <summary>
+    /// Optional per-settings availability gate for rows that stop making sense in
+    /// some modes (for example "preview while generating" has no meaning while
+    /// slow mode runs as instant preview). The window renders the row enabled iff
+    /// <see cref="IsAvailableFor"/> returns true.
+    /// </summary>
+    public Func<AppSettings, bool>? AvailableWhen { get; init; }
+
+    /// <summary>Reason shown when <see cref="AvailableWhen"/> turns the row off.</summary>
+    public string? ConditionalUnavailableReason { get; init; }
+
     /// <summary>Handler id for <see cref="SettingsRowKind.Action"/>.</summary>
     public string? ActionId { get; init; }
 
@@ -96,6 +113,15 @@ public sealed class SettingsRowDefinition
     public Action<AppSettings, object?>? Set { get; init; }
 
     public bool IsAvailable => string.IsNullOrEmpty(UnavailableReason);
+
+    public bool IsAvailableFor(AppSettings settings) =>
+        IsAvailable && (AvailableWhen?.Invoke(settings) ?? true);
+
+    /// <summary>Why the row is disabled for these settings, or null when it is enabled.</summary>
+    public string? UnavailableReasonFor(AppSettings settings) =>
+        !IsAvailable ? UnavailableReason
+        : AvailableWhen is not null && !AvailableWhen(settings) ? ConditionalUnavailableReason
+        : null;
 
     public object? Value(AppSettings settings) => Get?.Invoke(settings);
 

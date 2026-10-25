@@ -1,0 +1,4 @@
+// Blank mouse cursor used while the chrome is hidden (1x1, fully transparent).
+// Compiled into Wiina.Core.dll as Win32 resources; the runtime loads it through
+// Microsoft.UI.Input.InputDesktopResourceCursor.CreateFromModule("Wiina.Core.dll", 101).
+101 CURSOR "blank-cursor.cur"

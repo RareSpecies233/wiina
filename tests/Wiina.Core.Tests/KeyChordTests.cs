@@ -71,8 +71,10 @@ public sealed class KeyChordTests
                      PlayerActions.Stop,
                      PlayerActions.SeekBack5,
                      PlayerActions.SeekForward5,
-                     PlayerActions.SeekBack1,
-                     PlayerActions.SeekForward1,
+                     PlayerActions.SeekBack15,
+                     PlayerActions.SeekForward15,
+                     PlayerActions.SeekBack600,
+                     PlayerActions.SeekForward600,
                      PlayerActions.VolumeUp5,
                      PlayerActions.VolumeDown5,
                      PlayerActions.VolumeUp1,
@@ -82,20 +84,49 @@ public sealed class KeyChordTests
                      PlayerActions.FrameNext,
                      PlayerActions.SubtitleSeekPrevious,
                      PlayerActions.SubtitleSeekNext,
-                     PlayerActions.Open,
-                     PlayerActions.OpenUrl,
-                     PlayerActions.Settings,
                      PlayerActions.Screenshot,
                      PlayerActions.AbLoop,
+                     PlayerActions.LoopMode,
                      PlayerActions.PlaylistPrevious,
                      PlayerActions.PlaylistNext,
+                     PlayerActions.ChapterPrevious,
+                     PlayerActions.ChapterNext,
                      PlayerActions.SpeedHalf,
                      PlayerActions.SpeedDouble,
+                     PlayerActions.SpeedSlower,
+                     PlayerActions.SpeedFaster,
                      PlayerActions.SpeedReset,
                      PlayerActions.ToggleFullscreen,
-                     PlayerActions.PictureInPicture,
-                     PlayerActions.Sidebar,
-                     PlayerActions.Layout,
+                     PlayerActions.ExitFullscreen,
+                     PlayerActions.EnterFullscreen,
+                     PlayerActions.ToggleTopmost,
+                     PlayerActions.ShowProgress,
+                     PlayerActions.CycleVideo,
+                     PlayerActions.CycleAudio,
+                     PlayerActions.CycleSubtitle,
+                     PlayerActions.CycleEdition,
+                     PlayerActions.VideoPanel,
+                     PlayerActions.AudioPanel,
+                     PlayerActions.SubtitlesPanel,
+                     PlayerActions.PlaylistPanel,
+                     PlayerActions.ChapterPanel,
+                     PlayerActions.SubtitleVisibility,
+                     PlayerActions.SecondarySubtitleVisibility,
+                     PlayerActions.SubtitleScaleIncrease,
+                     PlayerActions.SubtitleScaleDecrease,
+                     PlayerActions.SubtitleDelayDecrease,
+                     PlayerActions.SubtitleDelayIncrease,
+                     PlayerActions.SubtitleDelayReset,
+                     PlayerActions.SubtitlePositionUp,
+                     PlayerActions.SubtitlePositionDown,
+                     PlayerActions.AudioDelayIncrease05,
+                     PlayerActions.AudioDelayDecrease05,
+                     PlayerActions.AudioDelayIncrease01,
+                     PlayerActions.AudioDelayDecrease01,
+                     PlayerActions.AudioDelayReset,
+                     PlayerActions.WindowHalf,
+                     PlayerActions.WindowNormal,
+                     PlayerActions.WindowDouble,
                      PlayerActions.Quit,
                  })
         {
@@ -124,10 +155,10 @@ public sealed class KeyChordTests
     public void LookupReturnsBoundAction()
     {
         KeyMap map = KeyMap.CreateDefault();
-        Assert.True(KeyChord.TryParse("Ctrl+Shift+O", out KeyChord chord));
+        Assert.True(KeyChord.TryParse("Ctrl+Shift+L", out KeyChord chord));
 
         Assert.True(map.TryGetAction(chord, out string? action));
-        Assert.Equal(PlayerActions.OpenUrl, action);
+        Assert.Equal(PlayerActions.LoopMode, action);
     }
 
     [Fact]

@@ -46,6 +46,11 @@ public sealed partial class MainWindow
         host.TabRequested += OnSidebarTabRequested;
         host.PageRequested += (_, page) =>
         {
+            // Quick-settings pages have no inline home of their own: they are
+            // always shown inside the settings slot. The host raises the type
+            // switch first; this guard also covers calls that request a page
+            // while another section is still on screen.
+            EnsureSettingsSlot(host);
             _settings.QuickSettingsPage = page;
             SyncQuickSettingsPage(page);
             ScheduleSettingsSave();
@@ -218,6 +223,7 @@ public sealed partial class MainWindow
             host.SetWidth(_sidebar.Width);
             host.SetType(type);
             host.SetPage(_settings.QuickSettingsPage);
+            host.QuickSettings.SetSpeed(_oscVm.Speed);
             if (host.Visibility != Visibility.Visible)
             {
                 if (animate)
@@ -240,7 +246,32 @@ public sealed partial class MainWindow
             {
                 host.CollapseInstant();
             }
+
+            // The panel still reports Visible at its full width while it slides
+            // out; placing the floating OSC now avoids waiting for the collapse
+            // to release the overlap clamp.
+            ApplyOscPosition();
         }
+    }
+
+    /// <summary>
+    /// Keeps quick-settings pages reachable: if a page request arrives while
+    /// playlist/chapters/plugins is the visible section, switch that slot to
+    /// settings instead of leaving the requested page hidden behind it.
+    /// </summary>
+    private void EnsureSettingsSlot(SidebarHost host)
+    {
+        if (host.Visibility != Visibility.Visible ||
+            _sidebar.TypeFor(host.Side) == SidebarType.Settings)
+        {
+            return;
+        }
+
+        _sidebar.Show(host.Side, SidebarType.Settings);
+        _settings.SidebarSide = host.Side;
+        _settings.SidebarType = SidebarType.Settings;
+        ApplySidebarState(animate: true);
+        SaveSidebarSettings();
     }
 
     /// <summary>Compact/menu path: drop both slots without animating.</summary>
@@ -417,6 +448,18 @@ public sealed partial class MainWindow
     {
         SidebarLeading.QuickSettings.LoadFromSettings(_settings);
         SidebarTrailing.QuickSettings.LoadFromSettings(_settings);
+        SyncQuickSettingsSpeed();
+    }
+
+    /// <summary>
+    /// The playback rate lives in mpv, not in <see cref="AppSettings"/>, so the
+    /// quick-settings speed controls are refreshed from the view-model instead
+    /// of the settings object.
+    /// </summary>
+    private void SyncQuickSettingsSpeed()
+    {
+        SidebarLeading.QuickSettings.SetSpeed(_oscVm.Speed);
+        SidebarTrailing.QuickSettings.SetSpeed(_oscVm.Speed);
     }
 
     // ------------------------------------------------------- playlist actions
@@ -478,8 +521,9 @@ public sealed partial class MainWindow
                 _settings.Theme = (ThemeMode)Math.Clamp((int)e.Number, 0, 2);
                 ApplyTheme();
                 break;
-            case QuickSettingKey.Animations:
-                _settings.AnimationsEnabled = e.Flag;
+            case QuickSettingKey.Speed:
+                SetSpeed(e.Number);
+                SyncQuickSettingsSpeed();
                 break;
             case QuickSettingKey.Layout:
                 _settings.Layout = e.Number >= 1
@@ -501,6 +545,7 @@ public sealed partial class MainWindow
                 break;
             case QuickSettingKey.MpvStats:
                 _settings.ShowMpvStats = e.Flag;
+                ApplyStatsSettings();
                 break;
             case QuickSettingKey.OscPosition:
                 SetOscPosition((OscPosition)Math.Clamp((int)e.Number, 0, 2));
@@ -527,17 +572,6 @@ public sealed partial class MainWindow
                 _settings.OsdDurationSeconds = OsdSettings.ClampDuration(e.Number);
                 Osd.SetDuration(OsdSettings.Duration(_settings.OsdDurationSeconds));
                 break;
-            case QuickSettingKey.OsdPersistent:
-                if (e.Flag)
-                {
-                    ShowPersistentOsd();
-                }
-                else
-                {
-                    ClosePersistentOsd();
-                }
-
-                break;
             case QuickSettingKey.FullscreenClock:
                 _settings.FullscreenClockEnabled = e.Flag;
                 ApplyStage5Settings();
@@ -552,11 +586,10 @@ public sealed partial class MainWindow
                 break;
             case QuickSettingKey.ThumbnailPreview:
                 _settings.ThumbnailPreviewEnabled = e.Flag;
-                if (!e.Flag)
-                {
-                    HideTimePreview();
-                }
-
+                // Route through the same live-apply path as the settings
+                // window so switching off also stops pre-generation, drops
+                // queued jobs and blocks disk writes immediately.
+                ApplySettingsRow("video.thumbnail-preview");
                 break;
             case QuickSettingKey.SidebarSide:
                 MoveSidebarTo(e.Number >= 1 ? SidebarSide.Trailing : SidebarSide.Leading);
@@ -608,6 +641,11 @@ public sealed partial class MainWindow
                 _settings.VideoHardwareDecode = e.Flag;
                 ApplyMpvString("hwdec", EffectiveHwdecValue());
                 ApplyVideoFilters();
+                break;
+            case QuickSettingKey.ScreenshotWithSubtitles:
+                // Read at capture time by CaptureScreenshot/ScreenshotToFolder;
+                // the handler tail persists and notifies the other entry points.
+                _settings.ScreenshotWithSubtitles = e.Flag;
                 break;
             case QuickSettingKey.Zoom:
                 _settings.VideoZoom = QuickSettings.ClampZoom(e.Number);
@@ -762,7 +800,6 @@ public sealed partial class MainWindow
                 _settings.FullscreenBatteryEnabled = true;
                 _settings.FullscreenTitleEnabled = false;
                 _settings.ThumbnailPreviewEnabled = true;
-                ClosePersistentOsd();
                 ApplyStage5Settings();
                 break;
             case "sidebar":
@@ -845,24 +882,25 @@ public sealed partial class MainWindow
 
     private void ApplyQualityPreset()
     {
+        // Debanding is an independent toggle on the Video settings page, so
+        // profiles only keep the legacy flag for JSON round-trip with older
+        // exports; the deband parameters apply only while that master switch is on.
         VideoQualityProfile? custom = _settings.UserQualityProfiles.FirstOrDefault(profile =>
             string.Equals(profile.Name, _settings.ActiveQualityProfile, StringComparison.OrdinalIgnoreCase));
-        (string Scale, string Downscale, string Chroma, string Deband) preset = custom is not null
-            ? (custom.Scale, custom.Dscale, custom.Cscale, custom.Deband ? "yes" : "no")
-            : _settings.VideoQualityPreset switch
-            {
-                VideoQualityPreset.HighQuality =>
-                    ("ewa_lanczossharp", "mitchell", "bilinear", "yes"),
-                VideoQualityPreset.Balanced =>
-                    ("ewa_lanczos", "bilinear", "bilinear", "yes"),
-                VideoQualityPreset.Performance =>
-                    ("bilinear", "bilinear", "bilinear", "no"),
-                _ => ("ewa_lanczos", "mitchell", "bilinear", "yes"),
-            };
-        ApplyMpvString("scale", preset.Scale);
-        ApplyMpvString("dscale", preset.Downscale);
-        ApplyMpvString("cscale", preset.Chroma);
-        ApplyMpvString("deband", preset.Deband);
+        VideoQualityProfile profile = custom ?? _settings.VideoQualityPreset switch
+        {
+            // Legacy Balanced/HighQuality values are kept only so old
+            // settings.json files still deserialize; both behave like the
+            // default built-in profile.
+            VideoQualityPreset.Performance => VideoQualityProfiles.CreatePerformance(),
+            _ => VideoQualityProfiles.CreateDefault(),
+        };
+
+        foreach ((string key, string value) in
+                 VideoQualityProfiles.ToMpvOptions(profile, _settings.DebandEnabled))
+        {
+            ApplyMpvString(key, value);
+        }
     }
 
     private void ApplyMpvString(string name, string value)

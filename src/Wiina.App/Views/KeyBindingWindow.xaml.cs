@@ -19,13 +19,7 @@ public sealed partial class KeyBindingWindow : Window
         InitializeComponent();
         Title = Loc.T("keybindings.windowTitle");
 
-        bool dark = App.Settings.Theme != ThemeMode.Light;
-        RootGrid.RequestedTheme = App.Settings.Theme switch
-        {
-            ThemeMode.Dark => ElementTheme.Dark,
-            ThemeMode.Light => ElementTheme.Light,
-            _ => ElementTheme.Default,
-        };
+        RootGrid.RequestedTheme = App.ResolveTheme();
 
         WindowShell.Prepare(
             this,
@@ -34,14 +28,41 @@ public sealed partial class KeyBindingWindow : Window
             resizable: true,
             extendTitleBar: true,
             titleBar: DragRegion,
-            dark: dark,
+            dark: App.IsDarkTheme,
             minWidth: 760,
             minHeight: 500);
         RestoreWindowBounds();
 
         Editor.AttachWindow(this);
+        AppWindow.Closing += OnAppWindowClosing;
         Loc.LanguageChanged += OnLanguageChanged;
         Closed += OnClosed;
+    }
+
+    private bool _allowClose;
+
+    private async void OnAppWindowClosing(AppWindow sender, AppWindowClosingEventArgs args)
+    {
+        if (_allowClose)
+        {
+            return;
+        }
+
+        args.Cancel = true;
+        try
+        {
+            if (!await Editor.ConfirmCloseAsync())
+            {
+                return;
+            }
+        }
+        catch
+        {
+            // A dialog failure must never trap the user in the window.
+        }
+
+        _allowClose = true;
+        Close();
     }
 
     private void OnLanguageChanged(object? sender, EventArgs e)

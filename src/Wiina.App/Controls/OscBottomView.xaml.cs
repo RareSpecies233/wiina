@@ -1,7 +1,7 @@
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
-using Microsoft.UI.Xaml.Media;
 using Wiina.App.Interop;
+using Wiina.Core.Settings;
 
 namespace Wiina.App.Controls;
 
@@ -15,17 +15,31 @@ public sealed partial class OscBottomView : UserControl
         SizeChanged += OnSizeChanged;
         Loaded += OnLoaded;
         Unloaded += OnUnloaded;
+        ActualThemeChanged += (_, _) => ApplyBlurVisuals();
     }
 
+    public TimelineControl Timeline => InnerTimeline;
+
+    public OscToolbar Toolbar => ToolbarGroup;
+
+    public VolumeSlider Volume => VolumeGroup;
+
     private void OnLoaded(object sender, RoutedEventArgs e)
+    {
+        ChromeBlur.ModeChanged += OnBlurModeChanged;
+        EnsureAttached();
+        ApplyBlurVisuals();
+    }
+
+    private void EnsureAttached()
     {
         if (_blur is not null || XamlRoot is null)
         {
             return;
         }
 
-        // Live blurred frame behind the docked OSC; the acrylic strip stays
-        // until the first blurred frame arrives.
+        // Live blurred frame behind the docked OSC. Until the first frame
+        // arrives, and whenever the mode is Solid, the opaque strip stays.
         if (!ChromeBlur.TryAttach(BackdropBlurHost, 0, out ChromeBlurLayer layer))
         {
             return;
@@ -36,14 +50,33 @@ public sealed partial class OscBottomView : UserControl
         _blur.RaiseFirstFrameIfReady();
     }
 
-    private void OnFirstBlurFrame(object? sender, EventArgs e)
+    private void OnBlurModeChanged(object? sender, EventArgs e)
     {
-        OscAcrylicPanel.Background = null;
-        OscBlurTintLayer.Visibility = Visibility.Visible;
+        EnsureAttached();
+        ApplyBlurVisuals();
+    }
+
+    private void OnFirstBlurFrame(object? sender, EventArgs e) => ApplyBlurVisuals();
+
+    private void ApplyBlurVisuals()
+    {
+        bool live = ChromeBlur.Current.Mode != ChromeBlurMode.Solid;
+        if (_blur is not null)
+        {
+            _blur.Visibility = live ? Visibility.Visible : Visibility.Collapsed;
+        }
+
+        // The blurred frame and its tint are children of the panel, so they
+        // paint over its opaque ChromeSolidBrush; the Background itself is
+        // never touched. Solid therefore cannot lose its paint, and the XAML
+        // ThemeResource binding keeps following theme/accent changes.
+        bool blurred = live && _blur is { HasFrame: true };
+        OscBlurTintLayer.Visibility = blurred ? Visibility.Visible : Visibility.Collapsed;
     }
 
     private void OnUnloaded(object sender, RoutedEventArgs e)
     {
+        ChromeBlur.ModeChanged -= OnBlurModeChanged;
         if (_blur is not null)
         {
             _blur.FirstFrame -= OnFirstBlurFrame;
@@ -51,12 +84,6 @@ public sealed partial class OscBottomView : UserControl
 
         _blur = null;
     }
-
-    public TimelineControl Timeline => InnerTimeline;
-
-    public OscToolbar Toolbar => ToolbarGroup;
-
-    public VolumeSlider Volume => VolumeGroup;
 
     private void OnSizeChanged(object sender, SizeChangedEventArgs e)
     {

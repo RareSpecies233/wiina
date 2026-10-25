@@ -31,6 +31,9 @@ public sealed partial class AppSettings
 
     public bool OscAutoHide { get; set; } = true;
 
+    /// <summary>Idle seconds before the OSC/titlebar fade out (0.5–30).</summary>
+    public double OscAutoHideSeconds { get; set; } = 2.5;
+
     // ---- Stage 5: OSD, status overlays and timeline thumbnails ----
 
     public bool OsdEnabled { get; set; } = true;
@@ -42,9 +45,6 @@ public sealed partial class AppSettings
 
     /// <summary>Hold time before the 0.5 s fade-out.</summary>
     public double OsdDurationSeconds { get; set; } = 1;
-
-    /// <summary>Keep the technical OSD open instead of auto-hiding messages.</summary>
-    public bool OsdPersistent { get; set; }
 
     /// <summary>Fullscreen bottom-left clock.</summary>
     public bool FullscreenClockEnabled { get; set; } = true;
@@ -61,7 +61,60 @@ public sealed partial class AppSettings
 
     public double ThumbnailBucketSeconds { get; set; } = 5;
 
+    /// <summary>
+    /// Legacy compatibility only: the settings UI no longer exposes a cache
+    /// floor because the memory cache always sizes itself to every bucket of
+    /// the playing video (see <c>ThumbnailService.SetSource</c>).
+    /// </summary>
     public int ThumbnailCacheCount { get; set; } = 60;
+
+    /// <summary>Disk budget for pre-generated thumbnails, in megabytes; 0 disables it.</summary>
+    public int ThumbnailCacheMegabytes { get; set; } = 512;
+
+    /// <summary>
+    /// Slow thumbnail mode: one low-priority worker extracts frames one at a
+    /// time and nothing is pre-generated up front, so weak devices stay smooth
+    /// at the cost of a slower first hover.
+    /// </summary>
+    public bool ThumbnailSlowMode { get; set; }
+
+    /// <summary>
+    /// Let the background pass and slow mode seek to the preceding keyframe
+    /// instead of the exact time. mpv decodes from that keyframe either way, so
+    /// this skips the rest of the GOP and makes pre-generation several times
+    /// faster; the frame lands up to one GOP early (a few seconds). Interactive
+    /// hover in pre-generation mode always seeks exactly, and the disk-cache
+    /// format is unchanged. Off by default.
+    /// </summary>
+    public bool ThumbnailKeyframeSeek { get; set; }
+
+    /// <summary>
+    /// Whether timeline thumbnails may use the GPU decoder (libmpv probes the
+    /// driver and falls back on its own) or must always decode on the CPU.
+    /// </summary>
+    public ThumbnailAcceleration ThumbnailAcceleration { get; set; }
+
+    /// <summary>
+    /// Pre-generate the whole file (default) or extract only the hovered frame
+    /// on demand; see <see cref="ThumbnailMode"/>.
+    /// </summary>
+    public ThumbnailMode ThumbnailMode { get; set; }
+
+    /// <summary>
+    /// How long the pointer must rest on a timeline position before an instant
+    /// thumbnail is extracted, so scrubbing across the bar does not queue a
+    /// decode per pixel. Clamped to 0–2000 ms by the settings row and service.
+    /// </summary>
+    public int ThumbnailHoverDelayMs { get; set; } = 250;
+
+    /// <summary>
+    /// Pre-generation mode only: allow hovering to show a ready frame (or extract
+    /// one on demand) while the background pass still walks the file. Off by
+    /// default — matching IINA, previews stay hidden until the pass finished,
+    /// which keeps a weak machine from decoding on two fronts at once. Instant
+    /// mode ignores this flag because it has no background pass.
+    /// </summary>
+    public bool ThumbnailPreviewWhileGenerating { get; set; }
 
     // ---- Quick settings: video (persisted and re-applied on startup) ----
 
@@ -85,6 +138,24 @@ public sealed partial class AppSettings
     public double VideoPanX { get; set; }
 
     public double VideoPanY { get; set; }
+
+    /// <summary>
+    /// What the OSC prev/next buttons do: skip playlist tracks (default) or
+    /// seek inside the current file.
+    /// </summary>
+    public OscPrevNextMode OscPrevNextMode { get; set; } = OscPrevNextMode.TrackSkip;
+
+    /// <summary>
+    /// Include the current subtitle track when saving a screenshot. Off keeps
+    /// only the video frame.
+    /// </summary>
+    public bool ScreenshotWithSubtitles { get; set; } = true;
+
+    /// <summary>
+    /// mpv <c>deband</c> post-processing for the current window. Off by default;
+    /// it stays a global video toggle instead of being part of a scaler profile.
+    /// </summary>
+    public bool DebandEnabled { get; set; }
 
     // ---- Quick settings: audio ----
 
@@ -205,6 +276,12 @@ public sealed partial class AppSettings
 
     /// <summary>Reverse the wheel direction for volume/seek gestures.</summary>
     public bool InvertWheelDirection { get; set; }
+
+    /// <summary>
+    /// Registers SystemMediaTransportControls and handles the keyboard media
+    /// keys; off means Wiina never claims them (other apps stay in charge).
+    /// </summary>
+    public bool MediaKeysEnabled { get; set; } = true;
 
     /// <summary>User key bindings; empty means the documented defaults.</summary>
     public List<KeyBindingSetting> KeyBindings { get; set; } = new();

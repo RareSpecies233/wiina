@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Portable uninstaller manifest (issue 9, item 7).
+
+  The uninstaller always runs elevated: it must remove the HKLM half of Wiina's
+  file associations (created by the app's "associate as administrator" action),
+  clean the loaded hives of the invoking user, and delete a folder under
+  %LOCALAPPDATA%\Programs (or wherever the portable zip was extracted). A
+  requireAdministrator manifest makes UAC ask for consent at launch, which is
+  the "always ask the administrator" requirement; the process itself also checks
+  its token (see NativeMethods.IsElevated) so that running the .dll through
+  `dotnet` - where the manifest is not applied - fails with a clear message
+  instead of half-uninstalling.
+
+  No compatibility GUIDs for older Windows: Wiina requires Windows 10 2004+
+  (net10.0-windows10.0.19041.0), so the Windows 10/11 GUID is the only one.
+-->
+<assembly manifestVersion="1.0" xmlns="urn:schemas-microsoft-com:asm.v1">
+  <assemblyIdentity version="1.0.0.0" name="Wiina.Uninstall.app" />
+
+  <trustInfo xmlns="urn:schemas-microsoft-com:asm.v3">
+    <security>
+      <requestedPrivileges>
+        <requestedExecutionLevel level="requireAdministrator" uiAccess="false" />
+      </requestedPrivileges>
+    </security>
+  </trustInfo>
+
+  <compatibility xmlns="urn:schemas-microsoft-com:compatibility.v1">
+    <application>
+      <!-- Windows 10 and Windows 11 -->
+      <supportedOS Id="{8e0f7a12-bfb3-4fe8-b9a5-48fd50a15a9a}" />
+    </application>
+  </compatibility>
+
+  <application xmlns="urn:schemas-microsoft-com:asm.v3">
+    <windowsSettings>
+      <dpiAwareness xmlns="http://schemas.microsoft.com/SMI/2016/WindowsSettings">permonitorv2,permonitor</dpiAwareness>
+      <longPathAware xmlns="http://schemas.microsoft.com/SMI/2016/WindowsSettings">true</longPathAware>
+    </windowsSettings>
+  </application>
+</assembly>

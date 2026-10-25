@@ -94,6 +94,52 @@ public class ThumbnailCacheTests
     }
 
     [Fact]
+    public void ResizeGrowsWithoutDroppingEntries()
+    {
+        var cache = new ThumbnailCache<string>(capacity: 2, bucketSeconds: 5);
+        cache.Put(0, "a");
+        cache.Put(5, "b");
+
+        IReadOnlyList<string> evicted = cache.Resize(5);
+
+        Assert.Empty(evicted);
+        Assert.Equal(5, cache.Capacity);
+        Assert.Equal(2, cache.Count);
+        Assert.True(cache.TryGet(0, out _));
+    }
+
+    [Fact]
+    public void ResizeShrinksFromTheLeastRecentlyUsedEnd()
+    {
+        var evictedList = new List<string>();
+        var cache = new ThumbnailCache<string>(
+            capacity: 4,
+            bucketSeconds: 5,
+            onEvict: evictedList.Add);
+        cache.Put(0, "a");
+        cache.Put(5, "b");
+        cache.Put(10, "c");
+        cache.Put(15, "d");
+        Assert.True(cache.TryGet(0, out _)); // a becomes most recent
+
+        IReadOnlyList<string> evicted = cache.Resize(2);
+
+        Assert.Equal(new[] { "b", "c" }, evicted);
+        Assert.Equal(new[] { "b", "c" }, evictedList);
+        Assert.Equal(2, cache.Capacity);
+        Assert.Equal(new long[] { 0, 3 }, cache.KeysInLruOrder());
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-1)]
+    public void ResizeMustBePositive(int capacity)
+    {
+        var cache = new ThumbnailCache<string>(capacity: 2);
+        Assert.Throws<ArgumentOutOfRangeException>(() => cache.Resize(capacity));
+    }
+
+    [Fact]
     public void BucketSizeMustBePositive()
     {
         Assert.Throws<ArgumentOutOfRangeException>(

@@ -54,6 +54,13 @@ public enum AppKey
     MediaNext,
     MediaPrevious,
     MediaStop,
+    MediaVolumeUp,
+    MediaVolumeDown,
+    MediaMute,
+    MediaForward,
+    MediaRewind,
+    MediaPower,
+    MediaClose,
 }
 
 /// <summary>
@@ -66,6 +73,22 @@ public readonly record struct KeyChord(AppKey Key, KeyModifiers Modifiers)
 
     public static bool TryParse(
         string? text,
+        [NotNullWhen(true)] out KeyChord chord) =>
+        TryParseCore(text, mpvStyle: false, out chord);
+
+    /// <summary>
+    /// Parses an mpv/input.conf style chord. In mpv syntax a bare uppercase
+    /// letter implies Shift ("P" means Shift+p) and punctuation such as
+    /// <c>&gt;</c>, <c>(</c> or <c>_</c> implies the Shift key needed to type it.
+    /// </summary>
+    public static bool TryParseMpv(
+        string? text,
+        [NotNullWhen(true)] out KeyChord chord) =>
+        TryParseCore(text, mpvStyle: true, out chord);
+
+    private static bool TryParseCore(
+        string? text,
+        bool mpvStyle,
         [NotNullWhen(true)] out KeyChord chord)
     {
         chord = default;
@@ -108,12 +131,19 @@ public readonly record struct KeyChord(AppKey Key, KeyModifiers Modifiers)
             }
         }
 
-        if (!TryParseKey(parts[^1], out AppKey key))
+        string keyToken = parts[^1];
+        if (mpvStyle && keyToken.Length == 1 && keyToken[0] is >= 'A' and <= 'Z')
+        {
+            modifiers |= KeyModifiers.Shift;
+            keyToken = keyToken.ToLowerInvariant();
+        }
+
+        if (!TryParseKey(keyToken, out AppKey key, out KeyModifiers impliedModifiers))
         {
             return false;
         }
 
-        chord = new KeyChord(key, modifiers);
+        chord = new KeyChord(key, modifiers | impliedModifiers);
         return true;
     }
 
@@ -154,12 +184,102 @@ public readonly record struct KeyChord(AppKey Key, KeyModifiers Modifiers)
         return builder.ToString();
     }
 
-    private static bool TryParseKey(string token, out AppKey key)
+    private static bool TryParseKey(
+        string token,
+        out AppKey key,
+        out KeyModifiers impliedModifiers)
     {
         key = AppKey.Unknown;
+        impliedModifiers = KeyModifiers.None;
         if (string.IsNullOrWhiteSpace(token))
         {
             return false;
+        }
+
+        // Shifted punctuation typed on a US layout. The chord names the resulting
+        // character, so record the Shift modifier that produces it.
+        switch (token)
+        {
+            case ">":
+                key = AppKey.Period;
+                impliedModifiers = KeyModifiers.Shift;
+                return true;
+            case "<":
+                key = AppKey.Comma;
+                impliedModifiers = KeyModifiers.Shift;
+                return true;
+            case "(":
+                key = AppKey.D9;
+                impliedModifiers = KeyModifiers.Shift;
+                return true;
+            case ")":
+                key = AppKey.D0;
+                impliedModifiers = KeyModifiers.Shift;
+                return true;
+            case "_":
+                key = AppKey.Minus;
+                impliedModifiers = KeyModifiers.Shift;
+                return true;
+            case "{":
+                key = AppKey.OpenBracket;
+                impliedModifiers = KeyModifiers.Shift;
+                return true;
+            case "}":
+                key = AppKey.CloseBracket;
+                impliedModifiers = KeyModifiers.Shift;
+                return true;
+            case ":":
+                key = AppKey.Semicolon;
+                impliedModifiers = KeyModifiers.Shift;
+                return true;
+            case "\"":
+                key = AppKey.Quote;
+                impliedModifiers = KeyModifiers.Shift;
+                return true;
+            case "?":
+                key = AppKey.Slash;
+                impliedModifiers = KeyModifiers.Shift;
+                return true;
+            case "|":
+                key = AppKey.Backslash;
+                impliedModifiers = KeyModifiers.Shift;
+                return true;
+            case "!":
+                key = AppKey.D1;
+                impliedModifiers = KeyModifiers.Shift;
+                return true;
+            case "@":
+                key = AppKey.D2;
+                impliedModifiers = KeyModifiers.Shift;
+                return true;
+            case "#":
+                key = AppKey.D3;
+                impliedModifiers = KeyModifiers.Shift;
+                return true;
+            case "$":
+                key = AppKey.D4;
+                impliedModifiers = KeyModifiers.Shift;
+                return true;
+            case "%":
+                key = AppKey.D5;
+                impliedModifiers = KeyModifiers.Shift;
+                return true;
+            case "^":
+                key = AppKey.D6;
+                impliedModifiers = KeyModifiers.Shift;
+                return true;
+            case "&":
+                key = AppKey.D7;
+                impliedModifiers = KeyModifiers.Shift;
+                return true;
+            case "*":
+                key = AppKey.D8;
+                impliedModifiers = KeyModifiers.Shift;
+                return true;
+            case "~":
+                key = AppKey.Tilde;
+                impliedModifiers = KeyModifiers.Shift;
+                return true;
         }
 
         string lowered = token.ToLowerInvariant();
@@ -175,7 +295,7 @@ public readonly record struct KeyChord(AppKey Key, KeyModifiers Modifiers)
             "home" => AppKey.Home,
             "end" => AppKey.End,
             "pageup" or "pgup" => AppKey.PageUp,
-            "pagedown" or "pgdn" => AppKey.PageDown,
+            "pagedown" or "pgdn" or "pgdwn" => AppKey.PageDown,
             "left" or "arrowleft" => AppKey.Left,
             "right" or "arrowright" => AppKey.Right,
             "up" or "arrowup" => AppKey.Up,
@@ -200,12 +320,20 @@ public readonly record struct KeyChord(AppKey Key, KeyModifiers Modifiers)
             "slash" => AppKey.Slash,
             "\\" => AppKey.Backslash,
             "backslash" => AppKey.Backslash,
-            "`" or "~" => AppKey.Tilde,
+            "`" => AppKey.Tilde,
             "tilde" => AppKey.Tilde,
-            "mediaplaypause" or "playpause" => AppKey.MediaPlayPause,
-            "medianext" => AppKey.MediaNext,
-            "mediaprevious" or "mediaprev" => AppKey.MediaPrevious,
-            "mediastop" => AppKey.MediaStop,
+            "mediaplaypause" or "playpause" or "play" or "pause" or "playonly" or "pauseonly" =>
+                AppKey.MediaPlayPause,
+            "medianext" or "next" => AppKey.MediaNext,
+            "mediaprevious" or "mediaprev" or "prev" => AppKey.MediaPrevious,
+            "mediastop" or "stop" => AppKey.MediaStop,
+            "forward" => AppKey.MediaForward,
+            "rewind" => AppKey.MediaRewind,
+            "volume_up" or "volumeup" or "volup" => AppKey.MediaVolumeUp,
+            "volume_down" or "volumedown" or "voldown" => AppKey.MediaVolumeDown,
+            "mute" => AppKey.MediaMute,
+            "power" => AppKey.MediaPower,
+            "close_win" or "closewin" => AppKey.MediaClose,
             _ => ParseLetterDigitOrFunction(lowered),
         };
 

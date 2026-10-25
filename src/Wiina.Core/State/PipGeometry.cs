@@ -19,6 +19,24 @@ public static class PipGeometry
 
     public const double AspectRatio = 16.0 / 9.0;
 
+    /// <summary>
+    /// mpv render/composition size for a window of
+    /// <paramref name="pixelWidth"/>×<paramref name="pixelHeight"/> physical
+    /// pixels. This is the full, unscaled window pixel size: the mini/PiP window
+    /// must look exactly as sharp as the main window and only saves cost by
+    /// dropping the heavy UI chrome, never by rendering into a low-resolution
+    /// buffer that the compositor then upscales (issue 7).
+    /// </summary>
+    public static (int Width, int Height) RenderSize(int pixelWidth, int pixelHeight)
+    {
+        if (pixelWidth <= 0 || pixelHeight <= 0)
+        {
+            return (1, 1);
+        }
+
+        return (pixelWidth, pixelHeight);
+    }
+
     /// <summary>Height implied by a 16:9 width.</summary>
     public static double HeightForWidth(double width) => width / AspectRatio;
 

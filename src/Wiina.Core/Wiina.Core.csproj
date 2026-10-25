@@ -1,9 +1,23 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="Input\wiina-defaults.conf" />
+  </ItemGroup>
+
+  <!--
+    Win32 cursor resource (RT_GROUP_CURSOR id 101) for the hidden-cursor mode.
+    The .NET apphost (Wiina.exe) cannot carry a Win32 cursor next to its
+    ApplicationIcon, so the blank cursor lives in this managed module and is
+    loaded with InputDesktopResourceCursor.CreateFromModule("Wiina.Core.dll", 101).
+  -->
+  <PropertyGroup>
+    <Win32Resource>Resources\blank-cursor.res</Win32Resource>
   </PropertyGroup>
 
 </Project>

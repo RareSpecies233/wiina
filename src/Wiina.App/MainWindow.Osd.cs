@@ -5,14 +5,15 @@ using Microsoft.UI.Dispatching;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Media.Animation;
 using Microsoft.UI.Xaml.Media.Imaging;
 using Windows.Foundation;
-using Windows.Graphics;
 using Wiina.App.Controls;
 using Wiina.App.Services;
 using Wiina.Core.Models;
 using Wiina.App.Localization;
 using Wiina.Core.Osd;
+using Wiina.Core.Playback;
 using Wiina.Core.Settings;
 using Wiina.Core.State;
 using Wiina.Core.Text;
@@ -27,9 +28,12 @@ namespace Wiina.App;
 public sealed partial class MainWindow
 {
     private readonly OsdQueue _osdQueue = new();
+    private readonly ThumbnailHoverState _thumbnailHover = new();
     private ThumbnailService? _thumbnailService;
     private CancellationTokenSource? _thumbnailCts;
     private long _thumbnailRequest;
+    private string? _thumbnailPregenPath;
+    private bool _thumbnailSourceHooked;
     private TimelineControl? _previewTimeline;
     private double _previewRatio;
     private double _previewPointerX;
@@ -47,12 +51,11 @@ public sealed partial class MainWindow
     private bool _openingStream;
     private string? _streamTarget;
     private DispatcherQueueTimer? _fullscreenInfoTimer;
+    private DispatcherQueueTimer? _frameDropNoticeTimer;
     private DateTimeOffset _lastBatterySample;
     private int? _batteryPercent;
     private bool _batteryCharging;
     private bool _onAcPower;
-    private SizeInt32? _persistentSavedSize;
-    private SizeInt32? _persistentGrownSize;
 
     private bool IsFullscreen => AppWindow.Presenter.Kind == AppWindowPresenterKind.FullScreen;
 
@@ -62,8 +65,12 @@ public sealed partial class MainWindow
         Osd.SetScale(_settings.OsdSizePercent);
         Osd.SetDuration(OsdSettings.Duration(_settings.OsdDurationSeconds));
         Osd.SetAnimationsEnabled(AnimationsEnabled);
-        Osd.PersistentCloseRequested += ClosePersistentOsd;
-        Osd.PersistentVisibilityChanged += OnPersistentVisibilityChanged;
+
+        // The statistics card shares RootGrid's element-level theme; mirroring
+        // it like OsdText keeps its ThemeResource brushes from keeping the
+        // app-theme values used at construction (issue 6 dark-mode text).
+        StatsPanel.RequestedTheme = RootGrid.RequestedTheme;
+        RootGrid.ActualThemeChanged += (_, _) => StatsPanel.RequestedTheme = RootGrid.ActualTheme;
 
         FullscreenStatus.Configure(
             _settings.FullscreenClockEnabled,
@@ -75,12 +82,13 @@ public sealed partial class MainWindow
         _fullscreenInfoTimer.IsRepeating = true;
         _fullscreenInfoTimer.Tick += (_, _) => UpdateFullscreenStatus();
 
+        _frameDropNoticeTimer = DispatcherQueue.CreateTimer();
+        _frameDropNoticeTimer.Interval = FrameDropNoticeSeconds;
+        _frameDropNoticeTimer.IsRepeating = false;
+        _frameDropNoticeTimer.Tick += (_, _) => HideFrameDropNotice();
+
         UpdateOsdPlacement();
         UpdateFullscreenStatus();
-        if (_settings.OsdPersistent)
-        {
-            DispatcherQueue.TryEnqueue(ShowPersistentOsd);
-        }
     }
 
     private void ApplyStage5Settings()
@@ -95,18 +103,82 @@ public sealed partial class MainWindow
             _settings.FullscreenTitleEnabled);
         UpdateOsdPlacement();
         UpdateFullscreenStatus();
+        ApplyStatsSettings();
     }
 
     private void ShowOsd(OsdMessage message)
     {
         OsdQueueResult result = _osdQueue.Enqueue(message);
-        if (!Osd.IsPersistentShowing)
-        {
-            Osd.Show(message);
-        }
-
+        Osd.Show(message);
         UpdateOsdPlacement();
         Trace($"OSD [{message.Kind}] coalesced={result.Coalesced}");
+    }
+
+    // ------------------------------------------------------ frame-drop notice
+
+    /// <summary>How long the frame-drop card stays fully visible.</summary>
+    private static readonly TimeSpan FrameDropNoticeSeconds = TimeSpan.FromSeconds(2.2);
+
+    /// <summary>
+    /// Shows a drop burst as a native card in the middle of the picture. The
+    /// previous implementation asked mpv to render it with `show-text`, but on
+    /// this libmpv build the ASS positioning prefix was printed literally and
+    /// the text landed in the top-left corner (shown behind the title bar).
+    /// This card is unaffected by the OSD position setting and never overlaps
+    /// the OSD/counter layout.
+    /// </summary>
+    private void ShowFrameDropNotice(FrameDropNotice notice)
+    {
+        if (FrameDropNotice.Visibility != Visibility.Visible)
+        {
+            FrameDropNoticeText.Text = notice.Describe();
+            FrameDropNotice.Visibility = Visibility.Visible;
+        }
+        else
+        {
+            // A second burst while the card is still up: refresh the text and
+            // restart the dwell so the user gets the full reading time.
+            FrameDropNoticeText.Text = notice.Describe();
+        }
+
+        FrameDropNotice.Opacity = 1;
+        _frameDropNoticeTimer?.Stop();
+        _frameDropNoticeTimer?.Start();
+        Trace(
+            $"[frame-drop] notice {notice.PerMinute:0}/min drops={notice.Drops}" +
+            $" window={notice.Seconds:0.##} card=center");
+    }
+
+    private void HideFrameDropNotice()
+    {
+        _frameDropNoticeTimer?.Stop();
+        if (FrameDropNotice.Visibility != Visibility.Visible)
+        {
+            return;
+        }
+
+        if (!AnimationsEnabled || FrameDropNotice.XamlRoot is null)
+        {
+            FrameDropNotice.Opacity = 0;
+            FrameDropNotice.Visibility = Visibility.Collapsed;
+            return;
+        }
+
+        var storyboard = new Storyboard();
+        var fade = new DoubleAnimation
+        {
+            To = 0,
+            Duration = new Duration(TimeSpan.FromMilliseconds(180)),
+        };
+        Storyboard.SetTarget(fade, FrameDropNotice);
+        Storyboard.SetTargetProperty(fade, "Opacity");
+        storyboard.Children.Add(fade);
+        storyboard.Completed += (_, _) =>
+        {
+            FrameDropNotice.Visibility = Visibility.Collapsed;
+            FrameDropNotice.Opacity = 0;
+        };
+        storyboard.Begin();
     }
 
     private string ShortStreamName(string? path)
@@ -138,6 +210,40 @@ public sealed partial class MainWindow
     // ------------------------------------------------------------ OSD geometry
 
     private void UpdateOsdPlacement()
+    {
+        (double top, double bottom, double right, double left) = OverlayInsets();
+
+        OsdPosition position = _settings.OsdPosition;
+        bool topPosition = OsdPositions.IsTop(position);
+        bool leftPosition = OsdPositions.IsLeft(position);
+        bool centered = OsdPositions.IsCenter(position);
+        HorizontalAlignment horizontal = centered
+            ? HorizontalAlignment.Center
+            : leftPosition
+                ? HorizontalAlignment.Left
+                : HorizontalAlignment.Right;
+        VerticalAlignment vertical = topPosition
+            ? VerticalAlignment.Top
+            : VerticalAlignment.Bottom;
+
+        Osd.HorizontalAlignment = horizontal;
+        Osd.VerticalAlignment = vertical;
+        Osd.Margin = new Thickness(
+            centered ? 8 : leftPosition ? left : 0,
+            topPosition ? top : 0,
+            centered ? 8 : leftPosition ? 0 : right,
+            topPosition ? 0 : bottom);
+        Osd.SetAlignment(horizontal, vertical);
+
+        UpdateStatsPlacement(top, bottom, right, left);
+    }
+
+    /// <summary>
+    /// Insets shared by the overlay cards (OSD and statistics): bottom-anchored
+    /// cards stay clear of the OSC and top-anchored cards clear of the title bar
+    /// or top OSC; fullscreen drops the chrome allowances.
+    /// </summary>
+    private (double Top, double Bottom, double Right, double Left) OverlayInsets()
     {
         double bottom = 8;
         double top = 8;
@@ -183,27 +289,34 @@ public sealed partial class MainWindow
             bottom = Math.Max(bottom, 48);
         }
 
+        return (top, bottom, right, left);
+    }
+
+    /// <summary>
+    /// Places the statistics card on the same six OSD positions and with the
+    /// same insets, so it respects the OSD position setting and never covers
+    /// the OSC or title bar (issue 6).
+    /// </summary>
+    private void UpdateStatsPlacement(double top, double bottom, double right, double left)
+    {
         OsdPosition position = _settings.OsdPosition;
         bool topPosition = OsdPositions.IsTop(position);
         bool leftPosition = OsdPositions.IsLeft(position);
         bool centered = OsdPositions.IsCenter(position);
-        HorizontalAlignment horizontal = centered
+
+        StatsPanel.HorizontalAlignment = centered
             ? HorizontalAlignment.Center
             : leftPosition
                 ? HorizontalAlignment.Left
                 : HorizontalAlignment.Right;
-        VerticalAlignment vertical = topPosition
+        StatsPanel.VerticalAlignment = topPosition
             ? VerticalAlignment.Top
             : VerticalAlignment.Bottom;
-
-        Osd.HorizontalAlignment = horizontal;
-        Osd.VerticalAlignment = vertical;
-        Osd.Margin = new Thickness(
+        StatsPanel.Margin = new Thickness(
             centered ? 8 : leftPosition ? left : 0,
             topPosition ? top : 0,
             centered ? 8 : leftPosition ? 0 : right,
             topPosition ? 0 : bottom);
-        Osd.SetAlignment(horizontal, vertical);
     }
 
     private bool OsdCoversTimeline()
@@ -382,112 +495,6 @@ public sealed partial class MainWindow
             : $" · {kilo / 1024:0.0} MB/s";
     }
 
-    // ---------------------------------------------------------- persistent OSD
-
-    private void TogglePersistentOsd()
-    {
-        if (Osd.IsPersistentShowing)
-        {
-            ClosePersistentOsd();
-            return;
-        }
-
-        ShowPersistentOsd();
-    }
-
-    private void ShowPersistentOsd()
-    {
-        _settings.OsdPersistent = true;
-        GrowWindowForPersistentOsd();
-
-        var details = new List<(string Label, string Value)>
-        {
-            (Loc.T("osd.status"), _oscVm.IsPlaying ? Loc.T("osd.play") : _oscVm.Position > 0 ? Loc.T("osd.pause") : Loc.T("osd.idle")),
-            (Loc.T("osd.position"), $"{TimeFormatter.Format(_oscVm.Position)} / {TimeFormatter.Format(_oscVm.Duration)}"),
-            (Loc.T("osd.labelVolume"), $"{Math.Round(_oscVm.Volume)}%" + (_oscVm.IsMuted ? Loc.T("osd.mutedSuffix") : string.Empty)),
-            (Loc.T("osd.labelSpeed"), $"{_oscVm.Speed:0.##}x"),
-            (Loc.T("osd.labelVideo"), _videoWidth > 0 && _videoHeight > 0
-                ? $"{_videoWidth}×{_videoHeight} · {_videoAspect:0.###}:1"
-                : Loc.T("osd.videoNotLoaded")),
-            (Loc.T("osd.labelAudioOutput"), string.IsNullOrWhiteSpace(_currentAudioDevice)
-                ? Loc.T("osd.auto")
-                : _currentAudioDevice),
-            (Loc.T("osd.labelFile"), _currentPath ?? "—"),
-        };
-
-        TrackInfo? audio = _trackList.FirstOrDefault(
-            track => track.Type == TrackType.Audio && track.IsSelected);
-        TrackInfo? subtitle = _trackList.FirstOrDefault(
-            track => track.Type == TrackType.Subtitle && track.IsSelected);
-        if (audio is not null)
-        {
-            details.Add((Loc.T("osd.labelAudioTrack"), audio.DisplayName));
-        }
-
-        details.Add((Loc.T("osd.labelSubtitle"), subtitle?.DisplayName ?? Loc.T("menu.off")));
-
-        string body = Loc.T("osd.persistentBody");
-
-        Osd.ShowPersistent(_currentTitle ?? Loc.T("osd.technicalInfo"), _currentPath, details, body);
-        SyncQuickSettingsValues();
-        SaveSettings();
-    }
-
-    private void ClosePersistentOsd()
-    {
-        _settings.OsdPersistent = false;
-        Osd.HidePersistent();
-        RestoreWindowAfterPersistentOsd();
-        SyncQuickSettingsValues();
-        SaveSettings();
-    }
-
-    private void OnPersistentVisibilityChanged(bool visible)
-    {
-        if (!visible)
-        {
-            RestoreWindowAfterPersistentOsd();
-        }
-    }
-
-    private void GrowWindowForPersistentOsd()
-    {
-        if (_persistentGrownSize is not null)
-        {
-            return;
-        }
-
-        SizeInt32 size = AppWindow.Size;
-        if (size.Width >= 560 && size.Height >= 360)
-        {
-            return;
-        }
-
-        _persistentSavedSize = size;
-        int width = Math.Max(560, size.Width);
-        int height = Math.Max(360, size.Height);
-        AppWindow.Resize(new SizeInt32(width, height));
-        _persistentGrownSize = new SizeInt32(width, height);
-    }
-
-    private void RestoreWindowAfterPersistentOsd()
-    {
-        if (_persistentGrownSize is not { } grown || _persistentSavedSize is not { } saved)
-        {
-            return;
-        }
-
-        if (AppWindow.Size is { } current &&
-            current.Width == grown.Width &&
-            current.Height == grown.Height)
-        {
-            AppWindow.Resize(saved);
-        }
-
-        _persistentGrownSize = null;
-        _persistentSavedSize = null;
-    }
-
     // -------------------------------------------------------- time preview UX
 
     private async void RequestThumbnailAsync(double seconds)
@@ -497,6 +504,7 @@ public sealed partial class MainWindow
             !File.Exists(_currentPath) ||
             _videoWidth <= 0)
         {
+            _thumbnailHover.Clear();
             ThumbnailPeek.Hide();
             return;
         }
@@ -508,11 +516,16 @@ public sealed partial class MainWindow
 
         try
         {
-            ThumbnailFrame? frame = await GetThumbnailService().GetAsync(
+            var hoverClock = System.Diagnostics.Stopwatch.StartNew();
+            ThumbnailResult result = await GetThumbnailService().GetAsync(
                 _currentPath,
                 seconds,
+                _oscVm.Duration,
                 90,
                 cts.Token);
+            Trace(
+                $"thumbnail hover {seconds:0.0}s resolved in " +
+                $"{hoverClock.ElapsedMilliseconds} ms ({result.Outcome})");
             if (cts.IsCancellationRequested ||
                 request != _thumbnailRequest ||
                 !ThumbnailPeek.IsShowing ||
@@ -521,12 +534,37 @@ public sealed partial class MainWindow
                 return;
             }
 
-            if (frame is null)
+            ThumbnailHoverPhase phase = _thumbnailHover.Complete(result.Outcome);
+            if (result.Frame is null)
             {
-                ThumbnailPeek.Hide();
+                ThumbnailDisplaySize(out double emptyWidth, out double emptyHeight);
+                switch (phase)
+                {
+                    case ThumbnailHoverPhase.Unavailable:
+                        // The policy forbids previews: never keep a stale frame
+                        // of this file on screen behind a black backplate.
+                        ThumbnailPeek.ShowEmpty(
+                            TimeFormatter.Format(seconds),
+                            emptyWidth,
+                            emptyHeight);
+                        break;
+                    case ThumbnailHoverPhase.Empty:
+                        ThumbnailPeek.ShowEmpty(
+                            TimeFormatter.Format(seconds),
+                            emptyWidth,
+                            emptyHeight);
+                        break;
+                    default:
+                        // Pending / Showing / Updated: the previous frame (or
+                        // ring) stays, the new position only updates the label.
+                        break;
+                }
+
+                PositionThumbnail();
                 return;
             }
 
+            ThumbnailFrame frame = result.Frame;
             var bitmap = new WriteableBitmap(frame.Width, frame.Height);
             using (Stream stream = bitmap.PixelBuffer.AsStream())
             {
@@ -548,6 +586,7 @@ public sealed partial class MainWindow
         catch (Exception ex)
         {
             Trace("thumbnail request failed: " + ex.Message);
+            _thumbnailHover.Clear();
             ThumbnailPeek.Hide();
         }
         finally
@@ -558,11 +597,144 @@ public sealed partial class MainWindow
         }
     }
 
-    private ThumbnailService GetThumbnailService() =>
-        _thumbnailService ??= new ThumbnailService(
-            Math.Clamp(_settings.ThumbnailCacheCount, 1, 240),
-            Math.Clamp(_settings.ThumbnailBucketSeconds, 1, 30),
-            Trace);
+    /// <summary>Card size used by the hover bubble (empty/pending states).</summary>
+    private void ThumbnailDisplaySize(out double width, out double height)
+    {
+        width = Math.Clamp(_settings.ThumbnailWidth, 80, 320);
+        double aspect = _videoAspect > 0 ? _videoAspect : 16.0 / 9.0;
+        height = Math.Clamp(width / aspect, 45, 220);
+    }
+
+    private ThumbnailService GetThumbnailService()
+    {
+        if (_thumbnailService is null)
+        {
+            _thumbnailService = new ThumbnailService(
+                Math.Clamp(_settings.ThumbnailCacheCount, 1, 240),
+                Math.Clamp(_settings.ThumbnailBucketSeconds, 1, 30),
+                Trace,
+                Path.Combine(App.DataFolder, "thumbnails"),
+                Math.Clamp(_settings.ThumbnailCacheMegabytes, 0, 4096),
+                _settings.ThumbnailSlowMode,
+                _settings.ThumbnailAcceleration);
+            _thumbnailService.SetPreviewEnabled(_settings.ThumbnailPreviewEnabled);
+            _thumbnailService.SetMode(_settings.ThumbnailMode);
+            _thumbnailService.SetHoverDelayMilliseconds(_settings.ThumbnailHoverDelayMs);
+            _thumbnailService.SetPreviewWhileGenerating(
+                _settings.ThumbnailPreviewWhileGenerating);
+            _thumbnailService.SetKeyframeSeek(_settings.ThumbnailKeyframeSeek);
+        }
+
+        return _thumbnailService;
+    }
+
+    /// <summary>
+    /// Sizes the in-memory thumbnail cache for the file that just opened and,
+    /// unless slow mode is on, warms it by walking the timeline on the service's
+    /// background worker. Runs once per file and stops as soon as another file
+    /// starts loading.
+    /// </summary>
+    private void StartThumbnailPreGeneration()
+    {
+        if (!_settings.ThumbnailPreviewEnabled)
+        {
+            // Preview off means no thumbnail work at all: no cache sizing, no
+            // pre-generation task and no headless mpv instance (see also
+            // ThumbnailService.PreviewEnabled, which re-checks every request).
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(_currentPath) || IsUrlPath(_currentPath))
+        {
+            return;
+        }
+
+        EnsureThumbnailLifecycleHook();
+
+        double duration = _player?.GetPropertyDouble("duration") ?? 0;
+        if (duration <= 0)
+        {
+            // The duration property arrives after FileLoaded; retry from the
+            // property handler once it is known.
+            return;
+        }
+
+        ThumbnailService service = GetThumbnailService();
+
+        // Instant mode only ever extracts the frame under the pointer, so it
+        // skips the whole-file cache sizing as well: no pre-generation task, no
+        // extra resident capacity, and no disk-cache traffic. Source tracking
+        // happens on the first hover (ThumbnailService.GetAsync re-syncs it).
+        if (_settings.ThumbnailMode == ThumbnailMode.Instant)
+        {
+            return;
+        }
+
+        // Memory is sized for the whole file even when the walk is skipped
+        // (slow mode); hovering then fills a cache that never evicts mid-file.
+        service.SetSource(_currentPath, duration);
+
+        if (!ThumbnailPolicy.AllowsPreGeneration(
+                _settings.ThumbnailPreviewEnabled,
+                _settings.ThumbnailSlowMode,
+                _settings.ThumbnailCacheMegabytes,
+                _settings.ThumbnailMode)
+            || string.Equals(
+                _thumbnailPregenPath,
+                _currentPath,
+                StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        _thumbnailPregenPath = _currentPath;
+        service.StartPreGeneration(_currentPath, duration, 90);
+    }
+
+    /// <summary>
+    /// Watches mpv for the end of a source (<c>idle-active</c>, or an empty
+    /// <c>path</c>) so closing the file releases the memory frames immediately
+    /// instead of keeping the last video's buckets resident. Hooking here keeps
+    /// the playback file untouched.
+    /// </summary>
+    private void EnsureThumbnailLifecycleHook()
+    {
+        if (_thumbnailSourceHooked || _player is null)
+        {
+            return;
+        }
+
+        _thumbnailSourceHooked = true;
+
+        // A stop command makes mpv idle; the file's path is no longer current.
+        _player.FlagPropertyChanged += (name, value) =>
+        {
+            if (value && string.Equals(name, "idle-active", StringComparison.Ordinal))
+            {
+                DispatcherQueue.TryEnqueue(StopThumbnailPreGeneration);
+            }
+        };
+
+        // An unavailable path is reported as an empty string on some builds.
+        _player.StringPropertyChanged += (name, value) =>
+        {
+            if (string.Equals(name, "path", StringComparison.Ordinal) &&
+                string.IsNullOrEmpty(value))
+            {
+                DispatcherQueue.TryEnqueue(StopThumbnailPreGeneration);
+            }
+        };
+    }
+
+    private void StopThumbnailPreGeneration()
+    {
+        _thumbnailPregenPath = null;
+        // The bubble may still show a frame of the file that just ended; a new
+        // file must never inherit it (plan §3.5: cleared when the file changes).
+        _thumbnailHover.ClearFrame();
+        _thumbnailService?.ClearSource();
+        _thumbnailService?.StopPreGeneration();
+    }
 
     private void PositionThumbnail()
     {
@@ -616,9 +788,12 @@ public sealed partial class MainWindow
     {
         _fullscreenInfoTimer?.Stop();
         _fullscreenInfoTimer = null;
+        _frameDropNoticeTimer?.Stop();
+        _frameDropNoticeTimer = null;
         _thumbnailCts?.Cancel();
         _thumbnailCts?.Dispose();
         _thumbnailCts = null;
+        _thumbnailPregenPath = null;
         _thumbnailService?.Dispose();
         _thumbnailService = null;
         ThumbnailPeek.Hide();
