@@ -19,6 +19,8 @@ python -m http.server 8080 --directory site
 
 ## 维护
 
-- 截图位于 `assets/`，以 WebP 提供；更新界面后替换同名文件即可。
+- 截图位于 `assets/`，以 WebP 提供；更新界面后替换同名文件即可（`hero`、`osc`、`osc-thumb`、`settings`、`settings-search`、`keybindings`、`quality`、`welcome`、`stats`）。
+- 页面支持深浅色切换：默认跟随系统，导航栏按钮可手动切换并记忆；`?theme=light` / `?theme=dark` 便于截图与分享。
 - 下载按钮指向 `releases/latest` 与固定资产名；发新版本时同步修改 `index.html` 中的版本号与两个资产文件名，并更新 `assets/og.png` 的文案。
 - 页面文案与 README 保持同一口径；事实性数字（测试数、设置行数）以当版验收页为准。
+- 样式走 Fluent 风格（亚克力卡片、圆角、重点色、`prefers-reduced-motion`），新增组件请复用 `styles.css` 顶部的设计令牌。
