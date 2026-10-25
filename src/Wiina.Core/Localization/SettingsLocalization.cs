@@ -42,13 +42,14 @@ public static class SettingsLocalization
         ["ui.fullscreen-battery"] = new("Fullscreen battery", "Show battery and charging state in the bottom-left corner in fullscreen.", null),
         ["ui.fullscreen-title"] = new("Show title in fullscreen", "Include the current media title in the bottom-left status line.", null),
         ["video.thumbnail-preview"] = new("Timeline thumbnails", "Show a time preview and video frame when hovering the progress bar.", null),
-        ["video.thumbnail-mode"] = new("Thumbnail generation mode", "Pre-generate (recommended) walks the whole timeline in the background so hovering answers almost instantly; Instant never pre-generates and never writes the disk cache, decoding only the hovered time point after a short delay, which keeps disk and CPU use minimal.", new[] { "Pre-generate (recommended)", "Instant preview" }),
-        ["video.thumbnail-hover-delay"] = new("Thumbnail hover delay", "Instant preview only: how long the pointer must rest on the progress bar before decoding starts (0–2000 ms, step 50). Scrubbing across the bar only generates the position where it stops.", null),
-        ["video.thumbnail-preview-while-generating"] = new("Preview while generating", "Off (default, matching IINA): hover shows no preview and triggers no on-demand decoding until the whole timeline has been generated. On: previews are allowed while pre-generation is still running. Instant preview has no whole-file pass, so this switch does not apply to it.", null),
+        ["video.thumbnail-mode"] = new("Thumbnail generation mode", "Pre-generate (recommended) walks the whole timeline in the background so hovering answers almost instantly; Instant never pre-generates, decodes only the hovered time point after a short delay and keeps disk and CPU use minimal. Slow mode always runs as instant preview; turning it off restores this choice.", new[] { "Pre-generate (recommended)", "Instant preview" }),
+        ["video.thumbnail-hover-delay"] = new("Thumbnail hover delay", "Instant preview and slow mode: how long the pointer must rest on the progress bar before decoding starts (0–2000 ms, step 50). Scrubbing across the bar only generates the position where it stops.", null),
+        ["video.thumbnail-preview-while-generating"] = new("Preview while generating", "Off (default, matching IINA): hover shows no preview and triggers no on-demand decoding until the whole timeline has been generated. On: previews are allowed while pre-generation is still running. Instant preview and slow mode have no whole-file pass, so this switch does not apply to them.", null),
         ["video.thumbnail-width"] = new("Thumbnail width", "80–320 DIP; height follows the video aspect.", null),
         ["video.thumbnail-bucket"] = new("Thumbnail interval", "Cache buckets per second; larger saves memory but is less precise.", null),
         ["video.thumbnail-cache-mb"] = new("Thumbnail disk cache", "Disk budget in megabytes; 0 disables the cache, and least-recently-used frames are evicted when the limit is exceeded.", null),
-        ["video.thumbnail-slow"] = new("Slow thumbnail mode (single core)", "Generate frames one at a time on a single low-priority worker and never pre-generate a whole file; weak devices stay responsive at the cost of a slower first hover.", null),
+        ["video.thumbnail-slow"] = new("Slow thumbnail mode (single core)", "Generate frames one at a time on a single low-priority worker and never pre-generate a whole file; weak devices stay responsive. Hovering runs as instant preview in this mode (the first decode is slower, cached frames answer fast); turning it off restores the selected generation mode.", null),
+        ["video.thumbnail-keyframe-seek"] = new("Keyframe seek for pre-generation", "When on, the background pass and slow mode seek to the preceding keyframe instead of the exact time. mpv decodes from that keyframe either way, so this skips the rest of the GOP and makes pre-generation several times faster; frames can be a few seconds earlier than their label. Normal hover previews always seek exactly, and the disk-cache format is unchanged.", null),
         ["video.thumbnail-acceleration"] = new("Thumbnail hardware acceleration", "Auto decodes thumbnails on the GPU when the hardware decoder works and lets libmpv fall back to software decoding otherwise; \"CPU only\" forces software decoding for drivers that produce corrupted frames.", new[] { "Auto (recommended)", "CPU only" }),
         ["video.thumbnail-hint"] = new("Pre-generation heads-up", "After a file opens, Wiina walks the whole timeline in the background to fill the thumbnail cache. On weak devices that can steal CPU and cause brief stutter — turn on \"Slow thumbnail mode (single core)\" if it happens.", null),
         ["video.thumbnail-cache-clear"] = new("Clear thumbnail cache", "Delete cached thumbnails on disk and in memory, then report the freed space.", null),
@@ -233,6 +234,8 @@ public static class SettingsLocalization
                 "yt-dlp 解析在 Stage 10 接入。" => "yt-dlp resolution arrives in Stage 10.",
                 "插件加载、权限与 Info.json 解析尚未实现（Stage 9）。" =>
                     "Plugin loading, permissions, and Info.json parsing are not implemented (Stage 9).",
+                "慢速模式或即时预览没有全片生成过程，此项不适用。" =>
+                    "Slow mode and instant preview have no whole-file pass, so this option does not apply.",
                 _ => reason,
             }
             : reason;

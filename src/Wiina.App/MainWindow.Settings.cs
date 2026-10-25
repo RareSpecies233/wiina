@@ -188,8 +188,11 @@ public sealed partial class MainWindow
                     _settings.ThumbnailPreviewWhileGenerating);
                 break;
             case "video.thumbnail-slow":
-                // Live apply: slow mode turns off whole-file pre-generation and                // throttles the single extraction worker; hover still reads the
-                // memory/disk caches, so nothing reloads.
+                // Live apply: slow mode turns off whole-file pre-generation and
+                // throttles the single extraction worker; hover still reads the
+                // memory/disk caches, so nothing reloads. It also switches the
+                // effective mode to instant preview (hover delay + disk cache),
+                // which is what makes the first hover usable on a weak device.
                 _thumbnailService?.SetSlowMode(_settings.ThumbnailSlowMode);
                 if (_settings.ThumbnailSlowMode)
                 {
@@ -200,6 +203,11 @@ public sealed partial class MainWindow
                     StartThumbnailPreGeneration();
                 }
 
+                break;
+            case "video.thumbnail-keyframe-seek":
+                // Live apply: only the background pass and slow mode read it, the
+                // next queued job picks the cheaper seek up automatically.
+                _thumbnailService?.SetKeyframeSeek(_settings.ThumbnailKeyframeSeek);
                 break;
             case "video.thumbnail-acceleration":
                 // Live apply: the extraction worker rebuilds its headless mpv

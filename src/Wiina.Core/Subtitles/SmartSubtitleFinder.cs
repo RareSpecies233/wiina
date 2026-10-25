@@ -139,6 +139,7 @@ public static class SmartSubtitleFinder
 
         SubtitleLanguage preferred = SubtitleLanguagePreferences.ToLanguage(preferredLanguage);
         var candidates = new List<SubtitleCandidate>();
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (string file in files)
         {
             string extension = Path.GetExtension(file);
@@ -179,6 +180,13 @@ public static class SmartSubtitleFinder
             bool assFonts = tokens.Any(
                 token => string.Equals(token, "assfonts", StringComparison.OrdinalIgnoreCase));
 
+            // Never list the same file twice even if a future matcher learns a
+            // second spelling for it.
+            if (!seen.Add(file))
+            {
+                continue;
+            }
+
             candidates.Add(new SubtitleCandidate(
                 file,
                 language,
@@ -189,7 +197,10 @@ public static class SmartSubtitleFinder
 
         candidates.Sort((left, right) =>
         {
-            int compare = left.IsAssFonts.CompareTo(right.IsAssFonts);
+            // assfonts carries its fonts inside the file, so it renders correctly
+            // without anything installed; it is preferred first while the plain
+            // variant stays selectable right behind it.
+            int compare = right.IsAssFonts.CompareTo(left.IsAssFonts);
             if (compare != 0)
             {
                 return compare;
@@ -222,6 +233,79 @@ public static class SmartSubtitleFinder
     /// <summary>True when the suffix belongs to the video (exact base or dotted suffix).</summary>
     public static bool IsSidecarOf(string? videoBaseName, string? subtitleStem) =>
         SidecarSuffix(videoBaseName, subtitleStem) is not null;
+
+    /// <summary>
+    /// True when <paramref name="subtitleStem"/> is a sidecar of the same episode:
+    /// either the video's dotted suffix, or a loose match that keeps every title and
+    /// episode token of the video. A similar name from another episode ([02] vs [01])
+    /// is rejected. Used both by <see cref="Find"/> and by callers that need to test a
+    /// single file.
+    /// </summary>
+    public static bool IsSameEpisode(string? videoBaseName, string? subtitleStem) =>
+        MatchSuffix(videoBaseName, subtitleStem) is not null;
+
+    /// <summary>
+    /// Maps the name mpv reports for an external subtitle track (the full file name,
+    /// the <c>external-filename</c> property, or the short title libmpv derives such as
+    /// <c>chs.ass</c>) back to one of the candidates so an already loaded sidecar is
+    /// reused instead of loaded a second time.
+    /// </summary>
+    public static SubtitleCandidate? MatchTrack(
+        IReadOnlyList<SubtitleCandidate>? candidates,
+        string? trackFileOrTitle)
+    {
+        if (candidates is null || candidates.Count == 0 || string.IsNullOrWhiteSpace(trackFileOrTitle))
+        {
+            return null;
+        }
+
+        string name;
+        try
+        {
+            name = Path.GetFileName(trackFileOrTitle.Trim());
+        }
+        catch (Exception ex) when (ex is ArgumentException or NotSupportedException or PathTooLongException)
+        {
+            return null;
+        }
+
+        if (string.IsNullOrEmpty(name))
+        {
+            return null;
+        }
+
+        foreach (SubtitleCandidate candidate in candidates)
+        {
+            if (string.Equals(candidate.FileName, name, StringComparison.OrdinalIgnoreCase))
+            {
+                return candidate;
+            }
+        }
+
+        // libmpv titles external tracks with the language suffix only ("chs.ass"), so a
+        // candidate whose name ends with the reported name is the same file.
+        foreach (SubtitleCandidate candidate in candidates)
+        {
+            if (name.Length > 3 &&
+                candidate.FileName.EndsWith(name, StringComparison.OrdinalIgnoreCase))
+            {
+                return candidate;
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>Sidecar suffix text, or null when the file belongs to another video.</summary>
+    private static string? MatchSuffix(string? videoBaseName, string? subtitleStem)
+    {
+        if (string.IsNullOrEmpty(videoBaseName) || string.IsNullOrEmpty(subtitleStem))
+        {
+            return null;
+        }
+
+        return SidecarSuffix(videoBaseName, subtitleStem) ?? FuzzySuffix(videoBaseName, subtitleStem);
+    }
 
     /// <summary>Classifies language tokens such as chs/sc/zh-Hans/tc/en.</summary>
     public static SubtitleLanguage ClassifyTokens(IEnumerable<string>? tokens)

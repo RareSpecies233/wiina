@@ -19,6 +19,21 @@ public sealed record ThumbnailFrame(
     double Time);
 
 /// <summary>
+/// Outcome of a hover thumbnail request. <see cref="ThumbnailOutcome.Pending"/>
+/// means "still working, keep what is on screen", which used to be
+/// indistinguishable from "not allowed" and made the overlay flash empty.
+/// </summary>
+public readonly record struct ThumbnailResult(ThumbnailOutcome Outcome, ThumbnailFrame? Frame)
+{
+    public static ThumbnailResult NotAllowed => new(ThumbnailOutcome.NotAllowed, null);
+
+    public static ThumbnailResult Pending => new(ThumbnailOutcome.Pending, null);
+
+    public static ThumbnailResult FromFrame(ThumbnailFrame frame) =>
+        new(ThumbnailOutcome.Frame, frame);
+}
+
+/// <summary>
 /// Background thumbnail generator for the timeline hover peek. A second,
 /// headless libmpv instance seeks the same file, captures <c>screenshot-raw</c>
 /// and scales it before returning. The UI thread never performs file IO or
@@ -59,10 +74,12 @@ public sealed class ThumbnailService : IDisposable
     private volatile bool _instantMode;
     private volatile int _hoverDelayMs = ThumbnailPolicy.DefaultHoverDelayMilliseconds;
     private volatile bool _previewWhileGenerating;
+    private volatile bool _keyframeSeek;
     private readonly ThumbnailPreGenerationTracker _pregen = new();
     private bool _restartPlayer;
     private bool _loggedDecodePath;
     private bool _loggedHoverGate;
+    private bool _loggedKeyframeSeek;
     private bool _disposed;
 
     public ThumbnailService(
@@ -359,7 +376,12 @@ public sealed class ThumbnailService : IDisposable
     /// </summary>
     public ThumbnailMode Mode
     {
-        get => _instantMode ? ThumbnailMode.Instant : ThumbnailMode.PreGenerate;
+        // Slow mode runs the service as instant preview without touching the
+        // persisted setting: everything downstream (hover gate, disk policy,
+        // pre-generation skip) then behaves exactly like instant preview.
+        get => _instantMode || _slowMode
+            ? ThumbnailMode.Instant
+            : ThumbnailMode.PreGenerate;
         set
         {
             bool instant = value == ThumbnailMode.Instant;
@@ -377,7 +399,8 @@ public sealed class ThumbnailService : IDisposable
 
             Log?.Invoke(
                 instant
-                    ? "thumbnail mode: instant (no pre-generation, no disk cache)"
+                    ? "thumbnail mode: instant preview (no whole-file pass" +
+                      (_slowMode ? ", slow mode keeps the disk cache)" : ")")
                     : "thumbnail mode: pre-generation");
             try
             {
@@ -418,6 +441,33 @@ public sealed class ThumbnailService : IDisposable
         HoverDelayMilliseconds = milliseconds;
 
     /// <summary>
+    /// Seek to the previous keyframe instead of the exact time, for the
+    /// background pass and slow mode only. mpv decodes from the preceding
+    /// keyframe either way, so an exact seek pays for decoding between the
+    /// keyframe and the requested time; a keyframe seek skips that work. The
+    /// frame is then at most one GOP early (a few seconds on a long-GOP
+    /// release). Interactive hover in pre-generation mode always stays exact,
+    /// and the on-disk cache format is unchanged.
+    /// </summary>
+    public bool KeyframeSeek
+    {
+        get => _keyframeSeek;
+        set
+        {
+            if (_keyframeSeek == value)
+            {
+                return;
+            }
+
+            _keyframeSeek = value;
+            Log?.Invoke($"thumbnail seek mode: {(value ? "keyframe (background)" : "exact")}");
+        }
+    }
+
+    /// <summary>Live-apply entry point used by the settings window.</summary>
+    public void SetKeyframeSeek(bool enabled) => KeyframeSeek = enabled;
+
+    /// <summary>
     /// Instant mode keeps at most one pending hover job: a queued job was
     /// requested for a position the pointer already left. The worker's in-flight
     /// job still finishes (its frame is valid and lands in the memory cache).
@@ -451,10 +501,14 @@ public sealed class ThumbnailService : IDisposable
     /// Requests a thumbnail for <paramref name="seconds"/>. Concurrent requests
     /// for the same source/time share one extraction. The memory cache answers
     /// immediately, the disk cache answers after an IO hop, and anything else is
-    /// queued on the single extraction worker. Stale callers are expected to
-    /// ignore the result (the UI cancels its own request token).
+    /// queued on the single extraction worker.
+    ///
+    /// The result distinguishes "still working" from "not allowed" so the hover
+    /// overlay can keep the previous frame instead of flashing empty on every
+    /// pointer move (v1.3.8 plan §3.4). Stale callers are expected to ignore the
+    /// result (the UI cancels its own request token).
     /// </summary>
-    public async Task<ThumbnailFrame?> GetAsync(
+    public async Task<ThumbnailResult> GetAsync(
         string? mediaPath,
         double seconds,
         double durationSeconds,
@@ -467,7 +521,7 @@ public sealed class ThumbnailService : IDisposable
             || cancellationToken.IsCancellationRequested
             || !IsLocalFile(mediaPath))
         {
-            return null;
+            return ThumbnailResult.NotAllowed;
         }
 
         if (!background)
@@ -477,9 +531,9 @@ public sealed class ThumbnailService : IDisposable
 
         // Pre-generation mode hides previews until the pass finished (IINA's
         // thumbnailsReady behaviour) unless the user opted into previewing while
-        // the file is still being walked. Returning null here also keeps the
-        // hover path from reading the disk cache or queueing an extraction, so a
-        // fresh file is never decoded twice at once. Background jobs are the
+        // the file is still being walked. Reporting "not allowed" here also keeps
+        // the hover path from reading the disk cache or queueing an extraction, so
+        // a fresh file is never decoded twice at once. Background jobs are the
         // pass itself and must never be blocked.
         if (!background
             && !ThumbnailPolicy.AllowsHoverPreview(
@@ -495,7 +549,7 @@ public sealed class ThumbnailService : IDisposable
                     mediaPath);
             }
 
-            return null;
+            return ThumbnailResult.NotAllowed;
         }
 
         // Hover requests can arrive before (or without) a pre-generation pass;
@@ -507,10 +561,10 @@ public sealed class ThumbnailService : IDisposable
 
         if (_cache.TryGet(seconds, out ThumbnailFrame cached))
         {
-            return cached;
+            return ThumbnailResult.FromFrame(cached);
         }
 
-        bool instantHover = _instantMode && !background;
+        bool instantHover = Mode == ThumbnailMode.Instant && !background;
         if (instantHover)
         {
             // Wait for the pointer to settle before decoding. The UI cancels the
@@ -525,13 +579,13 @@ public sealed class ThumbnailService : IDisposable
                 }
                 catch (OperationCanceledException)
                 {
-                    return null;
+                    return ThumbnailResult.Pending;
                 }
             }
 
             if (!_previewEnabled || cancellationToken.IsCancellationRequested)
             {
-                return null;
+                return ThumbnailResult.NotAllowed;
             }
 
             // A previous hover position is stale by definition once a newer one
@@ -545,7 +599,7 @@ public sealed class ThumbnailService : IDisposable
 
         if (_disk is not null
             && durationSeconds > 0
-            && ThumbnailPolicy.AllowsDiskCache(Mode))
+            && ThumbnailPolicy.AllowsDiskCache(Mode, _slowMode))
         {
             var diskClock = Stopwatch.StartNew();
             ThumbnailFrame? diskFrame = await TryReadDiskAsync(
@@ -561,7 +615,7 @@ public sealed class ThumbnailService : IDisposable
                 Log?.Invoke(
                     $"thumbnail {bucketTime:0.0}s from disk in " +
                     $"{diskClock.Elapsed.TotalMilliseconds:0} ms");
-                return diskFrame;
+                return ThumbnailResult.FromFrame(diskFrame);
             }
         }
 
@@ -569,11 +623,14 @@ public sealed class ThumbnailService : IDisposable
         {
             // Switched off while the disk read above was in flight; do not queue
             // an extraction that nobody will display.
-            return null;
+            return ThumbnailResult.NotAllowed;
         }
 
         Job job = GetOrCreateJob(mediaPath!, bucketTime, durationSeconds, height, background);
-        return await job.Completion.Task.WaitAsync(cancellationToken).ConfigureAwait(false);
+        ThumbnailFrame? frame = await job.Completion.Task
+            .WaitAsync(cancellationToken)
+            .ConfigureAwait(false);
+        return frame is null ? ThumbnailResult.Pending : ThumbnailResult.FromFrame(frame);
     }
 
     private Job GetOrCreateJob(
@@ -607,6 +664,11 @@ public sealed class ThumbnailService : IDisposable
                 Height = height,
                 Bucket = bucket,
                 Background = background,
+
+                // Exact seeks on the interactive path; slow mode and the
+                // background pass may jump to the preceding keyframe when the
+                // setting (or slow mode itself) asks for the cheaper path.
+                Keyframes = (background || _slowMode) && (_keyframeSeek || _slowMode),
             };
             _jobs[id] = job;
             InsertLocked(job);
@@ -635,10 +697,19 @@ public sealed class ThumbnailService : IDisposable
             return;
         }
 
-        if (_instantMode)
+        if (Mode == ThumbnailMode.Instant)
         {
-            // Instant preview never walks the timeline. Queued hover positions
-            // from the previous mode are stale, so drop them too.
+            // Instant preview never walks the timeline. Slow mode is instant
+            // preview too, but it still sizes the per-file memory cache so
+            // hovering later is not a cold miss on every position.
+            if (_slowMode)
+            {
+                SetSource(mediaPath, durationSeconds);
+                _pregen.MarkComplete(mediaPath);
+            }
+
+            // Queued hover positions from the previous mode are stale, so drop
+            // them too.
             CancelPendingHoverJobsLocked();
             return;
         }
@@ -755,14 +826,14 @@ public sealed class ThumbnailService : IDisposable
                     continue;
                 }
 
-                ThumbnailFrame? frame = await GetAsync(
+                ThumbnailResult result = await GetAsync(
                     path,
                     seconds,
                     duration,
                     height,
                     ct,
                     background: true).ConfigureAwait(false);
-                if (frame is not null)
+                if (result.Frame is not null)
                 {
                     extracted++;
                 }
@@ -981,7 +1052,7 @@ public sealed class ThumbnailService : IDisposable
             return null;
         }
 
-        await SeekAsync(player, job.Seconds).ConfigureAwait(false);
+        await SeekAsync(player, job.Seconds, job.Keyframes).ConfigureAwait(false);
         MpvScreenshot? shot = Capture(player);
         ThumbnailFrame? frame = shot is null ? null : Scale(shot, job.Seconds, job.Height);
         if (frame is null)
@@ -1019,9 +1090,17 @@ public sealed class ThumbnailService : IDisposable
         if (_previewEnabled
             && _disk is not null
             && job.Duration > 0
-            && ThumbnailPolicy.AllowsDiskCache(Mode))
+            && ThumbnailPolicy.AllowsDiskCache(Mode, _slowMode))
         {
             await WriteDiskAsync(job, frame).ConfigureAwait(false);
+        }
+
+        if (job.Keyframes && !_loggedKeyframeSeek)
+        {
+            _loggedKeyframeSeek = true;
+            Log?.Invoke(
+                "thumbnail seek: keyframe (background pass and slow-mode hover); " +
+                "pre-generation hover in normal mode stays exact");
         }
 
         // Pre-generation extracts hundreds of frames; only log the interactive
@@ -1029,7 +1108,8 @@ public sealed class ThumbnailService : IDisposable
         if (!job.Background)
         {
             Log?.Invoke(
-                $"thumbnail {job.Seconds:0.0}s extracted in {extractedMs} ms");
+                $"thumbnail {job.Seconds:0.0}s extracted in {extractedMs} ms" +
+                (job.Keyframes ? " (keyframe)" : string.Empty));
         }
 
         return frame;
@@ -1110,21 +1190,51 @@ public sealed class ThumbnailService : IDisposable
         }
     }
 
-    private static async Task SeekAsync(MpvPlayer player, double seconds)
+    private static async Task SeekAsync(MpvPlayer player, double seconds, bool keyframes)
     {
         player.CommandAsync("set", "pause", "yes");
-        player.CommandAsync(
-            "seek",
-            seconds.ToString("0.###", CultureInfo.InvariantCulture),
-            "absolute",
-            "exact");
+        double before = player.GetPropertyDouble("time-pos");
+        bool sawSeeking = false;
+        if (keyframes)
+        {
+            // "absolute+keyframes" stops at the preceding keyframe: mpv decodes
+            // from it anyway, so this skips the whole GOP between the keyframe
+            // and the requested time. The frame is at most one GOP early.
+            player.CommandAsync(
+                "seek",
+                seconds.ToString("0.###", CultureInfo.InvariantCulture),
+                "absolute+keyframes");
+        }
+        else
+        {
+            player.CommandAsync(
+                "seek",
+                seconds.ToString("0.###", CultureInfo.InvariantCulture),
+                "absolute",
+                "exact");
+        }
 
         for (int i = 0; i < 120; i++)
         {
             await Task.Delay(20).ConfigureAwait(false);
             double position = player.GetPropertyDouble("time-pos");
             bool seeking = player.GetPropertyFlag("seeking");
-            if (!seeking && Math.Abs(position - seconds) < 0.75)
+            if (keyframes)
+            {
+                // A keyframe seek settles on a position before the requested
+                // time, so "close to seconds" is not a valid completion test.
+                // Wait until mpv reports the seek as started and finished.
+                if (seeking)
+                {
+                    sawSeeking = true;
+                }
+
+                if (!seeking && (sawSeeking || Math.Abs(position - before) > 0.05))
+                {
+                    break;
+                }
+            }
+            else if (!seeking && Math.Abs(position - seconds) < 0.75)
             {
                 break;
             }
@@ -1568,6 +1678,10 @@ public sealed class ThumbnailService : IDisposable
         public int Height { get; init; }
         public long Bucket { get; init; }
         public bool Background { get; set; }
+
+        /// <summary>Seek to the preceding keyframe instead of the exact time.</summary>
+        public bool Keyframes { get; init; }
+
         public TaskCompletionSource<ThumbnailFrame?> Completion { get; } =
             new(TaskCreationOptions.RunContinuationsAsynchronously);
     }

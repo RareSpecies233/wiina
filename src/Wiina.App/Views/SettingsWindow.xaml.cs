@@ -39,7 +39,7 @@ public sealed partial class SettingsWindow : Window
     private static readonly Color TransparentColor = Color.FromArgb(0x00, 0, 0, 0);
 
     private readonly List<(SettingsPageId Page, Button Button)> _navButtons = new();
-    private readonly List<(SettingsRowDefinition Row, Action Refresh, Border Container)> _rowWidgets = new();
+    private readonly List<(SettingsRowDefinition Row, Action Refresh, Border Container, Action<bool> SetAvailable)> _rowWidgets = new();
     private readonly List<(string Section, FrameworkElement Element)> _sectionHeaders = new();
 
     private SettingsPageId _currentPage = SettingsPageId.General;
@@ -111,7 +111,7 @@ public sealed partial class SettingsWindow : Window
                 return;
             }
 
-            foreach ((SettingsRowDefinition row, Action refreshRow, Border _) in _rowWidgets)
+            foreach ((SettingsRowDefinition row, Action refreshRow, Border _, Action<bool> _) in _rowWidgets)
             {
                 if (row.Kind == SettingsRowKind.AudioDevice)
                 {
@@ -393,7 +393,7 @@ public sealed partial class SettingsWindow : Window
 
     private void HighlightRow(string rowId)
     {
-        foreach ((SettingsRowDefinition row, Action refresh, Border container) in _rowWidgets)
+        foreach ((SettingsRowDefinition row, Action refresh, Border container, Action<bool> _) in _rowWidgets)
         {
             if (!string.Equals(row.Id, rowId, StringComparison.Ordinal))
             {
@@ -460,11 +460,14 @@ public sealed partial class SettingsWindow : Window
         string description = row.Id == "control.keybindings"
             ? Loc.T("settings.keyBindingsHint")
             : SettingsLocalization.Description(row, Loc.CurrentLanguage);
-        if (!row.IsAvailable)
+        bool available = row.IsAvailableFor(App.Settings);
+        if (!available)
         {
             description += "\n" + Loc.F(
                 "settings.unavailable",
-                SettingsLocalization.UnavailableReason(row.UnavailableReason ?? string.Empty, Loc.CurrentLanguage));
+                SettingsLocalization.UnavailableReason(
+                    row.UnavailableReasonFor(App.Settings) ?? string.Empty,
+                    Loc.CurrentLanguage));
         }
 
         textStack.Children.Add(new TextBlock
@@ -482,22 +485,27 @@ public sealed partial class SettingsWindow : Window
         Grid.SetColumn(control, 2);
         grid.Children.Add(control);
 
-        if (!row.IsAvailable)
+        // Availability can change with other settings (for example the
+        // thumbnail preview-while-generating row is disabled while slow
+        // thumbnail mode is on), so the refresh pass re-evaluates it.
+        void SetAvailable(bool canUse)
         {
-            container.Opacity = 0.55;
-            if (control is Control disabled)
+            container.Opacity = canUse ? 1 : 0.55;
+            if (control is Control current)
             {
-                disabled.IsEnabled = false;
+                current.IsEnabled = canUse;
             }
             else
             {
-                control.IsHitTestVisible = false;
+                control.IsHitTestVisible = canUse;
             }
         }
 
+        SetAvailable(available);
+
         container.Child = grid;
         PagePanel.Children.Add(container);
-        _rowWidgets.Add((row, refresh, container));
+        _rowWidgets.Add((row, refresh, container, SetAvailable));
     }
 
     private FrameworkElement BuildControl(SettingsRowDefinition row, out Action refresh)
@@ -918,9 +926,10 @@ public sealed partial class SettingsWindow : Window
         _loading = true;
         try
         {
-            foreach ((SettingsRowDefinition _, Action refresh, Border _) in _rowWidgets)
+            foreach ((SettingsRowDefinition row, Action refresh, Border _, Action<bool> setAvailable) in _rowWidgets)
             {
                 refresh();
+                setAvailable(row.IsAvailableFor(App.Settings));
             }
         }
         finally

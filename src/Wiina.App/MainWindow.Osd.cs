@@ -28,6 +28,7 @@ namespace Wiina.App;
 public sealed partial class MainWindow
 {
     private readonly OsdQueue _osdQueue = new();
+    private readonly ThumbnailHoverState _thumbnailHover = new();
     private ThumbnailService? _thumbnailService;
     private CancellationTokenSource? _thumbnailCts;
     private long _thumbnailRequest;
@@ -503,6 +504,7 @@ public sealed partial class MainWindow
             !File.Exists(_currentPath) ||
             _videoWidth <= 0)
         {
+            _thumbnailHover.Clear();
             ThumbnailPeek.Hide();
             return;
         }
@@ -515,7 +517,7 @@ public sealed partial class MainWindow
         try
         {
             var hoverClock = System.Diagnostics.Stopwatch.StartNew();
-            ThumbnailFrame? frame = await GetThumbnailService().GetAsync(
+            ThumbnailResult result = await GetThumbnailService().GetAsync(
                 _currentPath,
                 seconds,
                 _oscVm.Duration,
@@ -523,7 +525,7 @@ public sealed partial class MainWindow
                 cts.Token);
             Trace(
                 $"thumbnail hover {seconds:0.0}s resolved in " +
-                $"{hoverClock.ElapsedMilliseconds} ms");
+                $"{hoverClock.ElapsedMilliseconds} ms ({result.Outcome})");
             if (cts.IsCancellationRequested ||
                 request != _thumbnailRequest ||
                 !ThumbnailPeek.IsShowing ||
@@ -532,12 +534,37 @@ public sealed partial class MainWindow
                 return;
             }
 
-            if (frame is null)
+            ThumbnailHoverPhase phase = _thumbnailHover.Complete(result.Outcome);
+            if (result.Frame is null)
             {
-                ThumbnailPeek.Hide();
+                ThumbnailDisplaySize(out double emptyWidth, out double emptyHeight);
+                switch (phase)
+                {
+                    case ThumbnailHoverPhase.Unavailable:
+                        // The policy forbids previews: never keep a stale frame
+                        // of this file on screen behind a black backplate.
+                        ThumbnailPeek.ShowEmpty(
+                            TimeFormatter.Format(seconds),
+                            emptyWidth,
+                            emptyHeight);
+                        break;
+                    case ThumbnailHoverPhase.Empty:
+                        ThumbnailPeek.ShowEmpty(
+                            TimeFormatter.Format(seconds),
+                            emptyWidth,
+                            emptyHeight);
+                        break;
+                    default:
+                        // Pending / Showing / Updated: the previous frame (or
+                        // ring) stays, the new position only updates the label.
+                        break;
+                }
+
+                PositionThumbnail();
                 return;
             }
 
+            ThumbnailFrame frame = result.Frame;
             var bitmap = new WriteableBitmap(frame.Width, frame.Height);
             using (Stream stream = bitmap.PixelBuffer.AsStream())
             {
@@ -559,6 +586,7 @@ public sealed partial class MainWindow
         catch (Exception ex)
         {
             Trace("thumbnail request failed: " + ex.Message);
+            _thumbnailHover.Clear();
             ThumbnailPeek.Hide();
         }
         finally
@@ -567,6 +595,14 @@ public sealed partial class MainWindow
             {
             }
         }
+    }
+
+    /// <summary>Card size used by the hover bubble (empty/pending states).</summary>
+    private void ThumbnailDisplaySize(out double width, out double height)
+    {
+        width = Math.Clamp(_settings.ThumbnailWidth, 80, 320);
+        double aspect = _videoAspect > 0 ? _videoAspect : 16.0 / 9.0;
+        height = Math.Clamp(width / aspect, 45, 220);
     }
 
     private ThumbnailService GetThumbnailService()
@@ -586,6 +622,7 @@ public sealed partial class MainWindow
             _thumbnailService.SetHoverDelayMilliseconds(_settings.ThumbnailHoverDelayMs);
             _thumbnailService.SetPreviewWhileGenerating(
                 _settings.ThumbnailPreviewWhileGenerating);
+            _thumbnailService.SetKeyframeSeek(_settings.ThumbnailKeyframeSeek);
         }
 
         return _thumbnailService;
@@ -692,6 +729,9 @@ public sealed partial class MainWindow
     private void StopThumbnailPreGeneration()
     {
         _thumbnailPregenPath = null;
+        // The bubble may still show a frame of the file that just ended; a new
+        // file must never inherit it (plan §3.5: cleared when the file changes).
+        _thumbnailHover.ClearFrame();
         _thumbnailService?.ClearSource();
         _thumbnailService?.StopPreGeneration();
     }

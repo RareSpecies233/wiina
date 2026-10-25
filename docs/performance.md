@@ -1,8 +1,8 @@
-# Performance measurements (v1.3.8)
+# Performance measurements (v1.3.9)
 
 Measured on the development machine on 2026-10-19 (Asia/Hong_Kong), at v1.0.0.
 The numbers below are the historical baseline; they were **not** re-measured
-for 1.2.4 through 1.3.8 (see the per-version notes below for
+for 1.2.4 through 1.3.9 (see the per-version notes below for
 the known deltas). Numbers are what
 this machine produced; they are not universal guarantees.
 
@@ -70,6 +70,23 @@ scenarios (peak 265.7 MB at 4K). Private bytes exceed 300 MB at 4K because the
 GPU/driver surfaces and the video swapchain are charged to the process; this is
 reported honestly rather than trimmed by a smaller measurement window.
 
+## What changed in 1.3.9
+
+- Mini/PiP park the chrome blur worker: while a small window owns the video
+  there is no 125 ms `screenshot-raw` and no Win2D pass. The main window's
+  titlebar renders the opaque solid brush instead of a stale frame.
+- Keyframe seek for the background pass: the verification trace shows
+  **208 ms per extracted frame** for the keyframe path; the frame may be up to
+  one GOP early. Interactive hover still seeks exactly and pays the exact cost.
+- Slow mode now runs as instant preview: no whole-file pass, disk hits measured
+  at **26-29 ms**, memory hits at 0 ms. The first cold hover is slower than a
+  warm pre-generation hit, which is the documented trade-off.
+- Pending hover requests no longer reset the bubble or re-decode the same
+  bucket; the trace shows **~124 ms Pending** and **244-483 ms Frame** while
+  scrubbing.
+- Settings grew to **11 pages / 133 rows / 581 keys** and tests to **943**
+  (+34). Startup and memory numbers below are still the v1.0.0 baseline and
+  were not re-measured.
 ## What changed in 1.3.8
 
 - No runtime performance change: the three fixes are focus/activation logic. The

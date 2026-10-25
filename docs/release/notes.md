@@ -1,11 +1,61 @@
 # Wiina release notes
 
-Release date (1.3.8): 2026-10-25
+Release date (1.3.9): 2026-10-25
 
 Windows-native, IINA-inspired mpv front end built with WinUI 3, Windows App
 SDK 2.5, and libmpv.
 
-## What's new in 1.3.8
+## What's new in 1.3.9
+
+### Small windows park the chrome blur
+
+While the mini player or picture-in-picture owns the video the main window is
+minimized, but the blur worker used to keep pulling a frame out of mpv every
+125 ms and the hidden titlebar kept the last texture. `ChromeBlur.Suspend()` /
+`Resume()` (`src/Wiina.App/Interop/ChromeBlur.cs:143`, `:160`) now force the
+Solid strategy while a small window owns the video; the transitions use a
+counter (`MainWindow.Modes.cs:635`, `:651`) so mini -> PiP does not resume in
+between, and a mode chosen while parked is applied on resume. Evidence:
+`artifacts/v139-pip-titlebar-before/after.png`,
+`artifacts/v139-mini-titlebar-before/after.png`.
+
+### Thumbnail plan A/B/C landed
+
+- Slow mode really runs as instant preview: no whole-file pass, disk cache
+  kept, hover delay applies, and the stored mode is never overwritten
+  (`ThumbnailPolicy.EffectiveMode`, `src/Wiina.Core/State/ThumbnailPolicy.cs:56-58`).
+- New `video.thumbnail-keyframe-seek` (Video -> Thumbnails, default off):
+  the background pass and slow mode seek with `absolute+keyframes`, skipping
+  the rest of the GOP; hover previews stay exact. The verification trace shows
+  208 ms per extracted frame.
+- Settings rows can be disabled per current settings
+  (`SettingsRowDefinition.AvailableWhen`,
+  `SettingsWindow.xaml.cs:463-499`); "preview while generating" greys out in
+  slow/instant mode.
+- Hover outcomes are `Frame` / `Pending` / `NotAllowed`: Pending keeps the
+  previous frame without a spinner, NotAllowed shows an empty card instead of
+  a stale frame, and opening a new file clears the frame. Evidence
+  `artifacts/v139-thumb-traces.txt` (NotAllowed 0-1 ms, Pending ~124 ms,
+  Frame 244-483 ms, disk hit 26-29 ms).
+
+### Every same-episode subtitle is offered
+
+`SmartSubtitleFinder.Find` returns all sidecars of the episode; the assfonts
+variant is selected first and the plain one stays selectable behind it.
+`MatchTrack` maps mpv's `external-filename` and its short language title back
+to a candidate so an already loaded sidecar is reused, and another selected
+external track is never overridden.
+
+### Not in this build
+
+- `Always` blur mode still captures at the original ~8 Hz while the main
+  window is visible; only small-window suspension changed.
+- The optional 20 ms -> 5 ms seek polling and `vf=scale` pre-scaling from the
+  1.3.8 plan are still not implemented.
+- Mixed-DPI hover placement and small-window geometry were not re-measured.
+
+Settings: 11 pages / 133 rows / 581 keys; tests: 943.
+## 1.3.8 — previous release
 
 ### Opening Settings again keeps your place
 

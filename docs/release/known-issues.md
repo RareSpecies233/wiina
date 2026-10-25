@@ -1,6 +1,33 @@
-# Known issues — Wiina v1.3.8
+# Known issues — Wiina v1.3.9
 
-Nothing here is hidden; these are known limitations of the v1.3.8 build. The full decision list (with fix cost and checkboxes) lives in [../reports/known-issues-1.3.1.md](../reports/known-issues-1.3.1.md).
+Nothing here is hidden; these are known limitations of the v1.3.9 build. The full decision list (with fix cost and checkboxes) lives in [../reports/known-issues-1.3.1.md](../reports/known-issues-1.3.1.md).
+
+## What changed in 1.3.9
+
+- Mini/PiP now park the chrome blur (counted suspension, Solid while parked,
+  persisted mode re-applied on exit). A hidden main window no longer pulls a
+  frame every 125 ms.
+- Slow thumbnail mode is really instant preview now: no pre-generation, disk
+  cache kept, hover delay applies. The mode row shows the effective mode and
+  "preview while generating" is disabled because it has no meaning there.
+- New `video.thumbnail-keyframe-seek` (default off) makes the background pass
+  and slow mode seek to the preceding keyframe; a frame can land up to one GOP
+  early, while hover previews stay exact.
+- The hover bubble distinguishes a forbidden preview from a pending decode: the
+  old black flash on every pointer move and the stale frame after switching
+  files are gone.
+- All same-episode sidecars are added (assfonts selected first), matched by
+  `external-filename` and the short libmpv title; another selected external
+  subtitle is never replaced.
+
+## Limits specific to 1.3.9
+
+- `Always` blur mode still captures at ~8 Hz while the window is visible.
+- Keyframe pre-generation frames can be one GOP earlier than the label.
+- The settings availability gate is re-evaluated when settings change; a row
+  already rendered updates on the next refresh.
+- Mixed-DPI hover placement and small-window geometry were not tested.
+- Cursor hiding is unchanged and still unsolved.
 
 ## What changed in 1.3.8
 
@@ -15,9 +42,10 @@ Nothing here is hidden; these are known limitations of the v1.3.8 build. The ful
 - The PiP placeholder's restore button works: the video drag handler no longer
   runs in PiP. Same single-monitor limit.
 - The mini player's sidebar was not re-run separately (same focus guard).
-- Thumbnails: 1.3.8 ships a plan only (`../reports/thumbnails-v1.3.8-plan.md`);
-  slow-mode rework, the keyframe switch, the instant-mode UX and the 20 ms poll
-  floor are not implemented.
+- Thumbnails: 1.3.8 shipped a plan only (../reports/thumbnails-v1.3.8-plan.md);
+  slow-mode rework, the keyframe switch and the instant-mode UX landed in
+  1.3.9, while the 20 ms poll floor is still unchanged. Cursor hiding is
+  unchanged and still unsolved in 1.3.8.
 - Cursor hiding is still unsolved and unchanged in 1.3.8.
 ## What changed in 1.3.7
 

@@ -1,11 +1,15 @@
 # Accessibility, localization, DPI and motion
 
-This document records what Wiina v1.3.8 implements, how it was checked, and
+This document records what Wiina v1.3.9 implements, how it was checked, and
 what is intentionally limited. It is a summary, not a certification.
 
 ## 1. Keyboard and focus
 
-- Thumbnail `Instant` mode and its hover-delay NumberBox are ordinary keyboard
+- The new "pre-generate using keyframes" switch
+  (`video.thumbnail-keyframe-seek`) is an ordinary ToggleSwitch and reachable
+  by keyboard. Rows hidden by a conditional availability gate (for example
+  "preview while generating" in slow mode) are disabled, dimmed, and state the
+  reason in their description instead of disappearing.- Thumbnail `Instant` mode and its hover-delay NumberBox are ordinary keyboard
   reachable settings; the delay only affects hover previews, never playback.
 - Opening Settings from the menu while the window is already open only activates
   it; it does not jump the page or steal focus. Explicit deep links (a page, a
@@ -174,7 +178,7 @@ generic text containers mirror.
 
 - Runtime catalog: 581 keys in `UiStringCatalog.cs`, each with a non-empty
   zh-Hans and English string. Coverage includes the title bar, OSC, OSD, menus,
-  sidebars, quick settings, all settings pages (11 pages, 132 rows;
+  sidebars, quick settings, all settings pages (11 pages, 133 rows;
   page titles, summaries, section headers, row titles/descriptions/choices), welcome/about/log/inspector/open-URL
   dialogs, filter/equalizer windows, playlist/chapters, mini player, PiP badge,
   the 1.2.6 audio-device labels (auto/refresh/unavailable), the 1.2.7 thumbnail-cache and administrator-association labels, the 1.3.1

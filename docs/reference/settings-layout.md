@@ -1,32 +1,32 @@
-# Wiina 设置布局快照（1.3.8）
+# Wiina 设置布局快照（1.3.9）
 
-> **快照版本（1.3.8）**：本文是 v1.3.8 工作树的设置界面完整快照：**11 页 / 132 行 / 40 个页面-分节对（35 个不同分节名）/ 581 个本地化键**。
+> **快照版本（1.3.9）**：本文是 v1.3.9 工作树的设置界面完整快照：**11 页 / 133 行 / 40 个页面-分节对（35 个不同分节名）/ 581 个本地化键**。
 > 与 1.2.7（12 页 / 125 行）相比：缩略图 8 项从「界面」迁到「视频 → 缩略图」，「工具」页并入「高级 → 工具」，
 > 字体设置页与 `utilities.font` 移除，`utilities.open-url` 移到「通用 → 播放与历史」，
 > `general.screenshot-folder` 移到「视频 → 截图」，新增 `control.media-keys`。完整增删移清单见 §6.4。
 
 > **用途**：设置菜单重排的对照基线。这是一份**静态快照**（非运行时截图）；所有数字与行内容都从源码统计，
-> 日期 **2026-10-25**（Asia/Hong_Kong），分支 **`feat/v1.3.8`**。
+> 日期 **2026-10-25**（Asia/Hong_Kong），分支 **`feat/v1.3.9`**。
 >
-> **覆盖范围**：设置窗口的 11 个页面 / 132 行 / 控件与保存管线、设置能打开的全部窗口与对话框、
+> **覆盖范围**：设置窗口的 11 个页面 / 133 行 / 控件与保存管线、设置能打开的全部窗口与对话框、
 > 主窗口快速设置侧栏（含重复入口）、以及仍未解决的布局问题与重构契约。
 >
 > **不包含**：主窗口菜单、OSC 菜单、欢迎窗口（不由设置打开）、插件系统（未实现）。
 >
 > **如何重新生成**：以 `src/Wiina.Core/Settings/SettingsCatalog.cs` 的 `BuildRows()` 为准（`rows.Add(` 共 132 处），
 > 配合 `SettingsLocalization.cs` 的英文覆盖、`AppSettings*.cs` 的默认值、`SettingsWindow.xaml.cs` 的
-> `RunActionAsync` 分支、`MainWindow.Sidebar.cs` 的 `OnQuickSettingChanged` 分支统计。行号均指 1.3.8 工作树（以 id 为准；新增行会使后续行号顺延）。
+> `RunActionAsync` 分支、`MainWindow.Sidebar.cs` 的 `OnQuickSettingChanged` 分支统计。行号均指 1.3.9 工作树（以 id 为准；新增行会使后续行号顺延）。
 
 ## 0. 关键数字
 
 | 项目 | 数值 | 来源 |
 |---|---|---|
 | 设置页面 | **11**（目录 11 项；`KeyBindings` 在页枚举里但左栏跳过，可点击 10 项 + 1 个隐藏页） | `SettingsCatalog.cs:19-29`；`SettingsWindow.xaml.cs` `BuildNavigation` |
-| 设置行 | **132** | `SettingsCatalog.cs` `BuildRows()` 内 `rows.Add(` 计数 |
+| 设置行 | **133** | `SettingsCatalog.cs` `BuildRows()` 内 `rows.Add(` 计数 |
 | 页面-分节对 / 分节名 | **40** / **35**（音频「音量与输出」、字幕「外观」各出现两次；`重置` ×4） | 各页 `Section` 序列 |
 | 动作行（Button） | **31** | 第 3 节控件列 = Button |
 | 行控件种类 | 8 种目录行（Toggle/Choice/Number/Text/AudioDevice/Action/Info/Font）+ 2 种运行时面板（KeyBindings / PluginList） | `SettingsModels.cs` |
-| 英文覆盖 | **132 / 132** 行（1.3.1 补齐缺口，1.3.5/1.3.6 仍无缺口） | `SettingsLocalization.cs` |
+| 英文覆盖 | **133 / 133** 行（1.3.1 补齐缺口，1.3.5/1.3.6/1.3.9 仍无缺口） | `SettingsLocalization.cs` |
 | 快速设置分支 | **51** 个 `QuickSettingKey`，向 **47** 个不同的 `_settings.*` 属性写入（含 2 个侧栏状态：`SidebarSide`/`SidebarWidth`） | `MainWindow.Sidebar.cs` `OnQuickSettingChanged` |
 | 设置窗口默认尺寸 | 760×600 DIP（最小 600×440） | `AppSettings.Shell.cs`；`SettingsWindow.xaml:9-11` |
 | 左栏宽度 / 搜索框 | 200 DIP（内容区最小 400）；搜索框 280×32 | `SettingsWindow.xaml:160-186` |
@@ -164,13 +164,14 @@ English：Video — Decoding, thumbnails, picture quality, aspect, crop, and tra
 | id | 控件 | 标题 | 说明 | 默认 / 范围 / 选项 | English | 来源（定义 → 设置项） |
 |---|---|---|---|---|---|---|
 | `video.thumbnail-preview` | ToggleSwitch | 进度条缩略图 | 悬停进度条时显示时间预览与视频帧。 | 默认 true | Timeline thumbnails — Show a time preview and video frame when hovering the progress bar. | SettingsCatalog.cs:234 → `AppSettings.ThumbnailPreviewEnabled` |
-| `video.thumbnail-mode` | ComboBox | 缩略图生成模式 | 预生成（推荐）：打开文件后在后台遍历全片，悬停时几乎即时响应；即时预览：不预生成、不写磁盘缓存，指针在进度条上停留一会儿才解码当前时间点，磁盘与 CPU 占用最低。 | 默认 ThumbnailMode.PreGenerate；选项：预生成（推荐） / 即时预览 | Thumbnail generation mode — Pre-generate (recommended) walks the whole timeline in the background so hovering answers almost instantly; Instant never pre-generates and never writes the disk cache, decoding only the hovered time point after a short delay, which keeps disk and CPU use minimal. | SettingsCatalog.cs:249 → `AppSettings.ThumbnailMode` |
+| `video.thumbnail-mode` | ComboBox | 缩略图生成模式 | 预生成（推荐）：打开文件后在后台遍历全片，悬停时几乎即时响应；即时预览：不预生成，指针在进度条上停留一会儿才解码当前时间点，磁盘与 CPU 占用最低。慢速预览图模式下实际按即时预览运行（下拉显示即时预览），关闭慢速后恢复这里的选择。 | 默认 ThumbnailMode.PreGenerate；选项：预生成（推荐） / 即时预览 | Thumbnail generation mode — Pre-generate (recommended) walks the whole timeline in the background so hovering answers almost instantly; Instant never pre-generates and never writes the disk cache, decoding only the hovered time point after a short delay, which keeps disk and CPU use minimal. | SettingsCatalog.cs:249 → `AppSettings.ThumbnailMode` |
 | `video.thumbnail-hover-delay` | NumberBox | 缩略图悬停延迟 | 仅即时预览使用：指针在进度条上停留这么久后才开始解码（0–2000 毫秒，步进 50）。快速扫动时只会生成最后停留的位置。 | 默认 250；范围 0–2000，步进 50 ms | Thumbnail hover delay — Instant preview only: how long the pointer must rest on the progress bar before decoding starts (0–2000 ms, step 50). Scrubbing across the bar only generates the position where it stops. | SettingsCatalog.cs:258 → `AppSettings.ThumbnailHoverDelayMs` |
-| `video.thumbnail-preview-while-generating` | ToggleSwitch | 生成完成前允许预览 | 关闭（默认，与 IINA 一致）：整片缩略图生成完成前，悬停进度条不显示预览，也不会按需解码；打开：预生成过程中就允许边生成边预览。即时预览模式没有整片生成过程，不受此开关影响。 | 默认关 | Preview while generating — Off (default, IINA parity): no hover previews and no on-demand decode until the whole-file pass is done. On: previews appear while the pass is still running. Instant mode has no pass and ignores this switch. | SettingsCatalog.cs:267-273 → `AppSettings.ThumbnailPreviewWhileGenerating` |
+| `video.thumbnail-preview-while-generating` | ToggleSwitch | 生成完成前允许预览 | 关闭（默认，与 IINA 一致）：整片缩略图生成完成前，悬停进度条不显示预览，也不会按需解码；打开：预生成过程中就允许边生成边预览。即时预览与慢速模式没有整片生成过程，不受此开关影响（该行在慢速/即时模式下禁用并显示原因）。 | 默认关；按当前设置动态可用 | Preview while generating — Off (default, IINA parity): no hover previews and no on-demand decode until the whole-file pass is done. On: previews appear while the pass is still running. Instant mode has no pass and ignores this switch. | SettingsCatalog.cs:267-273 → `AppSettings.ThumbnailPreviewWhileGenerating` |
 | `video.thumbnail-width` | NumberBox | 缩略图宽度 | 80–320 DIP；高度按视频比例计算。 | 默认 160；范围 80–320，步进 10 DIP | Thumbnail width — 80–320 DIP; height follows the video aspect. | SettingsCatalog.cs:240 → `AppSettings.ThumbnailWidth` |
 | `video.thumbnail-bucket` | NumberBox | 缩略图间隔 | 按秒分桶缓存，越大越省内存、精度越低。 | 默认 5；范围 1–30，步进 1 秒 | Thumbnail interval — Cache buckets per second; larger saves memory but is less precise. | SettingsCatalog.cs:247 → `AppSettings.ThumbnailBucketSeconds` |
 | `video.thumbnail-cache-mb` | NumberBox | 缩略图磁盘缓存 | 0 关闭磁盘缓存；超出上限时按最近最少使用自动清理。 | 默认 512；范围 0–4096，步进 64 MB | Thumbnail disk cache — Disk budget in megabytes; 0 disables the cache, and least-recently-used frames are evicted when the limit is exceeded. | SettingsCatalog.cs:261 → `AppSettings.ThumbnailCacheMegabytes` |
-| `video.thumbnail-slow` | ToggleSwitch | 慢速预览图模式（单核） | 只用一个低优先级工作线程逐张生成，全片不做预生成；低配设备更不容易卡顿，首次悬停会稍慢。 | 默认 false（C# 默认） | Slow thumbnail mode (single core) — Generate frames one at a time on a single low-priority worker and never pre-generate a whole file; weak devices stay responsive at the cost of a slower first hover. | SettingsCatalog.cs:269 → `AppSettings.ThumbnailSlowMode` |
+| `video.thumbnail-slow` | ToggleSwitch | 慢速预览图模式（单核） | 只用一个低优先级工作线程逐张生成，全片不做预生成；低配设备更不容易卡顿。此模式下悬停按即时预览运行（首次解码较慢，命中磁盘缓存后很快），关闭后恢复上面选择的生成模式。 | 默认 false（C# 默认） | Slow thumbnail mode (single core) — Generate frames one at a time on a single low-priority worker and never pre-generate a whole file; weak devices stay responsive at the cost of a slower first hover. | SettingsCatalog.cs:269 → `AppSettings.ThumbnailSlowMode` |
+| `video.thumbnail-keyframe-seek` | ToggleSwitch | 预生成使用关键帧定位 | 开启后后台预生成与慢速模式改为定位到前一个关键帧截帧，跳过关键帧到目标时间之间的解码，预生成快数倍；代价是画面可能比标称时间早几秒。正常悬停预览始终精确定位，磁盘缓存格式不变。 | 默认 false（C# 默认） | Pre-generate using keyframe seek — The background pass and slow mode seek to the preceding keyframe and skip the GOP decode, which is several times faster; a frame may be a few seconds early. Interactive hover stays exact and the disk format is unchanged. | SettingsCatalog.cs:308-314 → `AppSettings.ThumbnailKeyframeSeek` |
 | `video.thumbnail-hint` | 只读文本 | 预生成提示 | 打开文件后会在后台遍历整段视频生成缩略图。低配设备上这可能抢占 CPU 造成短暂卡顿——遇到卡顿就打开上面的“慢速预览图模式（单核）”。 |  | Pre-generation heads-up — After a file opens, Wiina walks the whole timeline in the background to fill the thumbnail cache. On weak devices that can steal CPU and cause brief stutter — turn on \"Slow thumbnail mode (single core)\" if it happens. | SettingsCatalog.cs:276 |
 | `video.thumbnail-cache-clear` | Button | 清除缩略图缓存 | 删除磁盘与内存中缓存的缩略图，并报告释放的空间。 | 动作 `clear-thumbnails`（SettingsWindow.xaml.cs:1141） | Clear thumbnail cache — Delete cached thumbnails on disk and in memory, then report the freed space. | SettingsCatalog.cs:282 |
 | `video.thumbnail-acceleration` | ComboBox | 预览图硬件加速 | 自动：显卡可用时用 GPU 解码，驱动不支持时由 libmpv 自动回退软解；仅 CPU：强制软解，避免个别驱动花屏或驱动级卡顿。 | 默认 ThumbnailAcceleration.Auto；选项：自动（推荐） / 仅 CPU | Thumbnail hardware acceleration — Auto decodes on the GPU when the hardware decoder works and lets libmpv fall back to software decoding otherwise; "CPU only" forces software decoding for drivers that produce corrupted frames. | SettingsCatalog.cs:285 → `AppSettings.ThumbnailAcceleration` |
@@ -696,11 +697,18 @@ English：Plugins — Not implemented yet (Stage 9): placeholder and folder entr
 - 菜单 / 欢迎页的“设置”改为无参 `App.ShowSettingsWindow()`：窗口已打开时只前置，不回到“通用”。显式页/行仍导航（`src/Wiina.Core/Settings/SettingsNavigation.cs`）。
 - 全屏下侧栏/快速设置的指针点击不再被 `OnRootGotFocus` 抢焦点取消（`MainWindow.Playback.cs:2177-2187` 对 `FocusState.Pointer` 直接返回）；键盘 Tab 仍被拦截。
 - PiP 下视频区的 pointer press 不再抢 capture，占位页“恢复画中画”按钮可点击（`MainWindow.Playback.cs:2546-2556`）。
-- 缩略图设置行未动；1.3.8 只新增调研报告 `docs/reports/thumbnails-v1.3.8-plan.md`，计划中的 `video.thumbnail-keyframe-seek` 行**尚未加入目录**，不要写进本快照的表格。
+- 缩略图设置行未动；1.3.8 只新增调研报告 `docs/reports/thumbnails-v1.3.8-plan.md`，计划中的 `video.thumbnail-keyframe-seek` 行在 1.3.8 尚未加入目录（1.3.9 已加入，见 §6.13）。
 
+### 6.13 1.3.8 → 1.3.9 增删移清单
+
+**设置行 +1**：**11 页 / 133 行 / 40 个页面-分节对（35 个不同分节名）/ 581 个本地化键**，动作行 31，英文覆盖 133 / 133；快速设置仍是 51 个 `QuickSettingKey` → 47 个属性。
+
+- 新增 `video.thumbnail-keyframe-seek`（视频 → 缩略图 → 「预生成使用关键帧定位」，ToggleSwitch，默认关，`SettingsCatalog.cs:308-314`）。
+- 设置行新增**按当前设置动态可用**的能力：`SettingsRowDefinition.AvailableWhen` / `ConditionalUnavailableReason`（`SettingsModels.cs:103-127`），设置窗口在刷新时重新求值并置灰（`SettingsWindow.xaml.cs:463-499`）。`video.thumbnail-preview-while-generating` 在慢速/即时模式下禁用，并显示「慢速模式或即时预览没有全片生成过程，此项不适用。」
+- 文案更新（无增删）：`video.thumbnail-mode` 说明慢速模式按即时预览运行；`video.thumbnail-slow` 说明悬停按即时预览运行；「生成完成前允许预览」补充慢速模式。
 ## 7. 附录 A：全部行 id（按字母序）
 
-> 1.3.5 新增 `video.thumbnail-mode`、`video.thumbnail-hover-delay` 后整体重新编号；1.3.6 再新增「生成完成前允许预览」1 行（1.3.7 无增删），现共 132 行；1.3.4 删除的 `advanced.music-mode` 不在表内，1.3.3 新增的 `advanced.mini-player` 仍在表内，1.3.2 删除了 `video.thumbnail-cache`。
+> 1.3.5 新增 `video.thumbnail-mode`、`video.thumbnail-hover-delay` 后整体重新编号；1.3.6 再新增「生成完成前允许预览」1 行（1.3.7/1.3.8 无增删），1.3.9 新增「预生成使用关键帧定位」1 行，现共 133 行；1.3.4 删除的 `advanced.music-mode` 不在表内，1.3.3 新增的 `advanced.mini-player` 仍在表内，1.3.2 删除了 `video.thumbnail-cache`。
 
 | # | 行 id | 页面 / 分节 | 控件 |
 |---|---|---|---|
@@ -831,21 +839,22 @@ English：Plugins — Not implemented yet (Stage 9): placeholder and folder entr
 | 125 | `video.thumbnail-preview` | Video / 缩略图 | ToggleSwitch |
 | 126 | `video.thumbnail-mode` | Video / 缩略图 | ComboBox |
 | 127 | `video.thumbnail-hover-delay` | Video / 缩略图 | NumberBox |
-| 128 | `video.thumbnail-preview-while-generating` | Video / 缩略图 | ToggleSwitch |
-| 129 | `video.thumbnail-slow` | Video / 缩略图 | ToggleSwitch |
-| 130 | `video.thumbnail-width` | Video / 缩略图 | NumberBox |
-| 131 | `video.tone-mapping` | Video / HDR 与色彩 | ComboBox |
-| 132 | `video.zoom` | Video / 画面 | NumberBox |
+| 128 | `video.thumbnail-keyframe-seek` | Video / 缩略图 | ToggleSwitch |
+| 129 | `video.thumbnail-preview-while-generating` | Video / 缩略图 | ToggleSwitch |
+| 130 | `video.thumbnail-slow` | Video / 缩略图 | ToggleSwitch |
+| 131 | `video.thumbnail-width` | Video / 缩略图 | NumberBox |
+| 132 | `video.tone-mapping` | Video / HDR 与色彩 | ComboBox |
+| 133 | `video.zoom` | Video / 画面 | NumberBox |
 
 ## 8. 附录 B：本地化键与覆盖
 
-SettingsLocalization.cs：页面英文 11 条、分节英文 35 条、行英文 132 条；行英文键即行 id。
+SettingsLocalization.cs：页面英文 11 条、分节英文 35 条、行英文 133 条；行英文键即行 id。
 
 | 页面 id | 中文页名 | English title | 行数 | 覆盖英文行 |
 |---|---|---|---|---|
 | `General` | 通用 | General | 8 | 8 |
 | `Ui` | 界面 | Interface | 18 | 18 |
-| `Video` | 视频 | Video | 40 | 40 |
+| `Video` | 视频 | Video | 41 | 41 |
 | `Audio` | 音频 | Audio | 11 | 11 |
 | `Subtitles` | 字幕 | Subtitles | 15 | 15 |
 | `Network` | 网络 | Network | 6 | 6 |
@@ -855,7 +864,7 @@ SettingsLocalization.cs：页面英文 11 条、分节英文 35 条、行英文 
 | `Integration` | 文件关联 | File Associations | 7 | 7 |
 | `Plugin` | 插件 | Plugins | 4 | 4 |
 
-未覆盖英文的行：**无**（1.3.6 为 132 / 132 全部有英文）。1.3.0 缺失的 4 行（`general.screenshot-folder`、`advanced.config-folder`、`advanced.log-folder`、`plugin.folder`）已补齐。
+未覆盖英文的行：**无**（1.3.9 为 133 / 133 全部有英文）。1.3.0 缺失的 4 行（`general.screenshot-folder`、`advanced.config-folder`、`advanced.log-folder`、`plugin.folder`）已补齐。
 
 设置窗口与子窗口的 loc:Loc 键（共 54 个）：
 

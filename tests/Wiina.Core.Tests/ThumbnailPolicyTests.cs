@@ -1,3 +1,4 @@
+using Wiina.Core.Localization;
 using Wiina.Core.Settings;
 using Wiina.Core.State;
 using Xunit;
@@ -118,5 +119,91 @@ public sealed class ThumbnailPolicyTests
     public void PreviewWhileGeneratingRowDefaultsOff()
     {
         Assert.False(new AppSettings().ThumbnailPreviewWhileGenerating);
+    }
+
+    [Theory]
+    [InlineData(ThumbnailMode.PreGenerate, false, ThumbnailMode.PreGenerate)]
+    [InlineData(ThumbnailMode.Instant, false, ThumbnailMode.Instant)]
+    [InlineData(ThumbnailMode.PreGenerate, true, ThumbnailMode.Instant)]
+    [InlineData(ThumbnailMode.Instant, true, ThumbnailMode.Instant)]
+    public void SlowModeRunsAsInstantWithoutChangingTheStoredMode(
+        ThumbnailMode stored,
+        bool slowMode,
+        ThumbnailMode expected)
+    {
+        Assert.Equal(expected, ThumbnailPolicy.EffectiveMode(stored, slowMode));
+
+        // The persisted choice is never rewritten: the catalog getter maps it
+        // to the effective mode, the setter still stores what the user picked.
+        SettingsRowDefinition row = SettingsCatalog.Find("video.thumbnail-mode")!;
+        var settings = new AppSettings { ThumbnailMode = stored, ThumbnailSlowMode = slowMode };
+        Assert.Equal((int)expected, (int)row.Value(settings)!);
+        Assert.Equal(stored, settings.ThumbnailMode);
+    }
+
+    [Theory]
+    [InlineData(ThumbnailMode.PreGenerate, false, true)]
+    [InlineData(ThumbnailMode.Instant, false, false)]
+    [InlineData(ThumbnailMode.PreGenerate, true, true)]
+    [InlineData(ThumbnailMode.Instant, true, true)]
+    public void DiskCacheIsSkippedOnlyByPlainInstantPreview(
+        ThumbnailMode mode,
+        bool slowMode,
+        bool expected)
+    {
+        Assert.Equal(expected, ThumbnailPolicy.AllowsDiskCache(mode, slowMode));
+    }
+
+    [Theory]
+    [InlineData(ThumbnailMode.PreGenerate, false, false)]
+    [InlineData(ThumbnailMode.Instant, false, true)]
+    [InlineData(ThumbnailMode.PreGenerate, true, true)]
+    public void HoverDelayAppliesToInstantAndSlowMode(
+        ThumbnailMode mode,
+        bool slowMode,
+        bool expected)
+    {
+        Assert.Equal(expected, ThumbnailPolicy.RequiresHoverDelay(mode, slowMode));
+    }
+
+    [Fact]
+    public void KeyframeSeekRowDefaultsOffAndLivesOnTheVideoPage()
+    {
+        var settings = new AppSettings();
+        Assert.False(settings.ThumbnailKeyframeSeek);
+
+        SettingsRowDefinition? row = SettingsCatalog.Find("video.thumbnail-keyframe-seek");
+        Assert.NotNull(row);
+        Assert.Equal(SettingsPageId.Video, row!.Page);
+        Assert.Equal(SettingsRowKind.Toggle, row.Kind);
+        Assert.False((bool)row.Value(settings)!);
+
+        row.Apply(settings, true);
+        Assert.True(settings.ThumbnailKeyframeSeek);
+    }
+
+    [Fact]
+    public void PreviewWhileGeneratingRowIsUnavailableWithoutAWholeFilePass()
+    {
+        SettingsRowDefinition row = SettingsCatalog.Find("video.thumbnail-preview-while-generating")!;
+
+        var preGenerate = new AppSettings { ThumbnailMode = ThumbnailMode.PreGenerate, ThumbnailSlowMode = false };
+        Assert.True(row.IsAvailableFor(preGenerate));
+        Assert.Null(row.UnavailableReasonFor(preGenerate));
+
+        var slow = new AppSettings { ThumbnailMode = ThumbnailMode.PreGenerate, ThumbnailSlowMode = true };
+        Assert.False(row.IsAvailableFor(slow));
+        Assert.Equal(
+            "Slow mode and instant preview have no whole-file pass, so this option does not apply.",
+            SettingsLocalization.UnavailableReason(row.UnavailableReasonFor(slow)!, "en-US"));
+
+        var instant = new AppSettings { ThumbnailMode = ThumbnailMode.Instant, ThumbnailSlowMode = false };
+        Assert.False(row.IsAvailableFor(instant));
+
+        // Slow mode never rewrites the stored mode, so turning it off restores
+        // the row without any extra state.
+        slow.ThumbnailSlowMode = false;
+        Assert.True(row.IsAvailableFor(slow));
+        Assert.Equal(ThumbnailMode.PreGenerate, slow.ThumbnailMode);
     }
 }

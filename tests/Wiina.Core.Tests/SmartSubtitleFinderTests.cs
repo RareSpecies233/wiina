@@ -52,7 +52,7 @@ public sealed class SmartSubtitleFinderTests
     }
 
     [Fact]
-    public void PrefersSimplifiedThenTraditionalAndAssFontsLast()
+    public void AssFontsVariantsComeFirstThenLanguageOrder()
     {
         using var folder = new TempFolder();
         string video = folder.File("Movie.mkv");
@@ -61,16 +61,20 @@ public sealed class SmartSubtitleFinderTests
         folder.File("Movie.sc.assfonts.ass");
         folder.File("Movie.tc.assfonts.ass");
 
-        Assert.EndsWith("Movie.sc.ass", SmartSubtitleFinder.FindBest(video)!.FileName);
+        // assfonts embeds its fonts, so it is tried first; language ordering only
+        // breaks ties inside each tier.
+        Assert.EndsWith("Movie.sc.assfonts.ass", SmartSubtitleFinder.FindBest(video)!.FileName);
 
         IReadOnlyList<SubtitleCandidate> all = SmartSubtitleFinder.Find(video);
         Assert.Equal(4, all.Count);
-        Assert.False(all[0].IsAssFonts);
-        Assert.False(all[1].IsAssFonts);
-        Assert.True(all[2].IsAssFonts);
-        Assert.True(all[3].IsAssFonts);
+        Assert.True(all[0].IsAssFonts);
+        Assert.True(all[1].IsAssFonts);
+        Assert.False(all[2].IsAssFonts);
+        Assert.False(all[3].IsAssFonts);
         Assert.Equal(SubtitleLanguage.SimplifiedChinese, all[0].Language);
         Assert.Equal(SubtitleLanguage.TraditionalChinese, all[1].Language);
+        Assert.Equal(SubtitleLanguage.SimplifiedChinese, all[2].Language);
+        Assert.Equal(SubtitleLanguage.TraditionalChinese, all[3].Language);
     }
 
     [Fact]
@@ -124,23 +128,21 @@ public sealed class SmartSubtitleFinderTests
     }
 
     [Fact]
-    public void AssFontsIsAlwaysTheFallback()
+    public void AssFontsWinsOverThePlainVariantOfTheSameLanguage()
     {
         using var folder = new TempFolder();
         string video = folder.File("Movie.mkv");
-        folder.File("Movie.tc.ass");
+        folder.File("Movie.sc.ass");
         folder.File("Movie.sc.assfonts.ass");
 
-        string traditional = folder.File("Movie.tc.ass");
-        Assert.EndsWith(
-            "Movie.tc.ass",
-            SmartSubtitleFinder.FindBest(video, SubtitleLanguagePreferences.SimplifiedChinese)!.FileName);
-
-        File.Delete(traditional);
-        folder.File("Movie.tc.assfonts.ass");
-        Assert.EndsWith(
-            "Movie.sc.assfonts.ass",
-            SmartSubtitleFinder.FindBest(video, SubtitleLanguagePreferences.SimplifiedChinese)!.FileName);
+        // The plain variant is listed but no longer hides the embedded-font one.
+        IReadOnlyList<SubtitleCandidate> all =
+            SmartSubtitleFinder.Find(video, SubtitleLanguagePreferences.SimplifiedChinese);
+        Assert.Equal(2, all.Count);
+        Assert.EndsWith("Movie.sc.assfonts.ass", all[0].FileName);
+        Assert.EndsWith("Movie.sc.ass", all[1].FileName);
+        Assert.True(all[0].IsAssFonts);
+        Assert.False(all[1].IsAssFonts);
     }
 
     [Fact]
@@ -275,6 +277,117 @@ public sealed class SmartSubtitleFinderTests
         Assert.Equal(SubtitleLanguagePreferences.Auto, SubtitleLanguagePreferences.Normalize(null));
         Assert.Equal(SubtitleLanguagePreferences.Auto, SubtitleLanguagePreferences.Normalize("system"));
         Assert.Equal(5, SubtitleLanguagePreferences.All.Count);
+    }
+
+    [Fact]
+    public void ListsEverySidecarOfTheSameEpisodeNotJustTheBestOne()
+    {
+        using var folder = new TempFolder();
+        // Mirrors the reported folder: one real video and several sidecars that all
+        // belong to episode 01. The subtitle menu must offer every one of them.
+        string video = folder.File("[Group] Show [01][1080p][x265].mkv");
+        folder.File("[Group] Show [01][1080p][x265].chs.assfonts.ass");
+        folder.File("[Group] Show [01][1080p][x265].chs.ass");
+        folder.File("[Group] Show [01][1080p][x265].en.srt");
+
+        IReadOnlyList<SubtitleCandidate> all = SmartSubtitleFinder.Find(video);
+
+        Assert.Equal(3, all.Count);
+        Assert.Equal(3, all.Select(item => item.Path).Distinct(StringComparer.OrdinalIgnoreCase).Count());
+        Assert.True(all[0].IsAssFonts);
+        Assert.EndsWith(".chs.assfonts.ass", all[0].FileName, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains(all, item => item.FileName.EndsWith(".chs.ass", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(all, item => item.FileName.EndsWith(".en.srt", StringComparison.OrdinalIgnoreCase));
+        Assert.All(all, item => Assert.DoesNotContain("[02]", item.FileName));
+    }
+
+    [Fact]
+    public void OtherEpisodesNeverEnterTheCandidateList()
+    {
+        using var folder = new TempFolder();
+        string video = folder.File("[Group] Show [01][1080p].mkv");
+        folder.File("[Group] Show [01].chs.ass");
+        folder.File("[Group] Show [01].chs.assfonts.ass");
+        folder.File("[Group] Show [02].chs.ass");
+        folder.File("[Group] Show [02].chs.assfonts.ass");
+        folder.File("[Group] Show [01][1080p].chs.ass");
+        folder.File("[Group] Show [01][1080p].chs.assfonts.ass");
+
+        IReadOnlyList<SubtitleCandidate> all = SmartSubtitleFinder.Find(video);
+
+        Assert.Equal(4, all.Count);
+        Assert.All(all, item => Assert.StartsWith("[Group] Show [01]", item.FileName));
+        Assert.All(all, item => Assert.DoesNotContain("[02]", item.FileName));
+        Assert.True(all[0].IsAssFonts);
+        Assert.True(all[1].IsAssFonts);
+    }
+
+    [Fact]
+    public void PlainAndAssFontsVariantsAreBothKept()
+    {
+        using var folder = new TempFolder();
+        string video = folder.File("Show [01].mkv");
+        folder.File("Show [01].chs.ass");
+        folder.File("Show [01].chs.assfonts.ass");
+
+        IReadOnlyList<SubtitleCandidate> all = SmartSubtitleFinder.Find(video);
+
+        Assert.Equal(2, all.Count);
+        Assert.True(all[0].IsAssFonts);
+        Assert.False(all[1].IsAssFonts);
+        Assert.Equal(
+            new[] { "Show [01].chs.assfonts.ass", "Show [01].chs.ass" },
+            all.Select(item => item.FileName).ToArray());
+    }
+
+    [Theory]
+    [InlineData("Show [01][1080p]", "Show [01].chs.assfonts", true)]
+    [InlineData("Show [01][1080p]", "Show [01][1080p].chs.assfonts", true)]
+    [InlineData("Show [01][1080p]", "Show [02].chs.assfonts", false)]
+    [InlineData("Show [01][1080p]", "Show [01] Extra.chs.ass", false)]
+    [InlineData("Show [01][1080p]", "Other Show [01].chs.ass", false)]
+    [InlineData("", "Show [01].chs.ass", false)]
+    [InlineData("Show [01]", "", false)]
+    public void SameEpisodeHelperRejectsOtherEpisodes(string videoBase, string subtitleStem, bool expected)
+    {
+        Assert.Equal(expected, SmartSubtitleFinder.IsSameEpisode(videoBase, subtitleStem));
+    }
+
+    [Fact]
+    public void MatchTrackMapsMpvNamesBackToTheCandidate()
+    {
+        using var folder = new TempFolder();
+        string video = folder.File("Show [01].mkv");
+        folder.File("Show [01].chs.ass");
+        string assfonts = folder.File("Show [01].chs.assfonts.ass");
+        IReadOnlyList<SubtitleCandidate> all = SmartSubtitleFinder.Find(video);
+        Assert.Equal(2, all.Count);
+
+        Assert.Equal(assfonts, SmartSubtitleFinder.MatchTrack(all, assfonts)?.Path);
+        Assert.Equal(assfonts, SmartSubtitleFinder.MatchTrack(all, Path.GetFileName(assfonts))?.Path);
+        Assert.Equal(
+            "Show [01].chs.ass",
+            SmartSubtitleFinder.MatchTrack(all, "chs.ass")?.FileName);
+        Assert.Equal(
+            "Show [01].chs.assfonts.ass",
+            SmartSubtitleFinder.MatchTrack(all, "chs.assfonts.ass")?.FileName);
+        Assert.Null(SmartSubtitleFinder.MatchTrack(all, "deu.ass"));
+        Assert.Null(SmartSubtitleFinder.MatchTrack(all, null));
+        Assert.Null(SmartSubtitleFinder.MatchTrack(Array.Empty<SubtitleCandidate>(), "chs.ass"));
+    }
+
+    [Fact]
+    public void IndexSubPairIsListedOnce()
+    {
+        using var folder = new TempFolder();
+        string video = folder.File("Movie.mkv");
+        folder.File("Movie.chs.idx");
+        folder.File("Movie.chs.sub");
+
+        IReadOnlyList<SubtitleCandidate> all = SmartSubtitleFinder.Find(video);
+
+        Assert.Single(all);
+        Assert.EndsWith(".idx", all[0].FileName, StringComparison.OrdinalIgnoreCase);
     }
 
     private sealed class TempFolder : IDisposable

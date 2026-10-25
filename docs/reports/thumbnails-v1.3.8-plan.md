@@ -1,6 +1,6 @@
-# 缩略图 v1.3.8 改造方案（慢速模式重构 / 关键帧开关 / 即时模式 UX / macOS 差距）
+# 缩略图 v1.3.8 改造方案（慢速模式重构 / 关键帧开关 / 即时模式 UX / macOS 差距）——1.3.9 实施记录
 
-> 仓库 `C:\Users\zheng\Desktop\wiina`，分支 `feat/v1.3.8`（HEAD `1d8ab4d`）。**只读调研**：本轮不改代码、不构建、不提交，唯一产出就是本文档。
+> 仓库 `C:\Users\zheng\Desktop\wiina`，原始方案分支 `feat/v1.3.8`（HEAD `1d8ab4d`）。**本文最初是只读方案**；**1.3.9 已实施 A/B/C**（慢速模式重构、关键帧 seek 开关、即时模式 UX），实施差异与未做项见 §7。D（macOS 差距）仍是分析，E 的测试方案部分落地。
 > 依据：v1.3.7 报告 `docs/reports/thumbnails-optimization-1.3.7.md` + 本树逐行核对（行号按 `feat/v1.3.8` 当前树）。
 > 上一轮的三项缩放方案（A1 `vf=scale` / A2 `screenshot-to-file` / A3 `composition-size`）**按用户判断全部不做**，理由记录在 §0.2。
 
@@ -358,3 +358,22 @@ public enum ThumbnailOutcome { Frame, Pending, NotAllowed }
 - 本轮未做任何实测（按要求只出方案）；§4 的预算模型基于 `docs/performance.md` 的既有数字与静态代码，属于**推理**而非测量。
 - "30–50 s 是软解"是最强假设，需要 §4.5 第 2 步的日志确认；若确认是硬解，则主因回落到"张数 + 轮询地板"。
 - 行号以本轮核对时的树为准；该树有他人未提交的修改（`git status` 可见），实现前请重新 grep 锚点代码，不要只信行号。
+## 7. 实施状态（1.3.9）
+
+### 已实施
+
+| 编号 | 方案 | 落地 | 关键代码 |
+| --- | --- | --- | --- |
+| A | 慢速模式 = 即时预览 + 保留磁盘 + 设置界面锁死冲突项 | ✅ | `ThumbnailPolicy.EffectiveMode`（`src/Wiina.Core/State/ThumbnailPolicy.cs:56-58`）、`AllowsDiskCache(mode, slowMode)`（`:47-48`）、`RequiresHoverDelay(mode, slowMode)`（`:71`） |
+| B | 关键帧 seek 开关（默认关，预生成/慢速有效，悬停精确） | ✅ | `video.thumbnail-keyframe-seek`（`SettingsCatalog.cs:308-314`）、`KeyframeSeek`（`ThumbnailService.cs:452-468`）、`seek absolute+keyframes`（`:1193-1240`） |
+| C | 即时模式 UX：无转圈、保留上一帧、空卡 | ✅ | `ThumbnailHoverState`（`src/Wiina.Core/State/ThumbnailHoverState.cs`）、`ThumbnailOutcome` / `ThumbnailResult`（`ThumbnailService.cs:22-32`）、`ThumbnailPeek.ShowEmpty` |
+
+### 与方案的差异
+
+- **不做 20 ms → 5 ms 轮询**：方案把它列为零风险提速项，但本轮没有改 `SeekAsync` 的 20 ms 间隔（`ThumbnailService.cs:1205`）；关键帧定位是另一条提速路径。若后续要继续压缩预生成时间，这是首选。
+- **不做 `vf=scale` 预缩放**：方案 §0.2 已判定收益抵不上硬解损失，保持不做。
+- **慢速模式仍写磁盘**：方案要求慢速保留磁盘策略，已按此实现（`AllowsDiskCache` 对慢速返回 true）。
+- **设置行锁死方式**：用通用的 `AvailableWhen` / `ConditionalUnavailableReason`（`SettingsModels.cs:103-127`）在刷新时置灰，而不是为每个模式写专用分支。
+- **验证数据**：关键帧预生成 208 ms/帧、慢速磁盘命中 26–29 ms、Pending ≈124 ms、Frame 244–483 ms 来自 `artifacts/v139-thumb-traces.txt`；未重新测预生成总时长。
+- **仍是分析的部分**：D 的 macOS/Windows 预算模型没有复测；E 的“慢速模式暂停时中心向外生成”没有实现，慢速=即时预览是当前取舍。
+

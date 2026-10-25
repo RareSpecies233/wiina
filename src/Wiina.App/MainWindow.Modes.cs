@@ -8,6 +8,7 @@ using Windows.Storage.Pickers;
 using Wiina.App.Interop;
 using Wiina.Core.Models;
 using Wiina.App.Localization;
+using Wiina.Core.Settings;
 using Wiina.Core.State;
 using Wiina.Core.Text;
 
@@ -350,6 +351,11 @@ public sealed partial class MainWindow
         pip.AttachSwapChain(_swapChain);
         pip.Activate();
 
+        // While PiP owns the video the main window is minimized, but a
+        // minimized/hidden window would still run the blur worker and steal a
+        // frame from the PiP surface every 125 ms. Park it until PiP exits.
+        SuspendChromeBlur("pip");
+
         // PiP is meant to get the player out of the way. Minimize the main
         // window after the PiP window is visible; it is restored on exit.
         MinimizeMainForPip();
@@ -381,6 +387,10 @@ public sealed partial class MainWindow
         }
 
         PipPlaceholder.Visibility = Visibility.Collapsed;
+        // PiP is gone: the main window owns the video again, so the titlebar
+        // blur may resume (the counting helper keeps it parked if another
+        // small-window surface, e.g. mini, is still active).
+        ResumeChromeBlur("pip");
 
         if (_swapChain != 0)
         {
@@ -542,6 +552,10 @@ public sealed partial class MainWindow
 
     private bool EnterMiniInternal()
     {
+        // The mini window has a fixed dark chrome and no video behind the
+        // titlebar, so the blur worker would only burn frames. Park it here and
+        // restore the previous mode when mini exits.
+        SuspendChromeBlur("mini");
         CaptureNormalFrame();
         SetTopmost(true);
         SetMiniBackdropSuspended(true);
@@ -600,8 +614,58 @@ public sealed partial class MainWindow
         _ => brush.GetType().Name,
     };
 
+    // ------------------------------------------------- chrome blur suspension
+
+    /// <summary>
+    /// Number of active small-window surfaces (mini, PiP). A count keeps the
+    /// mini -> PiP transition from resuming the blur in between.
+    /// </summary>
+    private int _chromeBlurSuspendCount;
+
+    /// <summary>
+    /// Parks the ChromeBlur capture worker while only a small window is on
+    /// screen. <see cref="ChromeBlur.Suspend"/> forces the Solid strategy, the
+    /// only one that parks the worker unconditionally (Dynamic/Fixed/Always all
+    /// keep capturing, and a hidden or minimized chrome still burns GPU time
+    /// pulling frames out of mpv). The chrome surfaces switch to their opaque
+    /// <c>ChromeSolidBrush</c> meanwhile, so a titlebar that is still visible
+    /// (PiP placeholder) never shows a stale video texture. The persisted mode
+    /// is preserved and re-applied on resume.
+    /// </summary>
+    private void SuspendChromeBlur(string reason)
+    {
+        if (_chromeBlurSuspendCount++ > 0)
+        {
+            return;
+        }
+
+        ChromeBlur.Suspend();
+        Trace($"chrome blur: suspended ({reason})");
+    }
+
+    /// <summary>
+    /// Restores the chrome blur after the last small-window surface closed.
+    /// ChromeBlur remembers the mode requested while parked, so a settings
+    /// change made in the meantime wins over the pre-suspend snapshot.
+    /// </summary>
+    private void ResumeChromeBlur(string reason)
+    {
+        if (_chromeBlurSuspendCount == 0 || --_chromeBlurSuspendCount > 0)
+        {
+            return;
+        }
+
+        ChromeBlur.Resume();
+        Trace($"chrome blur: resumed ({reason}, mode={ChromeBlur.Current.Mode})");
+    }
+
     private void HideMiniPlayer()
     {
+        // Unconditional: if EnterMiniInternal failed halfway the visibility
+        // guard below would otherwise leave the blur parked forever. The
+        // helper counts suspensions, so a call with none active is a no-op.
+        ResumeChromeBlur("mini");
+
         if (MiniPlayer.Visibility != Visibility.Visible)
         {
             return;

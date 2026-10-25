@@ -1,8 +1,8 @@
 # 缩略图（进度条悬停预览）完整逻辑
 
-本文是 Wiina 时间轴缩略图的**实现参考文档**：两种生成模式、截取链路、三级缓存（内存 / 磁盘 / 预生成）、每个设置开关到底改变什么、性能数据与已知限制。内容按 `feat/v1.3.6` 当前树逐项核对，所有结论均给出行号；数字与实测记录见 [docs/performance.md](../performance.md) 与各版本验收页。
+本文是 Wiina 时间轴缩略图的**实现参考文档**：两种生成模式、截取链路、三级缓存（内存 / 磁盘 / 预生成）、每个设置开关到底改变什么、性能数据与已知限制。内容按 `feat/v1.3.9` 当前树逐项核对（1.3.7–1.3.9 的增量见 §3.2、§4、§10），所有结论均给出行号；数字与实测记录见 [docs/performance.md](../performance.md) 与各版本验收页。
 
-> 版本注记：本文按 **1.3.6** 当前树（`feat/v1.3.6`）核对，含 1.3.6 新增的“生成完成前允许预览”开关（`video.thumbnail-preview-while-generating`，默认关，见 §8.1）；1.3.5 的即时预览模式与更早的行为保持不变。
+> 版本注记：本文按 **1.3.9** 当前树（`feat/v1.3.9`）核对。1.3.6 加入“生成完成前允许预览”；1.3.9 让慢速模式实际按即时预览运行、新增“预生成使用关键帧定位”，并引入悬停状态机（`Frame` / `Pending` / `NotAllowed`，§3.2、§8.1）。
 
 ---
 
@@ -11,7 +11,7 @@
 - 缩略图由**第二个、无窗口的 libmpv 实例**按需解码，主播放器完全不参与；UI 线程不做文件 IO、不做缩放。
 - 结果分三级：**内存 LRU**（当前视频全部时间桶）→ **磁盘 JPEG 缓存**（跨进程、可清理）→ **后台预生成**（把整片逐桶灌进上面两级）。
 - 只有**一个**提取工作线程：同一时刻最多一个 libmpv seek 在飞；悬停请求排在预生成之前，预生成在用户交互后会让路。
-- 两种模式：**预生成（默认）** 与**即时预览**；另有**慢速模式**、**硬件加速**、**磁盘上限**、**总开关**、**生成完成前是否允许预览**与**清除缓存**。
+- 两种模式：**预生成（默认）** 与**即时预览**；另有**慢速模式**（1.3.9 起实际按即时预览运行）、**关键帧定位**、**硬件加速**、**磁盘上限**、**总开关**、**生成完成前是否允许预览**与**清除缓存**。
 
 ---
 
@@ -20,13 +20,14 @@
 | 设置 id | 位置 | 控件 | 默认 | 范围 / 取值 | 作用 |
 | --- | --- | --- | --- | --- | --- |
 | `video.thumbnail-preview` | 视频 → 缩略图 | 开关 | **开** | 开 / 关 | 总开关：关闭后不建 headless mpv、不预生成、不悬停提取、不写盘（`SettingsCatalog.cs:242-247`，`AppSettings.cs:58`） |
-| `video.thumbnail-mode` | 视频 → 缩略图 | 下拉 | **预生成（推荐）** | 预生成 / 即时预览 | 决定是否遍历全片、是否读写磁盘（`SettingsCatalog.cs:248-256`，`ThumbnailMode` 枚举） |
-| `video.thumbnail-hover-delay` | 视频 → 缩略图 | 数字 | **250 ms** | 0–2000，步进 50 | 仅即时预览：指针停留多久后才解码（`SettingsCatalog.cs:257-266`，`AppSettings.cs:98`） |
-| `video.thumbnail-preview-while-generating` | 视频 → 缩略图 | 开关 | **关** | 开 / 关 | 预生成模式下整片未生成完时是否允许悬停预览；关 = 悬停不发请求（返回 null、不读盘、不按需解码），对齐 IINA `thumbnailsReady`；即时模式恒允许（`SettingsCatalog.cs:267-273`，`AppSettings.cs:107`，`ThumbnailPolicy.cs:59-77`） |
+| `video.thumbnail-mode` | 视频 → 缩略图 | 下拉 | **预生成（推荐）** | 预生成 / 即时预览 | 决定是否遍历全片、是否读写磁盘；慢速模式下实际按即时预览运行并在下拉中显示有效模式（`ThumbnailMode` 枚举，`ThumbnailPolicy.EffectiveMode`） |
+| `video.thumbnail-hover-delay` | 视频 → 缩略图 | 数字 | **250 ms** | 0–2000，步进 50 | 即时预览与慢速模式：指针停留多久后才解码（`SettingsCatalog.cs:257-266`，`AppSettings.cs:98`） |
+| `video.thumbnail-preview-while-generating` | 视频 → 缩略图 | 开关 | **关** | 开 / 关 | 预生成模式下整片未生成完时是否允许悬停预览；关 = 悬停不发请求（返回 null、不读盘、不按需解码），对齐 IINA `thumbnailsReady`；即时模式与慢速模式恒允许，且该行在这两种模式下禁用并显示原因（`SettingsCatalog.cs:267-273`，`AppSettings.cs:107`，`ThumbnailPolicy.cs:59-77`，`SettingsModels.cs:103-127`） |
 | `video.thumbnail-width` | 视频 → 缩略图 | 数字 | **160 DIP** | 80–320 DIP | 悬停浮层宽度；高度按视频比例算（`SettingsCatalog.cs:274-280`，`AppSettings.cs:60`） |
 | `video.thumbnail-bucket` | 视频 → 缩略图 | 数字 | **5 秒** | 1–30 秒 | 时间桶大小；越大越省内存、精度越低（`SettingsCatalog.cs:281-287`，`AppSettings.cs:62`） |
 | `video.thumbnail-cache-mb` | 视频 → 缩略图 | 数字 | **512 MB** | 0–4096，步进 64 | 磁盘缓存字节上限；0 关闭磁盘缓存（`SettingsCatalog.cs:288-295`，`AppSettings.cs:72` 中 `ThumbnailCacheMegabytes`） |
-| `video.thumbnail-slow` | 视频 → 缩略图 | 开关 | **关** | 开 / 关 | 慢速模式：不预生成、单线程 `BelowNormal`、每帧后冷却 250 ms（`SettingsCatalog.cs:296-302`） |
+| `video.thumbnail-slow` | 视频 → 缩略图 | 开关 | **关** | 开 / 关 | 慢速模式：不预生成、单线程 `BelowNormal`、每帧后冷却 250 ms，悬停按即时预览运行并保留磁盘缓存（`SettingsCatalog.cs:296-302`，`ThumbnailPolicy.EffectiveMode`） |
+| `video.thumbnail-keyframe-seek` | 视频 → 缩略图 | 开关 | **关** | 开 / 关 | 后台预生成与慢速模式用 `seek absolute+keyframes` 定位到前一个关键帧，跳过 GOP 解码；画面最多早一个 GOP，悬停始终精确，磁盘格式不变（`SettingsCatalog.cs:308-314`，`AppSettings.cs:89`） |
 | `video.thumbnail-acceleration` | 视频 → 缩略图 | 下拉 | **自动（推荐）** | 自动 / 仅 CPU | 自动 = `hwdec=auto-safe`；仅 CPU = `hwdec=no`（`SettingsCatalog.cs:303-311`，`ThumbnailAcceleration.cs`） |
 | `video.thumbnail-hint` | 视频 → 缩略图 | 说明 | — | — | 提示低配设备可开慢速模式（`SettingsCatalog.cs:312-317`） |
 | `video.thumbnail-cache-clear` | 视频 → 缩略图 | 按钮 | — | — | 删除磁盘 + 内存缓存并报告释放空间（`SettingsCatalog.cs:318-325`） |
@@ -35,8 +36,8 @@
 补充：
 
 - **内存容量没有 UI 行**。1.3.2 起 `video.thumbnail-cache` 行被删除，`AppSettings.ThumbnailCacheCount`（默认 60，`AppSettings.cs:69`）只作为**短片的容量下限**保留。
-- 除**缩略图间隔（桶大小）**外，缩略图设置都**即时生效**，不需要重启（`MainWindow.Settings.cs:140-215`）；桶大小在服务构造时读取（`MainWindow.Osd.cs:578`），因此要等下次创建服务（重启应用，或关闭再打开预览）才生效。解码路径切换会在**下一次提取时重建 headless player**。
-- **`video.thumbnail-preview-while-generating` 只影响“预生成进行中”的悬停**：关闭（默认）时，整片未生成完之前悬停返回 `null`（不读磁盘、不排队解码、不显示加载态）；打开则允许边生成边预览。即时模式没有整片遍历，恒允许（`ThumbnailPolicy.cs:59-77`、`ThumbnailService.cs:478-499`）。
+- 除**缩略图间隔（桶大小）**外，缩略图设置都**即时生效**（含 1.3.9 的“预生成使用关键帧定位”，它只影响下一次后台任务），不需要重启（`MainWindow.Settings.cs:140-215`）；桶大小在服务构造时读取（`MainWindow.Osd.cs:578`），因此要等下次创建服务（重启应用，或关闭再打开预览）才生效。解码路径切换会在**下一次提取时重建 headless player**。
+- **`video.thumbnail-preview-while-generating` 只影响“预生成进行中”的悬停**：关闭（默认）时，整片未生成完之前悬停返回 `null`（不读磁盘、不排队解码、不显示加载态）；打开则允许边生成边预览。即时模式与慢速模式没有整片遍历，恒允许（`ThumbnailPolicy.cs:59-77`、`ThumbnailService.cs:478-499`）。该行在慢速/即时模式下会被动态禁用并显示原因（`SettingsModels.cs:103-127`）。
 
 ---
 
@@ -48,7 +49,7 @@
 2. 遍历从桶 0 到 `floor(duration / bucket)`：内存命中 → 跳过；磁盘命中 → 读回并放进内存；否则排一个**后台**提取任务（`ThumbnailService.StartPreGeneration` `:554-601`、`PreGenerateAsync` `:642-706`）。
 3. 提取结果写内存缓存，并在允许时写磁盘（`ExtractAsync` `:885-953`）。
 4. 悬停时绝大多数位置已是内存命中，因此“几乎即时”（热悬停约 4 ms，见 §10）。
-5. 悬停先过“生成完成前允许预览”闸门：遍历未完成且开关关闭（默认）→ 直接返回 `null`，不读盘、不排队、不显示加载态；打开 → 允许边生成边预览。后台遍历任务本身不被拦（`background: true` 跳过闸门，`ThumbnailService.cs:478-499`）。
+5. 悬停先过“生成完成前允许预览”闸门：遍历未完成且开关关闭（默认）→ 返回 `NotAllowed`（不读盘、不排队），浮层显示空卡而不是残留旧帧；打开 → 允许边生成边预览。后台遍历任务本身不被拦（`background: true` 跳过闸门，`ThumbnailService.cs:478-499`）。
 
 ### 3.2 即时预览（Instant）
 
@@ -56,6 +57,8 @@
 - 悬停后先等 `video.thumbnail-hover-delay`（默认 250 ms，`GetAsync` `:443-470`）；指针移走会取消等待，所以扫过整条进度条最多只解码**最后停留**的位置。
 - 同一时间只保留一个待处理悬停任务：新位置到来时清掉队列里的旧悬停任务（`CancelPendingHoverJobsLocked` `:378-395`）；已在飞的任务会跑完，其结果仍进内存缓存。
 - 命中内存缓存时立即返回，所以“回看刚看过的位置”在即时模式下也很便宜。
+- **慢速模式（1.3.9 起）实际就是即时预览**：`ThumbnailPolicy.EffectiveMode` 返回 `Instant`，所以不预生成、悬停仍等 `video.thumbnail-hover-delay`、但**保留磁盘缓存**（`AllowsDiskCache(mode, slowMode)` 对慢速模式返回 true）——低配设备重新打开同一文件时命中磁盘即可快速显示。设置里的“缩略图生成模式”下拉显示有效模式，慢速关闭后恢复用户保存的选择。
+- **悬停结果有明确分类**（`src/Wiina.Core/State/ThumbnailHoverState.cs`）：`Frame`（有新帧）、`Pending`（还在排队/解码，保留上一帧、不转圈）、`NotAllowed`（策略禁止预览，显示空卡；不展示上一文件的帧）。切换文件时 `ClearFrame` 保证第一帧不会是新片的旧画面。
 - 服务本身在退出即时模式时不会主动重启预生成；但设置窗口的实时应用路径会为当前文件立刻重新启动遍历（`MainWindow.Settings.cs:166-179`）。
 
 ---
@@ -75,7 +78,7 @@
                  └─ 否则排队 → 单工作线程 ExtractAsync        :509-547 / :749-823
                       ├─ EnsurePlayer()：headless libmpv      :955-998
                       ├─ LoadFileAsync()：loadfile + pause    :1000-1028
-                      ├─ SeekAsync()：seek absolute exact + 轮询 time-pos/seeking  :1030-1049
+                      ├─ SeekAsync()：关键帧模式 seek absolute+keyframes，否则 absolute exact；20 ms 轮询  :1193-1240
                       ├─ Capture()：screenshot-raw "video"，最多 3 次，间隔 80 ms  :1051-1075
                       ├─ 失败回退 CaptureToFileAsync()：screenshot-to-file + PNG 解码  :1077-1129
                       ├─ Scale()：双线性缩放到目标高度（BGRA8，顶朝下）  :1308-1399
@@ -137,12 +140,12 @@
 | --- | --- | --- | --- | --- | --- | --- |
 | 总开关**关** | 否 | 否 | 否 | 否 | 否（清空） | 不创建，空闲后释放 |
 | 预生成 + 慢速**关** + 磁盘 > 0 | **是** | 是（遍历完成后；开关可放宽） | 是 | 是 | 是 | 按需创建 |
-| 预生成 + 慢速**开** | 否 | 是（单线程冷却） | 是 | 是 | 是 | 按需创建 |
+| 慢速模式（`EffectiveMode=Instant`） | 否 | 是（等 hover delay，单线程冷却） | 是 | 是 | 窗口侧跳过；首次悬停按全片设容量上限、不预填充 | 按需创建 |
 | 预生成 + 磁盘 **0** | 否（`AllowsPreGeneration` 要求 >0） | 是 | 否 | 否 | 是 | 按需创建 |
 | **即时预览**（任意慢速/磁盘） | 否 | 是（等 hover delay，只留一个待处理） | **否** | **否** | 窗口侧跳过；首次悬停仍按全片设容量上限、不预填充 | 按需创建 |
 | 非本地文件（URL / 流 / 文件不存在） | 否 | 否 | 否 | 否 | 否 | 不创建 |
 
-实现依据：`ThumbnailPolicy.cs:29-37`（预生成门槛）、`:44-45`（磁盘门槛）、`:56-57`（悬停延迟仅即时）；`ThumbnailService.cs:418-424`、`:561-601`、`:629-637`。
+实现依据：`ThumbnailPolicy.cs:29-37`（预生成门槛）、`:47-48`（磁盘门槛，慢速模式仍允许）、`:56-58`（有效模式：慢速=即时）、`:71`（悬停延迟：即时或慢速）；`ThumbnailService.cs:418-424`、`:561-601`、`:629-637`。
 
 预生成进行中的闸门由 `ThumbnailPreGenerationTracker`（`src/Wiina.Core/Caching/ThumbnailPreGenerationTracker.cs`：按源路径记 total/completed，换片 `Begin` 重置，失败桶也 `MarkCompleted`，不会遍历的分支 `MarkComplete`）+ `ThumbnailPolicy.AllowsHoverPreview`（`:70-77`）决定。
 
@@ -156,6 +159,7 @@
 - 判定链：`ThumbnailService.GetAsync` 在后台标记为 `false` 的请求上调用 `ThumbnailPolicy.AllowsHoverPreview(Mode, _previewWhileGenerating, _pregen.IsPendingFor(path))`，任一为真才继续（`ThumbnailService.cs:478-499`）；后台预生成请求传 `background: true`，**永不被拦**。
 - 进度来源：`ThumbnailPreGenerationTracker`（`src/Wiina.Core/Caching/ThumbnailPreGenerationTracker.cs`）按源路径记录 `TotalBuckets`/`CompletedBuckets`：`Begin` 在 `StartPreGeneration` 开始时重置；每个桶无论内存命中（`:739-743`）、磁盘命中（`:746-755`）还是提取完成/失败（`:758-772`）都 `MarkCompleted`；慢速模式、磁盘关闭、非本地文件、空时长等不会遍历的分支直接 `MarkComplete`（`:655-671`），因此不会把预览永久挡死。
 - 即时生效：设置变更走 `MainWindow.Settings.cs:183-189` → `ThumbnailService.SetPreviewWhileGenerating`；下一次悬停即按新值判定（无需重启、无需重建服务）。
+- 1.3.9 起该行在慢速/即时模式下被动态禁用（`AvailableWhen`），描述里会说明“慢速模式或即时预览没有全片生成过程，此项不适用”。
 - 边界：对一个**从未开始过遍历的源**，`IsPendingFor` 返回 false（视为不等待），所以关闭开关也不会挡住“原本就没有预生成任务”的悬停路径。
 
 ---
@@ -168,7 +172,8 @@
 | 改模式 | 立即：切即时停预生成并丢弃排队悬停；切回预生成对当前文件重启遍历（`:162-176`） |
 | 改悬停延迟 | 立即（下一次悬停）(`:177-182`) |
 | 改“生成完成前允许预览” | 立即（下一次悬停）`SetPreviewWhileGenerating`（`:183-189`） |
-| 改慢速模式 | 立即：改线程优先级、停/启预生成（`:190-203`） |
+| 改慢速模式 | 立即：改线程优先级、停/启预生成，有效模式切到即时预览（`:188-204`） |
+| 改“预生成使用关键帧定位” | 立即：只影响下一次后台任务，悬停仍精确（`:206-209`） |
 | 改硬件加速 | 下一次提取重建 headless player，缓存保留（`:204-209`） |
 | 改磁盘上限 | 立即 `SetLimitBytes` 触发 LRU 淘汰；0 时停预生成（`:210-222`） |
 | 改缩略图宽度 | 下一次悬停生效（浮层尺寸直接读设置，`MainWindow.xaml.cs:1302`） |
@@ -192,6 +197,9 @@
 | 单帧解码（仅 CPU） | **104 ms wall，461 ms CPU** | `hwdec=no` |
 | 磁盘占用 | 285 帧 **1.70 MB ≈ 6 KB/帧**（JPEG） | 90 px 高 |
 | 内存占用 | 约 **57.6 KB/桶**，**≈41 MB/小时**；24 min ≈ **15.8 MB**；2 h ≈ **83 MB** | 160×90 BGRA8 |
+| 关键帧预生成（1.3.9） | **208 ms/帧**（330.0 s 处） | `seek absolute+keyframes`，画面最多早一个 GOP |
+| 慢速模式磁盘命中（1.3.9） | **26–29 ms** | 慢速=即时但保留磁盘缓存 |
+| 悬停 Pending / Frame（1.3.9） | **≈124 ms** / **244–483 ms** | 快速扫动时 Pending 保留上一帧 |
 
 ---
 
@@ -202,10 +210,11 @@
 - **每个视频一个磁盘键**：路径、大小、mtime、时长、桶、高度任一变化都会产生新键；旧条目要等 LRU 或手动清理，不会自动迁移。
 - **单工作线程**：预生成与悬停共用一条线程；低配设备上预生成会与播放争 CPU（1.3.6 提供慢速模式与即时模式缓解）。
 - **解码路径切换**：从“仅 CPU”切回“自动”会在下一次提取时重建 headless player（一次性的启动开销）。
-- **慢速模式仍会写磁盘**：它只关掉全片预生成并降低线程优先级/加冷却，不关闭磁盘缓存。
-- **悬停浮层有加载态**：内存/磁盘都未命中时先显示转圈（`ThumbnailPeek.ShowLoading`，`ThumbnailPeek.xaml.cs:17-26`），冷启动时可能闪现。
+- **慢速模式=即时预览，但仍会写磁盘缓存**（1.3.9 起明确为设计行为）：不预生成、单线程冷却，命中磁盘后很快；这是低配设备重新打开文件时的收益来源。
+- **悬停浮层的加载态只在没有帧时出现**：1.3.9 起 `Pending` 保留上一帧且不转圈，`NotAllowed` 显示空卡（`ThumbnailPeek.ShowLoading/ShowEmpty`，`ThumbnailPeek.xaml.cs:17-80`）；冷启动第一次悬停仍是空卡 + 进度环。
 - **即时模式的内存容量上限仍按全片设**：窗口注释所说的“不做全片定容”指不预生成、不预填充（`MainWindow.Osd.cs:627-634`）；首次悬停时 `GetAsync` 会调用 `SetSource`，把**容量上限**设为全片桶数（`ThumbnailService.cs:433-436`），但缓存只为实际请求过的桶分配槽位，因此不会瞬间占用整片内存，也不会自动填满。
 - **字幕/OSD 已排除**：`screenshot-raw video` + headless 的 `sid=no` 等选项共同保证；若未来改动截图标志，需要回归“缩略图不带字幕”。
+- **关键帧定位的画面会早于标称时间**：最多一个 GOP（几秒），时间标签仍显示请求时间；正常悬停不受影响。
 
 ---
 
@@ -260,6 +269,9 @@ flowchart TD
 | 服务门面（模式 / 延迟 / 加速 / 总开关 / 生成完成前预览） | `src/Wiina.App/Services/ThumbnailService.cs:120-371` |
 | 悬停请求与预生成入口（含 `GetAsync` 闸门 :478-499） | `src/Wiina.App/Services/ThumbnailService.cs:410-706` |
 | 队列 / 工作线程 / 优先级 | `src/Wiina.App/Services/ThumbnailService.cs:509-883` |
+| 悬停状态机（Frame/Pending/NotAllowed） | `src/Wiina.Core/State/ThumbnailHoverState.cs:9-120` |
+| 关键帧 seek（工作线程路径） | `src/Wiina.App/Services/ThumbnailService.cs:452-468`、`:1193-1240` |
+| 设置行动态可用性（`AvailableWhen`） | `src/Wiina.Core/Settings/SettingsModels.cs:103-127`、`src/Wiina.App/Views/SettingsWindow.xaml.cs:463-499` |
 | 截取 / 缩放 / JPEG 编解码 | `src/Wiina.App/Services/ThumbnailService.cs:885-1406` |
 | 设置行 | `src/Wiina.Core/Settings/SettingsCatalog.cs:242-325`、`:936-943` |
 | 设置默认值 | `src/Wiina.Core/Settings/AppSettings.cs:58-107` |
@@ -274,7 +286,7 @@ flowchart TD
 
 ## 14. 相关文档
 
-- [缩略图 v1.3.8 改造方案](../reports/thumbnails-v1.3.8-plan.md) — 本轮**只出方案，未改代码**：慢速模式三套语义的根因、有效模式与磁盘缓存策略、关键帧 seek 开关（`video.thumbnail-keyframe-seek`，默认关，尚未进入设置）、即时模式 UX 状态机（`ThumbnailOutcome`，无 spinner、保留上一帧）、macOS 与本机 30–50 s 差距拆解（2.85× 帧数、疑似 hwdec 回退、20 ms 轮询地板）与分阶段实施顺序。
+- [缩略图 v1.3.8 改造方案](../reports/thumbnails-v1.3.8-plan.md) — 原为方案，**1.3.9 已实施 A/B/C**（慢速=即时、关键帧 seek 进入设置并默认关、`ThumbnailOutcome` 悬停状态机），§7 记录实施差异；20 ms 轮询地板与 `vf=scale` 预缩放仍未做。
 
 - [缩略图性能优化可行性（v1.3.7，仅报告）](../reports/thumbnails-optimization-1.3.7.md)
 

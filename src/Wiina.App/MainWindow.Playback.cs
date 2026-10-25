@@ -1368,13 +1368,15 @@ public sealed partial class MainWindow
         string preferred = _settings.PreferredSubtitleLanguage;
         _ = Task.Run(() =>
         {
-            SubtitleCandidate? subtitle = null;
+            IReadOnlyList<SubtitleCandidate> subtitles = Array.Empty<SubtitleCandidate>();
             ExternalAudioCandidate? audio = null;
             try
             {
                 if (findSubtitle)
                 {
-                    subtitle = SmartSubtitleFinder.FindBest(mediaPath, preferred);
+                    // Every same-episode sidecar, best (assfonts) first. Listing all
+                    // of them keeps the plain variant selectable next to assfonts.
+                    subtitles = SmartSubtitleFinder.Find(mediaPath, preferred);
                 }
 
                 if (findAudio)
@@ -1387,14 +1389,14 @@ public sealed partial class MainWindow
                 Trace("sidecar discovery failed: " + ex.Message);
             }
 
-            if (subtitle is null && audio is null)
+            if (subtitles.Count == 0 && audio is null)
             {
                 Trace("smart sidecar discovery found nothing");
                 return;
             }
 
             Trace(
-                $"smart sidecar discovery: subtitle={subtitle?.Path ?? "<none>"} " +
+                $"smart sidecar discovery: subtitles=[{string.Join(", ", subtitles.Select(item => item.FileName))}] " +
                 $"audio={audio?.Path ?? "<none>"} preferred={preferred}");
 
             DispatcherQueue.TryEnqueue(() =>
@@ -1404,9 +1406,9 @@ public sealed partial class MainWindow
                     return;
                 }
 
-                if (subtitle is not null)
+                if (subtitles.Count > 0)
                 {
-                    ApplyAutoSubtitle(subtitle.Path);
+                    ApplyAutoSubtitles(subtitles);
                 }
 
                 if (audio is not null)
@@ -1417,75 +1419,136 @@ public sealed partial class MainWindow
         });
     }
 
-    private void ApplyAutoSubtitle(string path)
+    /// <summary>
+    /// Adds every same-episode sidecar to the subtitle list, selecting the best one
+    /// (assfonts, because the fonts travel inside the file) and leaving the plain
+    /// variant selectable behind it. Tracks mpv's own <c>sub-auto</c> already added
+    /// are reused instead of duplicated; a track the user/another feature selected is
+    /// never overridden.
+    /// </summary>
+    private void ApplyAutoSubtitles(IReadOnlyList<SubtitleCandidate> candidates)
     {
-        if (!_settings.AutoLoadSmartSubtitles || _pendingSubtitles.Count > 0)
+        if (!_settings.AutoLoadSmartSubtitles || _pendingSubtitles.Count > 0 || candidates.Count == 0)
         {
             return;
         }
 
-        string fullPath = SafeFullPath(path);
-        if (string.Equals(_autoLoadedSubtitlePath, fullPath, StringComparison.OrdinalIgnoreCase))
+        SubtitleCandidate preferredCandidate = candidates[0];
+        string preferredFullPath = SafeFullPath(preferredCandidate.Path);
+        if (string.Equals(_autoLoadedSubtitlePath, preferredFullPath, StringComparison.OrdinalIgnoreCase))
         {
             return;
         }
 
-        // mpv's sub-auto may already have added this exact sidecar. Select the
-        // existing track instead of adding a duplicate, so the preferred
-        // language still wins when mpv picked a different sidecar first.
-        string fileName = Path.GetFileName(path);
-        string mediaBase = Path.GetFileNameWithoutExtension(_currentPath ?? string.Empty);
         IReadOnlyList<TrackInfo> tracks = _player?.GetTracks() ?? _trackList;
-        Trace(
-            $"smart subtitle candidate {fileName}; " +
-            "external=" + string.Join(
-                " | ",
-                tracks.Where(track => track.Type == TrackType.Subtitle && track.IsExternal)
-                      .Select(track => $"#{track.Id} '{track.Title}' sel={track.IsSelected}")));
-        TrackInfo? existing = tracks.FirstOrDefault(track =>
-            track.Type == TrackType.Subtitle &&
-            track.IsExternal &&
-            !string.IsNullOrWhiteSpace(track.Title) &&
-            (string.Equals(track.Title, fileName, StringComparison.OrdinalIgnoreCase) ||
-             (mediaBase.Length > 0 &&
-              string.Equals(
-                  fileName,
-                  mediaBase + "." + track.Title,
-                  StringComparison.OrdinalIgnoreCase))));
-        if (existing is not null)
-        {
-            Trace($"smart subtitle use existing sid={existing.Id} selected={existing.IsSelected}");
-            _autoLoadedSubtitlePath = fullPath;
-            if (!existing.IsSelected)
-            {
-                if (_player?.TrySetPropertyString("sid", existing.Id.ToString()) == true)
-                {
-                    ShowOsd(Loc.F("osd.autoSubtitleLoaded", fileName));
-                }
-                else
-                {
-                    Trace($"smart sid switch failed for {path}");
-                }
-            }
-            else
-            {
-                ShowOsd(Loc.F("osd.autoSubtitleLoaded", fileName));
-            }
+        List<TrackInfo> external = tracks
+            .Where(track => track.Type == TrackType.Subtitle && track.IsExternal)
+            .ToList();
 
-            return;
+        // Map mpv's existing external subtitle tracks back to our candidates: the
+        // external-filename property is exact, while the title libmpv derives is only
+        // the language suffix ("chs.ass"), which MatchTrack understands too.
+        var existingByCandidate = new Dictionary<string, TrackInfo>(StringComparer.OrdinalIgnoreCase);
+        var externalFiles = new Dictionary<int, string?>();
+        foreach (TrackInfo track in external)
+        {
+            string? externalFile = _player?.GetPropertyString($"track-list/{track.Id}/external-filename");
+            SubtitleCandidate? candidate = SmartSubtitleFinder.MatchTrack(candidates, externalFile)
+                ?? SmartSubtitleFinder.MatchTrack(candidates, track.Title);
+            if (candidate is not null)
+            {
+                existingByCandidate.TryAdd(candidate.FileName, track);
+                externalFiles[track.Id] = externalFile;
+            }
         }
 
-        if (HasSelectedExternalTrack(TrackType.Subtitle))
+        Trace(
+            "smart subtitle candidates: " +
+            string.Join(" | ", candidates.Select(item =>
+                $"{item.FileName}{(item.IsAssFonts ? " [assfonts]" : string.Empty)}")) +
+            "; external tracks: " +
+            string.Join(
+                " | ",
+                external.Select(track =>
+                    $"#{track.Id} '{track.Title}' sel={track.IsSelected}" +
+                    (externalFiles.TryGetValue(track.Id, out string? mappedFile) && mappedFile is not null
+                        ? $" file='{mappedFile}'"
+                        : string.Empty))));
+
+        // A subtitle somebody else selected (embedded preference handled elsewhere, or
+        // an external track that is not one of our candidates) keeps priority: add
+        // nothing and switch nothing, exactly like before.
+        var candidateTrackIds = new HashSet<int>(existingByCandidate.Values.Select(track => track.Id));
+        if (external.Any(track => track.IsSelected && !candidateTrackIds.Contains(track.Id)))
         {
             Trace("smart subtitle skipped: another external subtitle is active");
             return;
         }
 
-        _autoLoadedSubtitlePath = fullPath;
-        Trace($"smart sub-add {path}");
-        SendPlayerCommandAsync("sub-add", path, "select");
-        _wantSubtitleSelection = true;
-        ShowOsd(Loc.F("osd.autoSubtitleLoaded", Path.GetFileName(path)));
+        bool preferredSelected = false;
+        bool preferredAdded = false;
+        foreach (SubtitleCandidate candidate in candidates)
+        {
+            bool isPreferred = ReferenceEquals(candidate, preferredCandidate) ||
+                string.Equals(candidate.Path, preferredCandidate.Path, StringComparison.OrdinalIgnoreCase);
+
+            if (existingByCandidate.TryGetValue(candidate.FileName, out TrackInfo? existing))
+            {
+                if (!isPreferred)
+                {
+                    continue;
+                }
+
+                preferredAdded = true;
+                if (existing.IsSelected)
+                {
+                    preferredSelected = true;
+                    continue;
+                }
+
+                if (_player?.TrySetPropertyString("sid", existing.Id.ToString()) == true)
+                {
+                    preferredSelected = true;
+                }
+                else
+                {
+                    Trace($"smart sid switch failed for {candidate.Path}");
+                }
+
+                continue;
+            }
+
+            if (_player is null)
+            {
+                Trace($"smart sub-add skipped (no player) for {candidate.Path}");
+                continue;
+            }
+
+            // The preferred candidate is selected; the others only enter the list so
+            // the user can switch to the plain variant from the subtitle menu.
+            if (isPreferred)
+            {
+                Trace($"smart sub-add {candidate.Path} select");
+                SendPlayerCommandAsync("sub-add", candidate.Path, "select");
+                preferredAdded = true;
+                preferredSelected = true;
+            }
+            else
+            {
+                Trace($"smart sub-add {candidate.Path}");
+                SendPlayerCommandAsync("sub-add", candidate.Path);
+            }
+        }
+
+        if (!preferredAdded)
+        {
+            Trace("smart subtitle: no candidate could be added");
+            return;
+        }
+
+        _autoLoadedSubtitlePath = preferredFullPath;
+        _wantSubtitleSelection |= preferredSelected;
+        ShowOsd(Loc.F("osd.autoSubtitleLoaded", preferredCandidate.FileName));
     }
 
     private void ApplyAutoAudio(string path)

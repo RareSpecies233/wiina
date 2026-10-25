@@ -79,6 +79,16 @@ public sealed partial class AppSettings
     public bool ThumbnailSlowMode { get; set; }
 
     /// <summary>
+    /// Let the background pass and slow mode seek to the preceding keyframe
+    /// instead of the exact time. mpv decodes from that keyframe either way, so
+    /// this skips the rest of the GOP and makes pre-generation several times
+    /// faster; the frame lands up to one GOP early (a few seconds). Interactive
+    /// hover in pre-generation mode always seeks exactly, and the disk-cache
+    /// format is unchanged. Off by default.
+    /// </summary>
+    public bool ThumbnailKeyframeSeek { get; set; }
+
+    /// <summary>
     /// Whether timeline thumbnails may use the GPU decoder (libmpv probes the
     /// driver and falls back on its own) or must always decode on the CPU.
     /// </summary>

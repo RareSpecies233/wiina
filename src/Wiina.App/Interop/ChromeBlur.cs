@@ -65,6 +65,9 @@ internal sealed class ChromeBlur
     private volatile bool _active = true;
     private volatile bool _fixedCaptured;
     private volatile ChromeBlurMode _mode = ChromeBlurMode.Dynamic;
+    private volatile bool _suspended;
+    private volatile ChromeBlurMode _pendingMode = ChromeBlurMode.Dynamic;
+    private int _captures;
 
     /// <summary>Current capture strategy.</summary>
     public ChromeBlurMode Mode => _mode;
@@ -112,20 +115,77 @@ internal sealed class ChromeBlur
     public static void SetMode(ChromeBlurMode mode)
     {
         ChromeBlur blur = Current;
-        blur._mode = mode;
-        blur._fixedCaptured = false;
+        if (blur._suspended)
+        {
+            // A settings/theme refresh must not wake the capture loop while a
+            // small window owns the player. Remember the choice; Resume
+            // applies it.
+            blur._pendingMode = mode;
+            return;
+        }
+
+        blur.ApplyMode(mode);
+    }
+
+    /// <summary>
+    /// True while small-window mode keeps the capture worker parked.
+    /// <see cref="SetMode"/> calls made meanwhile are remembered, not applied.
+    /// </summary>
+    public bool IsSuspended => _suspended;
+
+    /// <summary>
+    /// Parks the capture worker for as long as a small window (mini / PiP)
+    /// owns the video. Independent of the persisted
+    /// <see cref="ChromeBlurMode"/>: the current mode is applied when
+    /// <see cref="Resume"/> runs, so a setting change made while parked is not
+    /// lost. The chrome surfaces render their opaque solid brush meanwhile.
+    /// </summary>
+    public static void Suspend()
+    {
+        ChromeBlur blur = Current;
+        if (blur._suspended)
+        {
+            return;
+        }
+
+        blur._suspended = true;
+        blur._pendingMode = blur._mode;
+        blur.ApplyMode(ChromeBlurMode.Solid);
+    }
+
+    /// <summary>
+    /// Leaves the parked state and re-applies the mode requested while
+    /// suspended (or the one that was active before).
+    /// </summary>
+    public static void Resume()
+    {
+        ChromeBlur blur = Current;
+        if (!blur._suspended)
+        {
+            return;
+        }
+
+        blur._suspended = false;
+        blur.ApplyMode(blur._pendingMode);
+    }
+
+    private void ApplyMode(ChromeBlurMode mode)
+    {
+        _mode = mode;
+        _fixedCaptured = false;
 
         // Solid stops all capture work (the worker parks on the Solid check)
         // but leaves _active alone: if the chrome is visible right now, going
         // back to a blur mode must resume capturing without a show/hide cycle.
-        if (mode != ChromeBlurMode.Solid && blur.SnapshotLayers().Count > 0)
+        if (mode != ChromeBlurMode.Solid && SnapshotLayers().Count > 0)
         {
             // Layers attached while Solid never armed the worker (Register
             // returns early there), so leaving Solid has to start it here.
-            blur.Start();
+            Start();
         }
 
-        ModeChanged?.Invoke(blur, EventArgs.Empty);
+        ModeChanged?.Invoke(this, EventArgs.Empty);
+        BlurLog($"mode -> {mode} (active={_active}, layers={SnapshotLayers().Count}, suspended={_suspended})");
     }
 
     private List<ChromeBlurLayer> SnapshotLayers()
@@ -263,16 +323,26 @@ internal sealed class ChromeBlur
                     if (shot is not null && shot.Pixels.Length > 0)
                     {
                         Blur(shot, ReadVideoGeometry(player));
+                        // Cheap diagnostic for "is the blur still capturing?"
+                        // reports: only written when WIINA_BLUR_LOG=1.
+                        BlurLog("capture #" + Interlocked.Increment(ref _captures));
                         if (_mode == ChromeBlurMode.Fixed)
                         {
                             _fixedCaptured = true;
                         }
+                    }
+                    else
+                    {
+                        BlurLog(shot is null
+                            ? "capture skipped: no frame"
+                            : "capture skipped: empty frame");
                     }
                 }
             }
             catch (Exception ex)
             {
                 LogOnce("frame capture failed: " + ex.Message);
+                BlurLog("capture failed: " + ex.Message);
             }
             int remaining = FrameIntervalMs - (int)(Environment.TickCount64 - started);
             if (remaining > 0)

@@ -40,9 +40,21 @@ public static class ThumbnailPolicy
     /// Instant mode extracts on demand and must not touch the disk cache:
     /// writing one PNG per hovered position would grow the cache without a
     /// known bound. Pre-generation mode keeps the existing disk behaviour.
+    /// Slow mode runs as instant preview but is still budgeted by the disk
+    /// cache: a weak device is exactly the one that benefits from re-opening a
+    /// file warm, and slow mode already writes the frames it extracts (§1.3 D2).
     /// </summary>
-    public static bool AllowsDiskCache(ThumbnailMode mode) =>
-        mode != ThumbnailMode.Instant;
+    public static bool AllowsDiskCache(ThumbnailMode mode, bool slowMode = false) =>
+        slowMode || mode != ThumbnailMode.Instant;
+
+    /// <summary>
+    /// The mode the service actually runs in. Slow mode forces instant preview
+    /// (no whole-file pass) but must never overwrite the user's persisted
+    /// choice, so the stored value is only read here, never written back
+    /// (v1.3.8 plan §1.3 D1).
+    /// </summary>
+    public static ThumbnailMode EffectiveMode(ThumbnailMode mode, bool slowMode) =>
+        slowMode ? ThumbnailMode.Instant : mode;
 
     /// <summary>Clamps a hover delay from settings or the UI to 0–2000 ms.</summary>
     public static int ClampHoverDelayMilliseconds(int milliseconds) =>
@@ -52,9 +64,12 @@ public static class ThumbnailPolicy
     /// True when a hover request should wait before extracting. Instant mode
     /// always waits (the delay is what prevents scrubbing from queueing a
     /// decode per pixel); pre-generation answers from its warm cache instead.
+    /// Slow mode is instant preview with a cold cache, so the delay matters
+    /// there most — it used to be ignored, which made scrubbing queue one
+    /// decode per passed bucket (§1.1).
     /// </summary>
-    public static bool RequiresHoverDelay(ThumbnailMode mode) =>
-        mode == ThumbnailMode.Instant;
+    public static bool RequiresHoverDelay(ThumbnailMode mode, bool slowMode = false) =>
+        slowMode || mode == ThumbnailMode.Instant;
 
     /// <summary>
     /// True when hovering may show a frame while the background pass is still

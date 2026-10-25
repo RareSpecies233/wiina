@@ -248,9 +248,11 @@ public static class SettingsCatalog
         rows.Add(ChoiceRow(
             "video.thumbnail-mode", SettingsPageId.Video, "缩略图",
             "缩略图生成模式",
-            "预生成（推荐）：打开文件后在后台遍历全片，悬停时几乎即时响应；即时预览：不预生成、不写磁盘缓存，指针在进度条上停留一会儿才解码当前时间点，磁盘与 CPU 占用最低。",
+            "预生成（推荐）：打开文件后在后台遍历全片，悬停时几乎即时响应；即时预览：不预生成，指针在进度条上停留一会儿才解码当前时间点，磁盘与 CPU 占用最低。慢速预览图模式下实际按即时预览运行，关闭慢速后恢复这里的选择。",
             new[] { "预生成（推荐）", "即时预览" },
-            settings => (int)settings.ThumbnailMode,
+            settings => (int)ThumbnailPolicy.EffectiveMode(
+                settings.ThumbnailMode,
+                settings.ThumbnailSlowMode),
             (settings, value) => settings.ThumbnailMode =
                 (ThumbnailMode)Math.Clamp(value, 0, 1),
             "thumbnail mode pregenerate instant on demand 缩略图 模式 预生成 即时 按需"));
@@ -267,10 +269,13 @@ public static class SettingsCatalog
         rows.Add(BoolRow(
             "video.thumbnail-preview-while-generating", SettingsPageId.Video, "缩略图",
             "生成完成前允许预览",
-            "关闭（默认，与 IINA 一致）：整片缩略图生成完成前，悬停进度条不显示预览，也不会按需解码；打开：预生成过程中就允许边生成边预览。即时预览模式没有整片生成过程，不受此开关影响。",
+            "关闭（默认，与 IINA 一致）：整片缩略图生成完成前，悬停进度条不显示预览，也不会按需解码；打开：预生成过程中就允许边生成边预览。即时预览与慢速模式没有整片生成过程，不受此开关影响。",
             settings => settings.ThumbnailPreviewWhileGenerating,
             (settings, value) => settings.ThumbnailPreviewWhileGenerating = value,
-            "thumbnail preview while generating iina ready partial 缩略图 生成 完成 前 允许 预览 边生成 边预览"));
+            "thumbnail preview while generating iina ready partial 缩略图 生成 完成 前 允许 预览 边生成 边预览",
+            availableWhen: settings => ThumbnailPolicy.EffectiveMode(
+                settings.ThumbnailMode, settings.ThumbnailSlowMode) != ThumbnailMode.Instant,
+            conditionalUnavailable: "慢速模式或即时预览没有全片生成过程，此项不适用。"));
         rows.Add(NumberRow(
             "video.thumbnail-width", SettingsPageId.Video, "缩略图",
             "缩略图宽度", "80–320 DIP；高度按视频比例计算。",
@@ -296,10 +301,17 @@ public static class SettingsCatalog
         rows.Add(BoolRow(
             "video.thumbnail-slow", SettingsPageId.Video, "缩略图",
             "慢速预览图模式（单核）",
-            "只用一个低优先级工作线程逐张生成，全片不做预生成；低配设备更不容易卡顿，首次悬停会稍慢。",
+            "只用一个低优先级工作线程逐张生成，全片不做预生成；低配设备更不容易卡顿。此模式下悬停按即时预览运行（首次解码较慢，命中磁盘缓存后很快），关闭后恢复上面选择的生成模式。",
             settings => settings.ThumbnailSlowMode,
             (settings, value) => settings.ThumbnailSlowMode = value,
             "slow thumbnail single core 慢速 缩略图 单核 低配 性能"));
+        rows.Add(BoolRow(
+            "video.thumbnail-keyframe-seek", SettingsPageId.Video, "缩略图",
+            "预生成使用关键帧定位",
+            "开启后后台预生成与慢速模式改为定位到前一个关键帧截帧，跳过关键帧到目标时间之间的解码，预生成快数倍；代价是画面可能比标称时间早几秒。正常悬停预览始终精确定位，磁盘缓存格式不变。",
+            settings => settings.ThumbnailKeyframeSeek,
+            (settings, value) => settings.ThumbnailKeyframeSeek = value,
+            "thumbnail keyframe seek gop fast pregeneration 缩略图 关键帧 快速 预生成"));
         rows.Add(ChoiceRow(
             "video.thumbnail-acceleration", SettingsPageId.Video, "缩略图",
             "预览图硬件加速",
@@ -1035,7 +1047,9 @@ public static class SettingsCatalog
         Func<AppSettings, bool> get,
         Action<AppSettings, bool> set,
         string keywords = "",
-        string? unavailable = null) =>
+        string? unavailable = null,
+        Func<AppSettings, bool>? availableWhen = null,
+        string? conditionalUnavailable = null) =>
         new()
         {
             Id = id,
@@ -1046,6 +1060,8 @@ public static class SettingsCatalog
             Keywords = keywords,
             Kind = SettingsRowKind.Toggle,
             UnavailableReason = unavailable,
+            AvailableWhen = availableWhen,
+            ConditionalUnavailableReason = conditionalUnavailable,
             Get = settings => get(settings),
             Set = (settings, value) => set(settings, value is bool flag && flag),
         };
