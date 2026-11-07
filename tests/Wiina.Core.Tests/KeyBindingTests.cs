@@ -25,6 +25,33 @@ public sealed class KeyBindingTests
     }
 
     [Fact]
+    public void DefaultProfileLeavesTheHardwareVolumeKeysToWindows()
+    {
+        // Windows itself changes the system volume when VOLUME_UP/DOWN/MUTE is
+        // pressed; binding them here ran "add volume" on top, so one key press
+        // changed the system volume and the player volume at once. The Wiina
+        // profile must not bind those chords (player volume stays on Up/Down,
+        // the mpv profile keeps 0/9). See fix-plan-1.3.10 §4.
+        IReadOnlyList<KeyBindingSetting> defaults = KeyBindings.CreateDefaults();
+        Assert.DoesNotContain(defaults, binding =>
+            string.Equals(binding.Chord, "MediaVolumeUp", StringComparison.OrdinalIgnoreCase));
+        Assert.DoesNotContain(defaults, binding =>
+            string.Equals(binding.Chord, "MediaVolumeDown", StringComparison.OrdinalIgnoreCase));
+        Assert.DoesNotContain(defaults, binding =>
+            string.Equals(binding.Chord, "MediaMute", StringComparison.OrdinalIgnoreCase));
+
+        // The actions stay in the catalog: the mpv profile still binds 0/9.
+        Assert.True(PlayerActionCatalog.IsKnown(PlayerActions.VolumeUp2));
+        Assert.True(PlayerActionCatalog.IsKnown(PlayerActions.VolumeDown2));
+        Assert.Contains(
+            KeyBindings.CreateMpvDefaults(),
+            binding => binding.Action == PlayerActions.VolumeUp2 && binding.Chord == "0");
+        Assert.Contains(
+            KeyBindings.CreateMpvDefaults(),
+            binding => binding.Action == PlayerActions.VolumeDown2 && binding.Chord == "9");
+    }
+
+    [Fact]
     public void DefaultProfileBindsPictureInPictureButNotMusicMode()
     {
         // PiP advertises Ctrl+Shift+P in the 窗口 menu, so the shipped profile

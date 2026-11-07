@@ -2,6 +2,7 @@ using System.Globalization;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Wiina.App.Controls;
+using Wiina.Core.Files;
 using Wiina.Core.Filters;
 using Wiina.App.Localization;
 using Wiina.Core.Models;
@@ -493,15 +494,18 @@ public sealed partial class MainWindow
 
     private void MovePlaylistItem(int from, int to)
     {
-        if (from == to)
+        // mpv removes "from" before inserting, so a downward move must target
+        // to + 1; sending "to" makes adjacent down-moves a silent no-op.
+        if (!PlaylistMove.TryResolveTarget(from, to, _playlistItems.Count, out int target))
         {
+            Trace($"playlist-move ignored: from={from} to={to} count={_playlistItems.Count}");
             return;
         }
 
         SendPlayerCommandAsync(
             "playlist-move",
             from.ToString(CultureInfo.InvariantCulture),
-            to.ToString(CultureInfo.InvariantCulture));
+            target.ToString(CultureInfo.InvariantCulture));
     }
 
     // ------------------------------------------------------- quick settings

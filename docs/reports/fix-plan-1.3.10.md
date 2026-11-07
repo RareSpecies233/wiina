@@ -374,11 +374,26 @@ libmpv 最小实验（`vo=null`，3 项 `[a,b,c]`，逐条执行）：
 
 ---
 
-## 12. 实施记录（待修复后填写）
+## 12. 实施记录（2026-11-07）
 
-- [ ] A 播放列表
-- [ ] B 毛玻璃菜单
-- [ ] C 快捷键 + 防休眠
-- [ ] D 长播稳定性
-- [ ] E 文档 + 版本 + 构建 + PR
-- 新增发现：
+- [x] A 播放列表：`PlaylistMove` 映射 + 选中/滚动保持 + 首尾禁用 + 18 个测试。
+- [x] B 侧栏快速设置毛玻璃：`ChromeBlur.Reapply` + `SidebarHost` 显示/布局后重放，构建 0 警告 0 错误。
+- [x] C 快捷键 + 防休眠：三个媒体键删除；`PowerKeepAwake` + `ui.prevent-sleep`（默认开）+ 1 s 定时器；英文覆盖已加。
+- [x] D 长播稳定性：4 Hz 抓帧、暂停跳过、异常/空帧退避（异常 3 次、空帧 20 次进入 2 s→5 s）、复用 render target/缩放/扩展缓冲、`SizeChanged` + 复用裁剪几何、2 s 看门狗（3 s 位移 / 2 样本 / 2 次每 10 分钟）、恢复链修正、`WM_POWERBROADCAST`/`WM_DISPLAYCHANGE`。
+- [x] E 文档 + 版本 + 构建 + PR（见 §13）。
+
+验证：
+
+- App Release 构建：**0 警告 / 0 错误**。
+- 全量测试：**977 / 977 通过**（含新增 18 个 `PlaylistMoveTests`、12 个 `RenderWatchdogTests`、1 个默认键位测试；官方 `dotnet test` 因本机 vstest testhost 无法打开父进程句柄改用 in-process xunit runner，命令见 §13）。
+- 额外修正：`ScreenshotRaw` 在设备异常时返回 `null` 而非抛异常，空帧也纳入退避（阈值 20 次，避免启动阶段误退避）。
+- 额外修正：main 上 README 重写导致 `Stage11ReleaseTests.Stage_9_and_10_features_are_not_declared_as_shipped` 失败；README 补回「Stage 9 / Stage 10 明确跳过」措辞后通过。
+
+新增发现（本轮）：
+
+1. `ChromeBlur` 的 8 Hz 抓帧在暂停时照跑，且失败无退避；设备丢失时 `screenshot-raw` 返回 null 的路径也不会触发异常退避。已修。
+2. `_deviceRecoveryFailed` 一旦置位本进程不再恢复；`CompleteDeviceRecovery` 不恢复 `ChromeBlur.SetActive`。已修。
+3. `OnDisplaySwapChainChanged` 在 pending 恢复期间对相同 handle 早退，可能让恢复 5 s 超时。已修。
+4. `ChromeBlurLayer.UpdateClip` 挂 `LayoutUpdated` 并每次新建 `RectangleGeometry`。已修。
+5. `PlaylistView` 每次 `SetItems` 清空选中和滚动。已修。
+6. main 的 README 重写缺少 Stage 9/10 声明，导致既有测试失败。已修。

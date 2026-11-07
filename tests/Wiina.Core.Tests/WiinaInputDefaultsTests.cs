@@ -15,9 +15,11 @@ public sealed class WiinaInputDefaultsTests
     {
         IReadOnlyList<KeyBindingSetting> bindings = WiinaInputDefaults.Create();
 
-        // 84 binding lines; PLAY/PAUSE/PLAYPAUSE/PLAYONLY/PAUSEONLY collapse onto
-        // the single Windows media play/pause key, leaving 80 unique chords.
-        Assert.Equal(80, bindings.Count);
+        // 81 binding lines; PLAY/PAUSE/PLAYPAUSE/PLAYONLY/PAUSEONLY collapse onto
+        // the single Windows media play/pause key, leaving 77 unique chords.
+        // VOLUME_UP/DOWN/MUTE were removed in 1.3.10 so Windows alone owns the
+        // hardware volume keys.
+        Assert.Equal(77, bindings.Count);
         Assert.All(bindings, binding => Assert.True(
             PlayerActionCatalog.IsKnown(binding.Action),
             binding.Action));
@@ -50,7 +52,6 @@ public sealed class WiinaInputDefaultsTests
     [InlineData("Shift+PageDown", PlayerActions.SeekBack600)]
     [InlineData("MediaPlayPause", PlayerActions.PlayPause)]
     [InlineData("MediaPower", PlayerActions.Quit)]
-    [InlineData("MediaVolumeUp", PlayerActions.VolumeUp2)]
     [InlineData("Ctrl+Alt+V", PlayerActions.CycleVideo)]
     [InlineData("Shift+9", PlayerActions.AudioDelayIncrease05)]
     [InlineData("Shift+0", PlayerActions.AudioDelayDecrease05)]

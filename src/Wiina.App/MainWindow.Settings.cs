@@ -126,6 +126,12 @@ public sealed partial class MainWindow
                 _autoHideTimer.Interval = TimeSpan.FromSeconds(_oscState.AutoHideSeconds);
                 ResetAutoHideTimer();
                 break;
+            case "ui.prevent-sleep":
+                // The shared settings object already holds the new value; the
+                // 1 s timer would also see it, but applying it now keeps the
+                // toggle honest on the spot.
+                UpdatePowerKeepAwake();
+                break;
             case "ui.blur-mode":
                 // Live-switchable: controls react through ChromeBlur.ModeChanged
                 // so the blurred frame, the opaque fallback and the capture

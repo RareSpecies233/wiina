@@ -32,6 +32,7 @@ public static class SettingsLocalization
         ["ui.osc-position"] = new("OSC position", "Playback controls floating, docked at the bottom, or in the top titlebar.", new[] { "Floating", "Bottom", "Top" }),
         ["ui.osc-autohide"] = new("OSC auto-hide", "Fade out after the idle delay configured below; stays visible in Docked layout.", null),
         ["ui.osc-autohide-seconds"] = new("Auto-hide delay", "Idle seconds before the OSC and titlebar hide (0.5–30 s).", null),
+        ["ui.prevent-sleep"] = new("Prevent sleep while playing", "Keep the display on and stop Windows from sleeping or auto-locking while media plays; the request is released on pause or exit. System power plans are never changed.", null),
         ["ui.osc-prev-next"] = new("OSC previous/next buttons", "Skip playlist tracks, or seek inside the current file; hold Ctrl to seek 30 seconds.", new[] { "Previous / Next track", "Rewind / Forward" }),
         ["ui.blur-mode"] = new("Chrome blur mode", "Fixed / Dynamic / Always capture the video frame for a Gaussian blur; Solid uses an opaque panel colour with an accent tint (cheapest, never see-through).", new[] { "Fixed (static frame)", "Dynamic (follow video)", "Always (continuous)", "No blur (solid colour)" }),
         ["ui.osd-enabled"] = new("Show OSD messages", "Status hints for volume, seeking, track changes, and more.", null),

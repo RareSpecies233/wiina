@@ -76,6 +76,8 @@ public sealed partial class MainWindow
 
         _oscVm.PropertyChanged += (_, _) => UpdateMiniPlayerState();
         UpdateOsdPlacement();
+
+        InitializePowerKeepAwake();
     }
 
     // -------------------------------------------------------------- layouts
@@ -834,6 +836,7 @@ public sealed partial class MainWindow
             ApplyStage7Settings();
             ApplyStage8Settings();
             SyncQuickSettingsValues();
+            UpdatePowerKeepAwake();
         });
     }
 

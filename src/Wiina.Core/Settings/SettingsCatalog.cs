@@ -178,6 +178,13 @@ public static class SettingsCatalog
             settings => settings.OscAutoHideSeconds,
             (settings, value) => settings.OscAutoHideSeconds = Math.Clamp(value, 0.5, 30),
             "osc autohide delay seconds 自动隐藏 延时 秒"));
+        rows.Add(BoolRow(
+            "ui.prevent-sleep", SettingsPageId.Ui, "窗口与 OSC",
+            "播放时阻止屏幕休眠",
+            "播放中阻止屏幕关闭、系统睡眠与自动锁屏；暂停或退出后恢复。不会修改系统电源计划。",
+            settings => settings.PreventSleepWhilePlaying,
+            (settings, value) => settings.PreventSleepWhilePlaying = value,
+            "sleep power display lock screensaver 休眠 睡眠 熄屏 锁屏 电源"));
         rows.Add(ChoiceRow(
             "ui.osc-prev-next", SettingsPageId.Ui, "窗口与 OSC",
             "OSC 上一首/下一首", "按钮是跟随播放列表切换，还是在当前文件内快退/快进；按住 Ctrl 时快退/快进 30 秒。",

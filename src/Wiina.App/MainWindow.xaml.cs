@@ -93,6 +93,9 @@ public sealed partial class MainWindow : Window
     private readonly DeviceLossRecoveryBudget _deviceRecovery = new();
     private bool _deviceRecoveryPending;
     private bool _deviceRecoveryFailed;
+    // A power-resume / display-change reload is routine plumbing, not a device
+    // failure: it keeps the traces but skips the "device lost" OSD pair.
+    private bool _deviceRecoveryQuiet;
     private DispatcherQueueTimer? _deviceRecoveryTimer;
     private bool _titleBarVisible = true;
 
@@ -198,6 +201,10 @@ public sealed partial class MainWindow : Window
         // Apply the saved capture mode before the chrome first becomes
         // visible: "Solid" must never arm the Win2D capture thread at all.
         ChromeBlur.SetMode(_settings.ChromeBlurMode);
+
+        // Blur capture diagnostics go to the app trace file (sparse: first
+        // failure of a run plus backoff transitions only).
+        ChromeBlur.Log = Trace;
 
         // Follow system light/dark changes even when the OSD was constructed
         // while the app was still on its default (dark) Application theme.
@@ -1711,6 +1718,12 @@ public sealed partial class MainWindow : Window
             return;
         }
 
+        // A new file starts a fresh recovery cycle. An exhausted device-loss
+        // budget or watchdog budget from the previous file used to latch for the
+        // rest of the process, so a later transient TDR was never recovered.
+        ResetDeviceRecovery();
+        ResetRenderWatchdog();
+
         _oscVm.SetDurationFromPlayer(_player.GetPropertyDouble("duration"));
         _oscVm.SetPositionFromPlayer(_player.GetPropertyDouble("time-pos"));
         _oscVm.SetVolumeFromPlayer(_player.GetPropertyDouble("volume"));
@@ -2225,7 +2238,16 @@ public sealed partial class MainWindow : Window
             OnWindowMoveStarted,
             // Fullscreen reports every hit as client area: a native move or
             // resize would drop the fullscreen presenter.
-            () => IsFullscreen);
+            () => IsFullscreen,
+            // Sleep/resume and display-mode changes may invalidate the
+            // composition swapchain; both callbacks only enqueue UI work.
+            OnPowerResumed,
+            OnDisplayChanged);
+
+        // Long-play watchdog: mpv can stop presenting frames without logging a
+        // device loss (audio keeps playing), so sample the frame counter and
+        // rebuild the video output when it stands still.
+        InitializeRenderWatchdog();
 
         if (RootGrid.XamlRoot is { } xamlRoot)
         {
@@ -2377,7 +2399,16 @@ public sealed partial class MainWindow : Window
     {
         DispatcherQueue.TryEnqueue(() =>
         {
-            if (swapChain <= 0 || _swapChain == (nint)swapChain)
+            if (swapChain <= 0)
+            {
+                return;
+            }
+
+            // mpv may republish the same handle during a recovery. The early
+            // return used to swallow that notification and let the recovery
+            // time out, so only skip duplicates when no recovery is waiting for
+            // the rebind.
+            if (_swapChain == (nint)swapChain && !_deviceRecoveryPending)
             {
                 return;
             }
@@ -2420,7 +2451,11 @@ public sealed partial class MainWindow : Window
     /// <see cref="OnDisplaySwapChainChanged"/>. Playback state (position,
     /// playlist, audio) is untouched by a video-output reload.
     /// </summary>
-    private void RecoverFromDeviceLoss(string reason)
+    /// <param name="quiet">
+    /// True for the power-resume / display-change reloads: they are routine, so
+    /// they keep the traces but skip the "device lost / recovered" OSD pair.
+    /// </param>
+    private void RecoverFromDeviceLoss(string reason, bool quiet = false)
     {
         if (_closed || _closing || _deviceRecoveryFailed)
         {
@@ -2446,10 +2481,11 @@ public sealed partial class MainWindow : Window
         }
 
         _deviceRecoveryPending = true;
+        _deviceRecoveryQuiet = quiet;
         Trace($"[devicelost] {reason}: attempt {_deviceRecovery.Attempts}/{DeviceLossRecoveryBudget.DefaultAttempts}");
 
         // The blur worker is the only part of Wiina that keeps submitting GPU
-        // work against the dead device (8 Hz screenshot-raw). Stop it first.
+        // work against the dead device (screenshot-raw). Stop it first.
         ChromeBlur.SetActive(false);
 
         try
@@ -2461,7 +2497,10 @@ public sealed partial class MainWindow : Window
             Trace("[devicelost] detach failed: " + ex.Message);
         }
 
-        ShowOsd(Loc.T("osd.deviceLost"));
+        if (!quiet)
+        {
+            ShowOsd(Loc.T("osd.deviceLost"));
+        }
 
         try
         {
@@ -2496,7 +2535,10 @@ public sealed partial class MainWindow : Window
     private void StartDeviceRecoveryTimeout()
     {
         _deviceRecoveryTimer ??= DispatcherQueue.CreateTimer();
-        _deviceRecoveryTimer.Interval = TimeSpan.FromSeconds(5);
+        // 8 s instead of 5 s: a video-reload after a TDR (and especially after a
+        // monitor wake-up) can take longer than the old timeout on slow GPUs,
+        // which made a successful recovery look like a failure.
+        _deviceRecoveryTimer.Interval = TimeSpan.FromSeconds(8);
         _deviceRecoveryTimer.IsRepeating = false;
         _deviceRecoveryTimer.Tick += (_, _) =>
         {
@@ -2506,7 +2548,7 @@ public sealed partial class MainWindow : Window
             }
 
             _deviceRecoveryPending = false;
-            Trace("[devicelost] no new swapchain within 5 s");
+            Trace("[devicelost] no new swapchain within 8 s");
             FailDeviceRecovery();
         };
         _deviceRecoveryTimer.Start();
@@ -2521,9 +2563,36 @@ public sealed partial class MainWindow : Window
 
         _deviceRecoveryPending = false;
         _deviceRecoveryTimer?.Stop();
+        // A success proves the device is healthy again, so the hard latch and
+        // the attempt budget must not survive it (7.2).
+        _deviceRecoveryFailed = false;
+        _deviceRecovery.Reset();
         Trace("[devicelost] recovered");
         ChromeBlur.SetMode(_settings.ChromeBlurMode);
-        ShowOsd(Loc.T("osd.deviceRecovered"));
+        // RecoverFromDeviceLoss parked the blur worker and nothing re-armed it,
+        // which left the chrome on its last frame forever (7.1). Mirror the
+        // current chrome visibility so the blur resumes (or stays parked when
+        // the chrome is hidden).
+        ChromeBlur.SetActive(_chromeShown);
+        if (!_deviceRecoveryQuiet)
+        {
+            ShowOsd(Loc.T("osd.deviceRecovered"));
+        }
+        _deviceRecoveryQuiet = false;
+    }
+
+    /// <summary>
+    /// Clears the device-loss latch, the pending attempt and the budget for a
+    /// fresh playback. Without this one exhausted budget disabled recovery for
+    /// the rest of the process (7.2).
+    /// </summary>
+    private void ResetDeviceRecovery()
+    {
+        _deviceRecoveryTimer?.Stop();
+        _deviceRecoveryPending = false;
+        _deviceRecoveryFailed = false;
+        _deviceRecoveryQuiet = false;
+        _deviceRecovery.Reset();
     }
 
     private void FailDeviceRecovery()
@@ -2534,6 +2603,7 @@ public sealed partial class MainWindow : Window
         }
 
         _deviceRecoveryFailed = true;
+        _deviceRecoveryQuiet = false;
         _deviceRecoveryTimer?.Stop();
         Trace("[devicelost] giving up; playback continues without video output");
         ShowOsd(Loc.T("osd.deviceLostFailed"));
@@ -3064,6 +3134,7 @@ public sealed partial class MainWindow : Window
 
         _closed = true;
         _deviceRecoveryTimer?.Stop();
+        StopRenderWatchdog();
 
         // Make the close feel instant even if teardown needs a moment.
         try
@@ -3085,6 +3156,7 @@ public sealed partial class MainWindow : Window
         _cursorHideTimer?.Stop();
         _settingsSaveTimer?.Stop();
         SidebarHost.Log = null;
+        ChromeBlur.Log = null;
         WindowInterop.SetCursorVisible(true);
         ApplyProtectedCursor(false);
         CloseStage("timers stopped");

@@ -1,11 +1,85 @@
 # Wiina release notes
 
-Release date (1.3.9): 2026-10-25
+Release date (1.3.10): 2026-11-07
 
 Windows-native, IINA-inspired mpv front end built with WinUI 3, Windows App
 SDK 2.5, and libmpv.
 
-## What's new in 1.3.9
+## What's new in 1.3.10
+
+### Playlist down-move works, and the row stays selected
+
+mpv's `playlist-move <old> <new>` inserts at `new` *after* removing the old
+row, so a downward move must pass `to + 1`; the old code passed `to`, which made
+the down button a silent no-op (adjacent down = no change) and made downward
+drags land one slot short. `PlaylistMove.ResolveTarget` now maps the request
+(`src/Wiina.Core/Files/PlaylistMove.cs`), and both the up/down buttons and the
+drag path use it. The list keeps the selected file and the scroll offset across
+the mpv playlist rebuild, and the up/down buttons are disabled at the ends.
+Tests: `PlaylistMoveTests` (18).
+
+### Sidebar quick settings no longer flash the solid colour
+
+While the sidebar was collapsed its blur layer had no layout size, so it never
+received a frame; opening it in any glass mode showed the opaque
+`ChromeSolidBrush` (`#F3F3F3` light / `#202227` dark) until the next capture.
+`ChromeBlur.Reapply` now replays the last published blurred frame into the
+layer once the panel has a size again, triggered from `SidebarHost.PlayShow`,
+`ShowInstant`, `SizeChanged` and a Solid -> glass switch. `Fixed` mode is
+covered too because the replay does not depend on a new capture.
+
+### Hardware volume keys belong to Windows again
+
+The default Wiina profile no longer binds `VOLUME_UP`, `VOLUME_DOWN` or `MUTE`.
+Windows already handles those keys globally, so the binding changed the system
+volume and the player volume at once. Player volume stays on `Up`/`Down` (±5)
+and `Alt+Up`/`Down` (±1); mute stays on `M` and `Ctrl+/`. The mpv profile's
+`0`/`9` bindings are unchanged, and the action catalog still lists the volume
+actions.
+
+### Prevent sleep while playing (default on)
+
+A new `ui.prevent-sleep` row (Settings -> Interface -> Window and OSC, default
+on) holds `PowerRequestDisplayRequired` + `PowerRequestSystemRequired` while
+media is actually playing, so the display stays on and Windows does not sleep
+or auto-lock mid-movie; the request is released on pause, stop and window
+close. `PowerCreateRequest` is preferred, with a `SetThreadExecutionState`
+fallback. System power plans are never changed. `powercfg /requests` shows the
+Wiina process and the reason "Wiina is playing media" while it is held.
+
+### Long-play stability
+
+The chrome blur used to capture at 8 Hz with no pause skip and no failure
+backoff, and the render pipeline had no "time advances but no frames are
+presented" recovery. 1.3.10:
+
+- captures at 4 Hz, skips while paused, and backs off (2 s, then 5 s) after
+  repeated failures, including `screenshot-raw` returning null on a dead
+  device; the render target and scale buffers are reused;
+- runs a 2 s render watchdog: `time-pos` advancing >= 3 s while
+  `estimated-frame-number` stands still for two samples triggers one
+  `video-reload`, at most twice per 10 minutes, then tells the user and stops;
+- clears the device-loss `_deviceRecoveryFailed` latch and budget on a new file
+  and after a successful recovery, re-arms the blur worker after recovery,
+  accepts a republished identical swapchain handle during recovery, and waits
+  8 s instead of 5 s;
+- handles `WM_POWERBROADCAST` / `WM_DISPLAYCHANGE`: re-applies the video layout
+  and only requests a quiet `video-reload` when the frame counter is actually
+  stale. See `docs/reports/fix-plan-1.3.10.md`.
+
+### Not in this build
+
+- A real TDR is still driver/hardware-dependent; the watchdog recovers the
+  video output but does not make a failing driver healthy.
+- The `Always` blur mode now captures at 4 Hz, not 8 Hz; the first frame after
+  a long seek can still be up to one interval stale.
+- 150 % DPI, mixed-DPI moves and long multi-monitor wake cycles were not
+  re-measured.
+- Cursor hiding is unchanged and still unsolved.
+
+Settings: 11 pages / 134 rows / 581 keys; tests: 977.
+
+## 1.3.9 — previous release
 
 ### Small windows park the chrome blur
 

@@ -46,6 +46,7 @@ public sealed partial class SidebarHost : UserControl
     private double _animToOpacity;
     private long _animStart;
     private ChromeBlurLayer? _blur;
+    private bool _reapplyQueued;
 
     public SidebarHost()
     {
@@ -74,6 +75,12 @@ public sealed partial class SidebarHost : UserControl
             new PointerEventHandler(OnGripPointerReleased),
             handledEventsToo: true);
         RootGrid.PointerCaptureLost += OnGripPointerCaptureLost;
+
+        // A collapsed panel has no layout size, so the blur layer never gets a
+        // frame while hidden. The first size after a show (and any later DPI
+        // change or width drag) is the moment to replay the cached frame.
+        RootGrid.SizeChanged += OnPanelSizeChanged;
+        PanelBorder.SizeChanged += OnPanelSizeChanged;
     }
 
     private void OnLoaded(object sender, RoutedEventArgs e)
@@ -106,6 +113,10 @@ public sealed partial class SidebarHost : UserControl
     {
         EnsureAttached();
         ApplyBlurVisuals();
+        // Leaving Solid while the panel is already on screen attaches a fresh,
+        // empty layer without a size change; replay immediately so the panel
+        // does not stay on the solid brush.
+        RequestBlurReapply();
     }
 
     private void OnFirstBlurFrame(object? sender, EventArgs e) => ApplyBlurVisuals();
@@ -123,6 +134,43 @@ public sealed partial class SidebarHost : UserControl
         // ThemeResource keeps resolving on theme/accent changes.
         bool blurred = live && _blur is { HasFrame: true };
         SidebarBlurTintLayer.Visibility = blurred ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    /// <summary>
+    /// The panel just received a layout size (first show, DPI change, width
+    /// drag). Repaint the cached blurred frame once layout has completed.
+    /// </summary>
+    private void OnPanelSizeChanged(object sender, SizeChangedEventArgs e) =>
+        RequestBlurReapply();
+
+    /// <summary>
+    /// Replays the last published blurred frame into this panel's layer on the
+    /// next dispatcher turn, when <c>ActualWidth/ActualHeight</c> are final.
+    /// Deferring also coalesces the SizeChanged burst of a width drag into one
+    /// repaint per pass. Solid keeps its opaque brush untouched.
+    /// </summary>
+    private void RequestBlurReapply()
+    {
+        if (_blur is null || _reapplyQueued ||
+            ChromeBlur.Current.Mode == ChromeBlurMode.Solid)
+        {
+            return;
+        }
+
+        _reapplyQueued = true;
+        if (!DispatcherQueue.TryEnqueue(() =>
+        {
+            _reapplyQueued = false;
+            if (_blur is null || ChromeBlur.Current.Mode == ChromeBlurMode.Solid)
+            {
+                return;
+            }
+
+            ChromeBlur.Current.Reapply(_blur);
+        }))
+        {
+            _reapplyQueued = false;
+        }
     }
 
     private void OnUnloaded(object sender, RoutedEventArgs e)
@@ -354,6 +402,7 @@ public sealed partial class SidebarHost : UserControl
         SlideTransform.TranslateX = 0;
         Opacity = 1;
         Visibility = Visibility.Visible;
+        RequestBlurReapply();
     }
 
     public void PlayShow(SidebarAnimationMode mode)
@@ -362,6 +411,10 @@ public sealed partial class SidebarHost : UserControl
         _hiding = false;
         _hideCompleted = null;
         Visibility = Visibility.Visible;
+        // The layer may still be empty (no frame was ever published while the
+        // panel was collapsed): repaint the cached one before the first frame
+        // of the show is composited.
+        RequestBlurReapply();
 
         if (mode == SidebarAnimationMode.None)
         {

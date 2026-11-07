@@ -1,6 +1,44 @@
-# Known issues — Wiina v1.3.9
+# Known issues — Wiina v1.3.10
 
-Nothing here is hidden; these are known limitations of the v1.3.9 build. The full decision list (with fix cost and checkboxes) lives in [../reports/known-issues-1.3.1.md](../reports/known-issues-1.3.1.md).
+Nothing here is hidden; these are known limitations of the v1.3.10 build. The full decision list (with fix cost and checkboxes) lives in [../reports/known-issues-1.3.1.md](../reports/known-issues-1.3.1.md).
+
+## What changed in 1.3.10
+
+- The playlist down button works: mpv's `playlist-move` needs `to + 1` when
+  moving down, and the row/scroll position survives the playlist rebuild. Up
+  and down are disabled at the ends.
+- Sidebar quick settings no longer flash the opaque chrome colour in glass
+  modes: the last blurred frame is replayed into the layer once it has a size.
+- The default Wiina profile no longer binds `VOLUME_UP` / `VOLUME_DOWN` /
+  `MUTE`; Windows alone owns the hardware volume keys.
+- New `ui.prevent-sleep` (default on) holds a display + system power request
+  while playing; released on pause, stop or exit. It never edits power plans.
+- Long-play hardening: blur capture is 4 Hz with pause skip and failure
+  backoff (including null `screenshot-raw` results), the render target and
+  buffers are reused, a render watchdog rebuilds the video output when frames
+  stop while time advances, the device-loss latch/budget reset on a new file
+  and after recovery, the blur worker is re-armed after recovery, and
+  `WM_POWERBROADCAST` / `WM_DISPLAYCHANGE` re-layout and conditionally reload
+  the video output.
+
+## Limits specific to 1.3.10
+
+- The render watchdog is a recovery mechanism, not a driver fix: a real TDR
+  still depends on the GPU/driver. After two automatic reloads in 10 minutes it
+  stops and asks you to reopen the file.
+- Blur capture is now 4 Hz (was 8 Hz); the first blurred frame after a long
+  seek can be up to ~250 ms stale. `Fixed` still captures one frame per chrome
+  visibility cycle.
+- The power request prevents display-off, system sleep and the automatic lock
+  that follows the screen saver. A Group Policy forced-inactivity timeout can
+  override it; a manual lock (Win+L) is always honoured.
+- Hardware volume keys now change only the Windows volume while Wiina is
+  focused; player volume is `Up`/`Down` (and `Alt+Up`/`Down`).
+- `WM_DISPLAYCHANGE` and sleep-resume handling were exercised on a single
+  100 % DPI monitor; mixed-DPI monitor moves were not re-measured.
+- The watchdog samples `estimated-frame-number`; an mpv build that reports it
+  as 0/-1 never trips the watchdog (fail-safe, no recovery), and very low
+  frame-rate slideshows (< ~0.2 fps) could look stalled.
 
 ## What changed in 1.3.9
 
