@@ -1,21 +1,21 @@
-# Wiina 设置布局快照（1.3.9）
+# Wiina 设置布局快照（1.3.11）
 
-> **快照版本（1.3.10）**：本文是 v1.3.10 工作树的设置界面完整快照：**11 页 / 134 行 / 40 个页面-分节对（35 个不同分节名）/ 581 个本地化键**。
+> **快照版本（1.3.11）**：本文是 v1.3.11 工作树的设置界面完整快照：**11 页 / 134 行 / 40 个页面-分节对（35 个不同分节名）/ 581 个本地化键**。
 > 与 1.2.7（12 页 / 125 行）相比：缩略图 8 项从「界面」迁到「视频 → 缩略图」，「工具」页并入「高级 → 工具」，
 > 字体设置页与 `utilities.font` 移除，`utilities.open-url` 移到「通用 → 播放与历史」，
 > `general.screenshot-folder` 移到「视频 → 截图」，新增 `control.media-keys`。完整增删移清单见 §6.4。
 
 > **用途**：设置菜单重排的对照基线。这是一份**静态快照**（非运行时截图）；所有数字与行内容都从源码统计，
-> 日期 **2026-10-25**（Asia/Hong_Kong），分支 **`feat/v1.3.9`**。
+> 日期 **2026-11-08**（Asia/Hong_Kong），分支 **`feat/v1.3.11`**。
 >
 > **覆盖范围**：设置窗口的 11 个页面 / 134 行 / 控件与保存管线、设置能打开的全部窗口与对话框、
 > 主窗口快速设置侧栏（含重复入口）、以及仍未解决的布局问题与重构契约。
 >
 > **不包含**：主窗口菜单、OSC 菜单、欢迎窗口（不由设置打开）、插件系统（未实现）。
 >
-> **如何重新生成**：以 `src/Wiina.Core/Settings/SettingsCatalog.cs` 的 `BuildRows()` 为准（`rows.Add(` 共 132 处），
+> **如何重新生成**：以 `src/Wiina.Core/Settings/SettingsCatalog.cs` 的 `BuildRows()` 为准（`rows.Add(` 共 134 处），
 > 配合 `SettingsLocalization.cs` 的英文覆盖、`AppSettings*.cs` 的默认值、`SettingsWindow.xaml.cs` 的
-> `RunActionAsync` 分支、`MainWindow.Sidebar.cs` 的 `OnQuickSettingChanged` 分支统计。行号均指 1.3.9 工作树（以 id 为准；新增行会使后续行号顺延）。
+> `RunActionAsync` 分支、`MainWindow.Sidebar.cs` 的 `OnQuickSettingChanged` 分支统计。行号均指 1.3.11 工作树（以 id 为准；新增行会使后续行号顺延）。
 
 ## 0. 关键数字
 
@@ -24,9 +24,9 @@
 | 设置页面 | **11**（目录 11 项；`KeyBindings` 在页枚举里但左栏跳过，可点击 10 项 + 1 个隐藏页） | `SettingsCatalog.cs:19-29`；`SettingsWindow.xaml.cs` `BuildNavigation` |
 | 设置行 | **134** | `SettingsCatalog.cs` `BuildRows()` 内 `rows.Add(` 计数 |
 | 页面-分节对 / 分节名 | **40** / **35**（音频「音量与输出」、字幕「外观」各出现两次；`重置` ×4） | 各页 `Section` 序列 |
-| 动作行（Button） | **31** | 第 3 节控件列 = Button |
+| 动作行（Button） | **30** | 第 3 节控件列 = Button |
 | 行控件种类 | 8 种目录行（Toggle/Choice/Number/Text/AudioDevice/Action/Info/Font）+ 2 种运行时面板（KeyBindings / PluginList） | `SettingsModels.cs` |
-| 英文覆盖 | **134 / 134** 行（1.3.1 补齐缺口，1.3.5/1.3.6/1.3.10 仍无缺口） | `SettingsLocalization.cs` |
+| 英文覆盖 | **134 / 134** 行（1.3.1 补齐缺口，1.3.5/1.3.6/1.3.11 仍无缺口） | `SettingsLocalization.cs` |
 | 快速设置分支 | **51** 个 `QuickSettingKey`，向 **47** 个不同的 `_settings.*` 属性写入（含 2 个侧栏状态：`SidebarSide`/`SidebarWidth`） | `MainWindow.Sidebar.cs` `OnQuickSettingChanged` |
 | 设置窗口默认尺寸 | 760×600 DIP（最小 600×440） | `AppSettings.Shell.cs`；`SettingsWindow.xaml:9-11` |
 | 左栏宽度 / 搜索框 | 200 DIP（内容区最小 400）；搜索框 280×32 | `SettingsWindow.xaml:160-186` |
@@ -417,7 +417,7 @@ English：Advanced — Diagnostics, tools, folders, and maintenance
 | `advanced.clear-history` | Button | 清空播放历史 | 删除最近文件与断点续播记录。 | 动作 `clear-history`（SettingsWindow.xaml.cs:1129） | Clear playback history — Delete recent files and resume positions. | SettingsCatalog.cs:888 |
 | `advanced.clear-thumbnails` | Button | 清空缩略图缓存 | 释放内存中的时间轴缩略图。 | 动作 `clear-thumbnails`（SettingsWindow.xaml.cs:1141） | Clear thumbnail cache — Free timeline thumbnails held in memory. | SettingsCatalog.cs:893 |
 | `advanced.reset-all` | Button | 重置所有设置 | 恢复全部默认值（按键绑定、窗口位置与历史不受影响）。 | 动作 `reset-all-settings`（SettingsWindow.xaml.cs:1145） | Reset all settings — Restore every default (key bindings, window position, and history are unaffected). | SettingsCatalog.cs:898 |
-| `advanced.mini-player` | Button | 迷你播放器（音乐模式） | 仍属开发中的功能，可先体验但不保证行为稳定；只保留封面与播放控制。 | 动作 `enter-mini-player`；点击后先弹确认框（默认取消），确认后关闭设置窗再切换 | Enter Mini Player (music mode) — still under development; keep the cover and playback controls. | SettingsCatalog.cs:920 |
+| `advanced.music-auto` | ToggleSwitch | 音频文件自动进入音乐模式 | 打开纯音频文件时自动进入迷你播放器（音乐模式）；视频文件不会自动进入，手动退出后同一文件不再自动进入。 | 默认 true | Auto-enter Music Mode for audio files — Open audio-only files in the mini player automatically. Video files never auto-enter, and leaving mini manually is not overridden for the same file. | SettingsCatalog.cs:920 |
 
 ### 页面：文件关联（`Integration`，7 行，图标 U+E71B）
 
@@ -715,9 +715,18 @@ English：Plugins — Not implemented yet (Stage 9): placeholder and folder entr
 - 新增 `ui.prevent-sleep`（界面 → 窗口与 OSC →「播放时阻止屏幕休眠」，ToggleSwitch，默认开，`SettingsCatalog.cs:182`）。
 - 行为：播放中通过 `PowerCreateRequest` 申请 Display / System 两个电源请求，暂停、停止或退出时释放；不修改系统电源计划。实现 `src/Wiina.App/Interop/PowerKeepAwake.cs` + `MainWindow.Power.cs`，由 1 秒定时器与设置变更共同驱动。
 - 其余行无增删；默认键位删除了 `VOLUME_UP` / `VOLUME_DOWN` / `MUTE`（与设置目录无关，见 `docs/reference/iina-shortcuts.md` 的说明）。
+
+### 6.15 1.3.10 → 1.3.11 增删移清单
+
+**设置行 ±0**：**11 页 / 134 行 / 40 个页面-分节对（35 个不同分节名）/ 581 个本地化键**，动作行 30，英文覆盖 134 / 134；快速设置仍是 51 个 `QuickSettingKey` → 47 个属性。
+
+- 删除 `advanced.mini-player`（开发中动作行 + 二次确认）；迷你播放器入口移到 视频菜单、OSC 工具栏与默认键位 `Ctrl+Alt+M`。
+- 新增 `advanced.music-auto`（高级 → 模式 →「音频文件自动进入音乐模式」，ToggleSwitch，默认开，`SettingsCatalog.cs` 的 `BoolRow`），绑定 `AppSettings.AutoSwitchToMusicMode`。
+- 默认键位新增 `Ctrl+Alt+m music-mode`；`PlayerActionCatalog` 恢复「音乐模式」动作（分类「模式」）。
+- 其余行无增删。
 ## 7. 附录 A：全部行 id（按字母序）
 
-> 1.3.5 新增 `video.thumbnail-mode`、`video.thumbnail-hover-delay` 后整体重新编号；1.3.6 再新增「生成完成前允许预览」1 行（1.3.7/1.3.8 无增删），1.3.9 新增「预生成使用关键帧定位」1 行，1.3.10 新增「播放时阻止屏幕休眠」1 行，现共 134 行；1.3.4 删除的 `advanced.music-mode` 不在表内，1.3.3 新增的 `advanced.mini-player` 仍在表内，1.3.2 删除了 `video.thumbnail-cache`。
+> 1.3.5 新增 `video.thumbnail-mode`、`video.thumbnail-hover-delay` 后整体重新编号；1.3.6 再新增「生成完成前允许预览」1 行（1.3.7/1.3.8 无增删），1.3.9 新增「预生成使用关键帧定位」1 行，1.3.10 新增「播放时阻止屏幕休眠」1 行，1.3.11 用「音频文件自动进入音乐模式」替换了「迷你播放器（音乐模式）」行，现共 134 行；1.3.4 删除的 `advanced.music-mode` 不在表内，1.3.3 新增的 `advanced.mini-player` 已在 1.3.11 移除，1.3.2 删除了 `video.thumbnail-cache`。
 
 | # | 行 id | 页面 / 分节 | 控件 |
 |---|---|---|---|
@@ -727,8 +736,8 @@ English：Plugins — Not implemented yet (Stage 9): placeholder and folder entr
 | 4 | `advanced.export-diagnostics` | Advanced / 诊断 | Button |
 | 5 | `advanced.libmpv` | Advanced / 诊断 | 只读文本 |
 | 6 | `advanced.log-folder` | Advanced / 文件夹 | Button |
-| 7 | `advanced.mini-player` | Advanced / 模式 | Button |
-| 8 | `advanced.mpv-log` | Advanced / 诊断 | ComboBox |
+| 7 | `advanced.mpv-log` | Advanced / 诊断 | ComboBox |
+| 8 | `advanced.music-auto` | Advanced / 模式 | ToggleSwitch |
 | 9 | `advanced.renderer` | Advanced / 诊断 | 只读文本 |
 | 10 | `advanced.reset-all` | Advanced / 维护 | Button |
 | 11 | `audio.auto-external` | Audio / 音量与输出 | ToggleSwitch |
@@ -934,5 +943,6 @@ SettingsLocalization.cs：页面英文 11 条、分节英文 35 条、行英文 
 | `ui.videoPresetExample` | FiltersWindow.xaml |
 | `ui.videoPresetPlaceholder` | FiltersWindow.xaml |
 | `ui.wiinaSettings` | SettingsWindow.xaml |
+
 
 

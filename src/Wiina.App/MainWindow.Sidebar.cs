@@ -72,6 +72,7 @@ public sealed partial class MainWindow
         host.Playlist.PlayRequested += (_, index) => PlayPlaylistIndex(index);
         host.Playlist.RemoveRequested += (_, indexes) => RemovePlaylistIndexes(indexes);
         host.Playlist.MoveRequested += (_, move) => MovePlaylistItem(move.From, move.To);
+        host.Playlist.MoveBatchRequested += (_, moves) => MovePlaylistItems(moves);
         host.Chapters.JumpRequested += (_, index) => JumpToChapter(index);
     }
 
@@ -506,6 +507,29 @@ public sealed partial class MainWindow
             "playlist-move",
             from.ToString(CultureInfo.InvariantCulture),
             target.ToString(CultureInfo.InvariantCulture));
+    }
+
+    /// <summary>
+    /// Sends a multi-select up/down move. <see cref="PlaylistMove.ResolveBatch"/>
+    /// already ordered the pairs and mapped each target for mpv's
+    /// remove-then-insert semantics, so the commands are sent verbatim; mpv's
+    /// async command queue executes them in this order.
+    /// </summary>
+    private void MovePlaylistItems(IReadOnlyList<(int From, int To)> moves)
+    {
+        if (moves.Count == 0)
+        {
+            return;
+        }
+
+        Trace($"playlist-move batch count={moves.Count} playlist={_playlistItems.Count}");
+        foreach ((int from, int to) in moves)
+        {
+            SendPlayerCommandAsync(
+                "playlist-move",
+                from.ToString(CultureInfo.InvariantCulture),
+                to.ToString(CultureInfo.InvariantCulture));
+        }
     }
 
     // ------------------------------------------------------- quick settings

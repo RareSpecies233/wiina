@@ -26,6 +26,7 @@ internal static class WindowInterop
     private const uint WM_POINTERENTER = 0x0249;
     private const uint WM_POWERBROADCAST = 0x0218;
     private const uint WM_DISPLAYCHANGE = 0x007E;
+    private const uint WM_SIZE = 0x0005;
 
     // WM_POWERBROADCAST events that mean "the machine came back". The panel may
     // have been powered off, so the composition swapchain can need a rebuild.
@@ -547,7 +548,8 @@ internal static class WindowInterop
         Action? windowMoveStarted = null,
         Func<bool>? isFullscreen = null,
         Action? powerResumed = null,
-        Action? displayChanged = null)
+        Action? displayChanged = null,
+        Action? sizeChanged = null)
     {
         nint hwnd = Microsoft.UI.Win32Interop.GetWindowFromWindowId(window.AppWindow.Id);
         if (Hooks.ContainsKey(hwnd))
@@ -568,7 +570,8 @@ internal static class WindowInterop
             windowMoveStarted,
             isFullscreen,
             powerResumed,
-            displayChanged);
+            displayChanged,
+            sizeChanged);
         Hooks[hwnd] = hook;
         hook.Attach();
         _cursorRootHwnd = hwnd;
@@ -1552,6 +1555,7 @@ internal static class WindowInterop
         private readonly Func<bool>? _isFullscreen;
         private readonly Action? _powerResumed;
         private readonly Action? _displayChanged;
+        private readonly Action? _sizeChanged;
         private readonly SubclassProc _proc;
         private bool _sizingGesture;
 
@@ -1568,7 +1572,8 @@ internal static class WindowInterop
             Action? windowMoveStarted,
             Func<bool>? isFullscreen,
             Action? powerResumed,
-            Action? displayChanged)
+            Action? displayChanged,
+            Action? sizeChanged)
         {
             _hwnd = hwnd;
             _minWidthDip = minWidthDip;
@@ -1583,6 +1588,7 @@ internal static class WindowInterop
             _isFullscreen = isFullscreen;
             _powerResumed = powerResumed;
             _displayChanged = displayChanged;
+            _sizeChanged = sizeChanged;
             _proc = WndProc;
         }
 
@@ -1670,6 +1676,22 @@ internal static class WindowInterop
                 catch (Exception ex)
                 {
                     Diag($"display change callback failed: {ex.Message}");
+                }
+            }
+
+            // WM_SIZE is the native-side "the client area changed" signal. The
+            // app uses it only to force the custom caption row to re-measure
+            // before WinUI's next layout pass; the callback must be cheap and
+            // enqueue anything that touches XAML.
+            if (msg == WM_SIZE && _sizeChanged is not null)
+            {
+                try
+                {
+                    _sizeChanged();
+                }
+                catch (Exception ex)
+                {
+                    Diag($"size change callback failed: {ex.Message}");
                 }
             }
 

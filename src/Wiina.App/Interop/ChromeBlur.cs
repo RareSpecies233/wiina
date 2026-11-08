@@ -227,7 +227,11 @@ internal sealed class ChromeBlur
     /// </summary>
     public void Reapply(ChromeBlurLayer layer)
     {
-        if (layer is null || _mode == ChromeBlurMode.Solid)
+        // A layer whose host is sliding must not be repainted: Apply samples
+        // the surface through TransformToVisual, so a frame published mid-slide
+        // would freeze the current offset into the brush transform. The host
+        // replays the cached frame once the animation settles instead.
+        if (layer is null || _mode == ChromeBlurMode.Solid || layer.IsTransformSuppressed)
         {
             return;
         }
@@ -1089,6 +1093,26 @@ public sealed class ChromeBlurLayer : Canvas
     private bool _firstFrameRaised;
 
     /// <summary>
+    /// Set by a host while its own subtree is animating (the sidebar slide).
+    /// <see cref="Apply"/> returns early meanwhile: the sampled geometry comes
+    /// from <c>TransformToVisual</c>, so painting at <c>TranslateX = ±Width</c>
+    /// bakes the slide into the brush transform and leaves half the surface on
+    /// the opaque solid brush once the animation finishes (1.3.10 regression).
+    /// The host clears the flag when the animation settles and calls
+    /// <see cref="ChromeBlur.Reapply"/> once.
+    /// </summary>
+    internal bool IsTransformSuppressed { get; set; }
+
+    /// <summary>
+    /// Extra DIP added to the sampled region's X while a host slides this layer.
+    /// The host keeps it equal to its current slide offset, so a frame that is
+    /// published mid-slide still maps the video onto the layer's settled
+    /// position instead of freezing the image half a panel off. Zero whenever
+    /// the host is not animating.
+    /// </summary>
+    internal double GeometryOffsetX { get; set; }
+
+    /// <summary>
     /// Delivers the first-frame notification to a subscriber that attached after
     /// the layer had already received a frame (the host's Loaded handler can run
     /// after the layer's Loaded, so a plain event subscription races).
@@ -1104,6 +1128,13 @@ public sealed class ChromeBlurLayer : Canvas
 
     internal void Apply(WriteableBitmap bitmap, ChromeBlur.VideoGeometry geometry)
     {
+        if (IsTransformSuppressed)
+        {
+            // The host is mid-slide: keep the previous image (or none) rather
+            // than freezing the current transform into the brush.
+            return;
+        }
+
         FrameworkElement? root = XamlRoot?.Content as FrameworkElement;
         if (root is null)
         {
@@ -1193,7 +1224,11 @@ public sealed class ChromeBlurLayer : Canvas
         _brush.ImageSource = bitmap;
         _transform.ScaleX = scaleX;
         _transform.ScaleY = scaleY;
-        _transform.TranslateX = videoX - surface.X;
+        // GeometryOffsetX compensates a slide that is still in flight when the
+        // frame is published: surface is sampled in root space (it includes the
+        // host's TranslateX), so adding the offset back maps the video to the
+        // settled position instead of the transient one.
+        _transform.TranslateX = videoX - surface.X + GeometryOffsetX;
         _transform.TranslateY = videoY - surface.Y;
         UpdateClip();
         // A chrome surface can be painted while it is not on screen yet (a

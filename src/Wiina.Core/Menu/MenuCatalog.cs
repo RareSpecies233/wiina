@@ -478,6 +478,9 @@ public static class MenuCatalog
                 Item("video.deinterlace", "去隔行", MenuCommands.Deinterlace,
                     enabled: state.HasMedia, isChecked: state.Deinterlace),
                 Separator(),
+                Item("video.music-mode", "音乐模式", MenuCommands.MusicMode,
+                    shortcut: "Ctrl+Alt+M", isChecked: state.IsMini),
+                Separator(),
                 Item("video.filters", "视频滤镜…", MenuCommands.VideoFilters,
                     enabled: true),
             });

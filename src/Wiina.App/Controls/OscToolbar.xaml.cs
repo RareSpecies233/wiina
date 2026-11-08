@@ -18,6 +18,9 @@ public sealed partial class OscToolbar : UserControl
 
     public event EventHandler? PipClicked;
 
+    /// <summary>Raised by the music-mode (mini player) button.</summary>
+    public event EventHandler? MusicModeClicked;
+
     public Microsoft.UI.Xaml.FrameworkElement MoreAnchor => MoreButton;
 
     private void OnMoreClick(object sender, Microsoft.UI.Xaml.RoutedEventArgs e) =>
@@ -25,6 +28,9 @@ public sealed partial class OscToolbar : UserControl
 
     private void OnPipClick(object sender, Microsoft.UI.Xaml.RoutedEventArgs e) =>
         PipClicked?.Invoke(this, EventArgs.Empty);
+
+    private void OnMusicModeClick(object sender, Microsoft.UI.Xaml.RoutedEventArgs e) =>
+        MusicModeClicked?.Invoke(this, EventArgs.Empty);
 
     private void OnDataContextChanged(object sender, Microsoft.UI.Xaml.DataContextChangedEventArgs e)
     {

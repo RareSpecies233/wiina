@@ -212,5 +212,5 @@
 
 ### 快速设置侧栏（视频页）
 
-![Stage 4 quick settings](assets/stage-4-quick-settings.png)
+![Stage 4 quick settings](../../acceptance/assets/stage-4-quick-settings.png)
 

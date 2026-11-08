@@ -216,8 +216,8 @@
 
 ### 视频滤镜与均衡器窗口
 
-![Stage 8 filters](assets/stage-8-filters.png)
+![Stage 8 filters](../../acceptance/assets/stage-8-filters.png)
 
 ### 设置中的视频滤镜/去 Logo 入口
 
-![Stage 8 video settings](assets/stage-8-video-settings.png)
+![Stage 8 video settings](../../acceptance/assets/stage-8-video-settings.png)

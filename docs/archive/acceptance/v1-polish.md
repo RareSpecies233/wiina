@@ -76,15 +76,15 @@
 
 ### 欢迎（无播放器窗口）
 
-![v1 polish welcome](assets/v1-polish-welcome.png)
+![v1 polish welcome](../../acceptance/assets/v1-polish-welcome.png)
 
 ### 播放器：亚克力标题栏 + 自定义窗口按钮 + 自动字幕
 
-![v1 polish player](assets/v1-polish-player.png)
+![v1 polish player](../../acceptance/assets/v1-polish-player.png)
 
 ### 设置：亚克力、760×600 默认、尺寸记忆
 
-![v1 polish settings](assets/v1-polish-settings.png)
+![v1 polish settings](../../acceptance/assets/v1-polish-settings.png)
 
 ## 已知问题
 

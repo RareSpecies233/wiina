@@ -128,7 +128,7 @@ public static class SettingsLocalization
         ["advanced.clear-history"] = new("Clear playback history", "Delete recent files and resume positions.", null),
         ["advanced.clear-thumbnails"] = new("Clear thumbnail cache", "Free timeline thumbnails held in memory.", null),
         ["advanced.reset-all"] = new("Reset all settings", "Restore every default (key bindings, window position, and history are unaffected).", null),
-        ["advanced.mini-player"] = new("Mini player (music mode)", "Still in development and limited in stability; use it for testing only. You will be asked to confirm before the settings window closes.", null),
+        ["advanced.music-auto"] = new("Auto-enter Music Mode for audio files", "Open audio-only files in the mini player automatically. Video files never auto-enter, and leaving mini manually is not overridden for the same file.", null),
         ["integration.status"] = new("Current registration", "Wiina has already written its Windows default-app registration. The next time you open a supported file and pick Wiina, choose \"Always\" and Windows will remember; use \"Associate as administrator\" below to make Explorer use Wiina directly.", null),
         ["integration.associate-video"] = new("Associate video formats", "Register common video extensions for Wiina and list it under Default Apps.", null),
         ["integration.associate-audio"] = new("Associate audio formats", "Register common audio extensions for Wiina and list it under Default Apps.", null),

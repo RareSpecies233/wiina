@@ -3,7 +3,7 @@
 ## 开始之前
 
 - 先读 [README](README.md)、[许可证审计](docs/licensing/AUDIT.md)、[ADR-0001](docs/architecture/0001-video-pipeline.md)、
-  [ADR-0004](docs/architecture/0004-solid-chrome.md)。[实施计划](docs/PLAN.md) 是 v1 前的历史文档，
+  [ADR-0004](docs/architecture/0004-solid-chrome.md)。[实施计划](docs/archive/planning/PLAN.md)（已归档）是 v1 前的历史文档，
   只用于了解设计意图，不代表当前行为。
 - 本项目以 **GPL-3.0-only** 发布。提交即表示你同意以该许可证授权你的贡献。
 - 不提交 IINA 的 Swift/AppKit 源码、`.xcassets` 图片、SF Symbols、IINA 图标或任何专有字体。

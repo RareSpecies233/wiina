@@ -55,15 +55,15 @@ dotnet build Wiina.slnx -c Debug
 
 ### 窗口化（1280×720，125% DPI）
 
-![Stage 0 windowed](assets/stage-0-windowed.png)
+![Stage 0 windowed](../../acceptance/assets/stage-0-windowed.png)
 
 ### Resize 到 1000×600
 
-![Stage 0 resized](assets/stage-0-resized.png)
+![Stage 0 resized](../../acceptance/assets/stage-0-resized.png)
 
 ### 全屏（F11）
 
-![Stage 0 fullscreen](assets/stage-0-fullscreen.png)
+![Stage 0 fullscreen](../../acceptance/assets/stage-0-fullscreen.png)
 
 ## 已知问题 / 偏离
 

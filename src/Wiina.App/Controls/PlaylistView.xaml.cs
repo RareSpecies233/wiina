@@ -8,6 +8,7 @@ using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Controls.Primitives;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
+using Wiina.Core.Files;
 using Wiina.Mpv;
 using Windows.ApplicationModel.DataTransfer;
 using Windows.UI.Text;
@@ -39,7 +40,19 @@ public sealed partial class PlaylistView : UserControl
 
     public event EventHandler<IReadOnlyList<int>>? RemoveRequested;
 
+    /// <summary>
+    /// Single-row drag reorder. <c>From</c>/<c>To</c> are final playlist
+    /// indexes; the shell maps them through
+    /// <see cref="PlaylistMove.ResolveTarget"/>.
+    /// </summary>
     public event EventHandler<(int From, int To)>? MoveRequested;
+
+    /// <summary>
+    /// Multi-row up/down move. Each pair is already the exact
+    /// <c>playlist-move</c> argument sequence, in execution order; the shell
+    /// sends them verbatim.
+    /// </summary>
+    public event EventHandler<IReadOnlyList<(int From, int To)>>? MoveBatchRequested;
 
     public void SetItems(IReadOnlyList<MpvPlaylistItem> items, int currentIndex)
     {
@@ -115,10 +128,10 @@ public sealed partial class PlaylistView : UserControl
         RemoveSelected();
 
     private void OnMoveUpClick(object sender, RoutedEventArgs e) =>
-        MoveFirstSelected(-1);
+        MoveSelectedBatch(-1);
 
     private void OnMoveDownClick(object sender, RoutedEventArgs e) =>
-        MoveFirstSelected(1);
+        MoveSelectedBatch(1);
 
     private void OnListSelectionChanged(object sender, SelectionChangedEventArgs e) =>
         UpdateMoveButtons();
@@ -174,11 +187,10 @@ public sealed partial class PlaylistView : UserControl
         }
 
         Add(Loc.T("playlist.play"), () => PlayRequested?.Invoke(this, row.Index));
-        int firstSelected = FirstSelectedIndex();
-        MenuFlyoutItem moveUp = Add(Loc.T("playlist.moveUp"), () => MoveFirstSelected(-1));
-        moveUp.IsEnabled = CanMoveUp(firstSelected);
-        MenuFlyoutItem moveDown = Add(Loc.T("playlist.moveDown"), () => MoveFirstSelected(1));
-        moveDown.IsEnabled = CanMoveDown(firstSelected);
+        MenuFlyoutItem moveUp = Add(Loc.T("playlist.moveUp"), () => MoveSelectedBatch(-1));
+        moveUp.IsEnabled = CanMoveSelection(-1);
+        MenuFlyoutItem moveDown = Add(Loc.T("playlist.moveDown"), () => MoveSelectedBatch(1));
+        moveDown.IsEnabled = CanMoveSelection(1);
         flyout.Items.Add(new MenuFlyoutSeparator());
         Add(Loc.T("playlist.remove"), RemoveSelected);
         Add(Loc.T("playlist.copyPath"), () => CopyPath(row.Path));
@@ -224,36 +236,30 @@ public sealed partial class PlaylistView : UserControl
         }
     }
 
-    private void MoveFirstSelected(int delta)
+    /// <summary>
+    /// Moves the whole selection one slot up/down. Contiguous runs move as a
+    /// block; a run already touching the edge is skipped as a unit.
+    /// </summary>
+    private void MoveSelectedBatch(int delta)
     {
-        PlaylistRow? row = SelectedRows().FirstOrDefault();
-        if (row is null)
+        IReadOnlyList<(int From, int To)> moves =
+            PlaylistMove.ResolveBatch(SelectedIndexes(), _rows.Count, delta);
+        if (moves.Count > 0)
         {
-            return;
+            MoveBatchRequested?.Invoke(this, moves);
         }
-
-        int to = row.Index + delta;
-        if (to < 0 || to >= _rows.Count)
-        {
-            return;
-        }
-
-        MoveRequested?.Invoke(this, (row.Index, to));
     }
 
-    private int FirstSelectedIndex() =>
-        SelectedRows().Select(row => row.Index).DefaultIfEmpty(-1).First();
+    private int[] SelectedIndexes() =>
+        SelectedRows().Select(row => row.Index).ToArray();
 
-    private bool CanMoveUp(int index) => index > 0;
-
-    private bool CanMoveDown(int index) =>
-        index >= 0 && index < _rows.Count - 1;
+    private bool CanMoveSelection(int delta) =>
+        PlaylistMove.CanMoveBatch(SelectedIndexes(), _rows.Count, delta);
 
     private void UpdateMoveButtons()
     {
-        int index = FirstSelectedIndex();
-        MoveUpButton.IsEnabled = CanMoveUp(index);
-        MoveDownButton.IsEnabled = CanMoveDown(index);
+        MoveUpButton.IsEnabled = CanMoveSelection(-1);
+        MoveDownButton.IsEnabled = CanMoveSelection(1);
     }
 
     private List<(int Index, string Path)> CaptureSelection() =>

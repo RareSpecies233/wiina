@@ -75,19 +75,19 @@
 
 ### 播放器：亚克力标题栏 + 小尺寸窗口按钮 + 自动字幕
 
-![v1 polish2 player](assets/v1-polish2-player.png)
+![v1 polish2 player](../../acceptance/assets/v1-polish2-player.png)
 
 ### 设置：透明导航 rail、无底部 footer、清晰窗口级模糊
 
-![v1 polish2 settings](assets/v1-polish2-settings.png)
+![v1 polish2 settings](../../acceptance/assets/v1-polish2-settings.png)
 
 ### 独立键位窗口（亚克力）
 
-![v1 polish2 key window](assets/v1-polish2-keywindow.png)
+![v1 polish2 key window](../../acceptance/assets/v1-polish2-keywindow.png)
 
 ### 临时图标：白底 + 正放黄三角
 
-![v1 polish2 icon](assets/v1-polish2-icon.png)
+![v1 polish2 icon](../../acceptance/assets/v1-polish2-icon.png)
 
 ## 已知问题
 

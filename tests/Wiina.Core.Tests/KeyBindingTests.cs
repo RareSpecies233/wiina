@@ -52,11 +52,11 @@ public sealed class KeyBindingTests
     }
 
     [Fact]
-    public void DefaultProfileBindsPictureInPictureButNotMusicMode()
+    public void DefaultProfileBindsPictureInPictureAndMusicMode()
     {
-        // PiP advertises Ctrl+Shift+P in the 窗口 menu, so the shipped profile
-        // must actually bind it; the mini/music mode is reachable only from
-        // Settings → 高级 → 模式 and gets no chord.
+        // Both window modes advertise a chord: PiP is Ctrl+Shift+P (窗口 menu)
+        // and music mode/mini is Ctrl+Alt+M (视频 menu, OSC toolbar and the
+        // shortcut editor). The obsolete Ctrl+Shift+M must never come back.
         IReadOnlyList<KeyBindingSetting> defaults = KeyBindings.CreateDefaults();
         Assert.Contains(defaults, binding =>
             binding.Action == PlayerActions.PictureInPicture &&
@@ -64,8 +64,12 @@ public sealed class KeyBindingTests
                 KeyBindings.NormalizeChord(binding.Chord),
                 "Ctrl+Shift+P",
                 StringComparison.OrdinalIgnoreCase));
-        Assert.DoesNotContain(defaults, binding =>
-            binding.Action == PlayerActions.MusicMode);
+        Assert.Contains(defaults, binding =>
+            binding.Action == PlayerActions.MusicMode &&
+            string.Equals(
+                KeyBindings.NormalizeChord(binding.Chord),
+                "Ctrl+Alt+M",
+                StringComparison.OrdinalIgnoreCase));
         Assert.DoesNotContain(defaults, binding =>
             string.Equals(
                 KeyBindings.NormalizeChord(binding.Chord),
@@ -74,18 +78,21 @@ public sealed class KeyBindingTests
     }
 
     [Fact]
-    public void ShortcutEditorOmitsMusicMode()
+    public void ShortcutEditorOffersMusicMode()
     {
-        // Removing the catalog row also removes the 模式 category from the
-        // editor, so no shortcut row can lead back into the mini player.
-        Assert.DoesNotContain(
+        // The music-mode action is bindable again: the editor lists it under
+        // the 模式 category and Ctrl+Alt+M is its shipped default.
+        Assert.Contains(
             PlayerActionCatalog.All,
             action => action.Action == PlayerActions.MusicMode);
         Assert.Contains(
             PlayerActionCatalog.All,
             action => action.Action == PlayerActions.PictureInPicture);
-        Assert.False(PlayerActionCatalog.IsKnown(PlayerActions.MusicMode));
-        Assert.DoesNotContain("模式", PlayerActionCatalog.Categories);
+        Assert.True(PlayerActionCatalog.IsKnown(PlayerActions.MusicMode));
+        Assert.Contains("模式", PlayerActionCatalog.Categories);
+        Assert.Equal(
+            new[] { "Ctrl+Alt+M" },
+            KeyBindings.DefaultChords(PlayerActions.MusicMode));
     }
 
     [Fact]

@@ -13,6 +13,12 @@
                 Click="OnPipClick"
                 loc:Loc.ToolTip="ui.pipShortcut"
                 loc:Loc.AutomationName="ui.pip" />
+        <Button x:Name="MusicModeButton"
+                Style="{StaticResource OscIconButtonStyle}"
+                Content="&#xE8D6;"
+                Click="OnMusicModeClick"
+                loc:Loc.ToolTip="modes.mini"
+                loc:Loc.AutomationName="modes.mini" />
         <Button x:Name="FullscreenButton"
                 Style="{StaticResource OscIconButtonStyle}"
                 Content="&#xE740;"

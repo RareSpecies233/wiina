@@ -4,7 +4,7 @@
 - 审计快照：分支 `feat/v1.2.7`，HEAD `49bb3d7`
 - 证据机器：Windows 11 25H2 (26200)，RTX 3070 Ti / 32.0.16.1088，本次 trace 显示该窗口 `1x`（100% 缩放）
 - 性质：**只读分析**，未修改代码、未改设置
-- 配套文档：[卡死分析](./hang-analysis-1.2.7.md)、[ADR-0001 视频管线](../architecture/0001-video-pipeline.md)、[既有性能记录](../performance.md)
+- 配套文档：[卡死分析](hang-analysis-1.2.7.md)、[ADR-0001 视频管线](../../architecture/0001-video-pipeline.md)、[既有性能记录](../../performance.md)
 
 ---
 
@@ -196,7 +196,7 @@ ADR §4.2 实测 `IDXGISwapChain2::SetMatrixTransform` 对 composition swapchain
 | 2 | `ChromeBlurLayer`：只在 `SizeChanged` 重建 clip，复用 `RectangleGeometry` | 降 GC 与布局抖动 | 低 | 小 | ✅ |
 | 3 | `ApplyVideoLayout`：resize 时复用 geometry（现在 80 ms 一次新建） | 拖动更顺 | 低 | 小 | ✅ |
 | 4 | `SwapChainPanel`：仅在 `RasterizationScale != 1` 时走物理像素 hack；并加一次 `SetMatrixTransform` 能力探测 | 高 DPI 下省一次全屏 composite transform | 中 | 中 | ⏳ 可延后 |
-| 5 | 缩略图改为一次性预生成 + 磁盘缓存（见 [iina-thumbnails.md](../reference/iina-thumbnails.md)） | 省掉常驻第二个 mpv | 中 | 中 | ⏳ 可延后 |
+| 5 | 缩略图改为一次性预生成 + 磁盘缓存（见 [../../reference/iina-thumbnails.md](../../reference/iina-thumbnails.md)） | 省掉常驻第二个 mpv | 中 | 中 | ⏳ 可延后 |
 | 6 | 统计面板补 `frame-drop-count` 等指标 | 让后续优化可量化 | 低 | 小 | ✅ |
 | 7 | 呈现路径改 flip-model / render API | 结构性缩小与 PotPlayer 的差距 | 高 | 大 | ❌ 不属于 1.2.7 |
 | — | 把"性能优先"做得更激进（如 `gpu-dumb-mode=yes`） | <1% | 画质风险 | 小 | ❌ 不建议 |

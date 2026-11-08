@@ -294,8 +294,8 @@
 
 ### 设置窗口（11 页 + 搜索 + 分区圆点）
 
-![Stage 7 settings](assets/stage-7-settings.png)
+![Stage 7 settings](../../acceptance/assets/stage-7-settings.png)
 
 ### 欢迎窗口
 
-![Stage 7 welcome](assets/stage-7-welcome.png)
+![Stage 7 welcome](../../acceptance/assets/stage-7-welcome.png)

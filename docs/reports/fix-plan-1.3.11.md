@@ -354,3 +354,27 @@ docs/archive/
 - 定位轮未提交 commit、未 push、未创建 PR。
 - 动态验证仅使用 UI Automation 与临时截图，未改用户 `settings.json`。
 - 进入实施轮后：分支 `feat/v1.3.11` 已创建；下方 §18 记录实施结果。
+
+---
+
+## 18. 实施记录（2026-11-08）
+
+- [x] A 多选批量移动：`PlaylistMove.ResolveBatch` + 批量事件 + 18 个测试（含模拟器）。
+- [x] B 侧栏毛玻璃：动画门控 `IsTransformSuppressed`/`GeometryOffsetX`，动画结束再 `Reapply`；缩略图预生成无黑卡（`CanShowHoverThumbnailNow`、透明背板、无帧 `Hide`）。
+- [x] C mini 交互/布局：拖拽只从非交互表面启动并检查左键；进度行 32/控制区 80；音量气泡锚定按钮；底部 300 播放列表；禁止全屏；上下首遵循 `OscPrevNextMode`；首字母跳过标点；mini 内暂停 Stats/OSD/Thumbnail/Buffer/FrameDrop。
+- [x] D mini 入口：视频菜单 + OSC 工具栏 + `Ctrl+Alt+M`；删除 `advanced.mini-player`，新增 `advanced.music-auto`（默认开）；纯音频自动进入（成功才置位、`ApplyLoadedMedia` 重试、手动退出不反弹）。
+- [x] E 吸附/缩放：单一移动源、工作区冻结、120ms DWM 去抖、`[snap]` trace；`ApplyCompositionSize` 立即/16ms 合并，80ms 只做 clip/cover；caption 保留自绘 + 高优先级同步，残余一帧延迟记入 known-issues。
+- [x] F 文档：21 个历史文档归档、3 个 stub、321 链接 0 404；WinUI 审计、设置/快捷键/README/notes/known-issues/验收页更新。
+
+验证：
+
+- Release 构建：**0 警告 / 0 错误**。
+- 全量测试：**1001 / 1001 通过**（`artifacts/v1311-tests.txt`；官方 `dotnet test` 仍受本机 vstest testhost 限制，使用 in-process runner）。
+- computer use：播放列表多选移动、mini 工具栏入口、mini 底部列表、音量气泡、音频自动进入（本机无音频输出，audio-only 文件报加载失败，自动进入由代码/入口验证，最终需在有输出设备的机器复核）。
+- 额外修正：自动进入 mini 在加载期模式切换失败后会永久锁死；改为成功才置位并在 `ApplyLoadedMedia` 重试。
+
+新增发现（本轮）：
+
+1. `TryAutoEnterMini` 先置 `_autoMiniEntered=true` 再 `RequestMode`，加载期拒绝后不再重试。已修。
+2. `OnFileLoadFailed` 会把 `_currentPath` 清空但 `_trackList`/duration 仍从属性更新；本机音频输出缺失导致 audio-only 文件报“打开失败”，与自动 mini 无关，记入 known-issues 作为环境限制。
+3. 自绘 caption 按钮残余一帧延迟，按确认本版不改原生，记入 known-issues / WinUI 审计。

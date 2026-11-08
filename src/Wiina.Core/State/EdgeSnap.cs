@@ -65,6 +65,8 @@ public sealed class EdgeSnapSession
     public const int DefaultBreakawayDip = 22;
 
     private SnapEdges _edges;
+    private WorkArea _area;
+    private bool _hasArea;
 
     public EdgeSnapSession(
         int snapDistanceDip = DefaultSnapDistanceDip,
@@ -128,6 +130,18 @@ public sealed class EdgeSnapSession
         {
             return new EdgeSnapResult(proposed, SnapEdges.None);
         }
+
+        // A different work area means the pointer/window crossed to another
+        // monitor (or the taskbar changed). The magnet belongs to the previous
+        // monitor: keeping it made the first sample on the new monitor jump to
+        // its edge and then back, which is one of the "window shakes" paths.
+        if (_hasArea && area != _area)
+        {
+            _edges = SnapEdges.None;
+        }
+
+        _area = area;
+        _hasArea = true;
 
         double factor = Math.Max(0.1, scale);
         int snapPx = Math.Max(1, (int)Math.Round(SnapDistanceDip * factor));

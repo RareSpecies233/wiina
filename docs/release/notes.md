@@ -1,11 +1,95 @@
 # Wiina release notes
 
-Release date (1.3.10): 2026-11-07
+Release date (1.3.11): 2026-11-08
 
 Windows-native, IINA-inspired mpv front end built with WinUI 3, Windows App
 SDK 2.5, and libmpv.
 
-## What's new in 1.3.10
+## What's new in 1.3.11
+
+### Playlist multi-select moves as a block
+
+Selecting several rows and pressing up/down used to move only the topmost one.
+`PlaylistMove.ResolveBatch` now emits the ordered `playlist-move` sequence for
+every selected row: up moves ascending, down moves descending, contiguous runs
+move as a block, and a run pinned at the top/bottom is skipped as a unit.
+Selection and scroll survive the rebuild; 16 new tests cover contiguous,
+non-contiguous, first/last and simulator order cases.
+
+### Sidebar glass no longer flashes half solid, half blurred
+
+1.3.10 replayed the cached blurred frame immediately on show, while the sidebar
+slide transform was still `±Width`; the geometry was sampled through
+`TransformToVisual(root)`, so the 320 px source was shifted by a slide and only
+half the panel got an image. The layer is now gated for the whole slide
+(`IsTransformSuppressed` + `GeometryOffsetX`), receives no new frames mid-slide,
+and is replayed exactly once when `TranslateX == 0`. The panel stays uniformly
+solid during the 240 ms slide and becomes glass at rest.
+
+### No black thumbnail card while pre-generation is running
+
+Hovering the timeline with "pre-generated + show only after generation" used to
+paint a black `ThumbnailPeek` card (and a spinner) before any frame existed.
+`CanShowHoverThumbnailNow` now mirrors the service policy: while the
+pre-generation pass is running and preview-while-generating is off, only the
+time bubble appears and no decode request is queued. `ShowLoading`/`ShowEmpty`
+no longer paint a black backplate without a decoded frame; the `Pending` path
+still keeps the previous frame.
+
+### Mini player (music mode)
+
+- The mini player is now reachable from the **Video menu**, the **OSC toolbar**
+  and the default **Ctrl+Alt+M**, not only from Settings -> Advanced -> Modes.
+  Audio-only files enter it automatically (new setting "Auto-enter Music Mode
+  for audio files", default on); video files never do, and a manual exit is not
+  overridden for the same file.
+- The playlist expands **below** the mini window (+300 DIP, full width) instead
+  of covering the cover on the right.
+- The window no longer follows the mouse without a held button: drag candidates
+  ignore buttons/sliders/lists and every move checks the left button.
+- Progress and volume sliders drag correctly; the progress row is 32 DIP so the
+  round thumb is no longer clipped; the 148 DIP volume bubble is anchored 8 DIP
+  above the volume button and clamped inside the window.
+- Mini rejects fullscreen (keyboard, menu, OSC), previous/next follow the
+  "seek 5 s / track skip" setting, and the cover fallback skips punctuation
+  (a file starting with `[` now shows its first letter, not `[`).
+- Stats/OSD/thumbnail/buffer/frame-drop overlays are parked while mini is
+  active and restored on exit.
+
+### Edge snapping and resize
+
+- Snap now uses a single mover (native caption drag is disabled while the
+  titlebar is hidden or a video drag is active), a frozen work area per
+  gesture, a 120 ms stable window for DWM frame changes, and sparse `[snap]`
+  traces. A monitor seam no longer makes the magnet jump; 7 new `EdgeSnap`
+  tests cover monotonic sweeps, jitter and work-area switches.
+- The video composition size is applied immediately from `SizeChanged`
+  (coalesced to 16 ms), so live resizing no longer waits for the 80 ms layout
+  debounce; only clip geometry/content-island cover stay on the debounce.
+- The custom caption buttons still trail the DWM frame by at least one frame;
+  a high-priority layout sync narrows it, but the real fix (native
+  `AppWindowTitleBar` buttons) is deferred to a future UI pass and recorded in
+  known-issues.
+
+### Documentation
+
+The 21 superseded planning/stage/one-off report files moved to `docs/archive/`
+with an index, three redirect stubs and rewritten links (321 local links
+checked, 0 broken).
+
+### Not in this build
+
+- Caption buttons are still custom XAML, not native `AppWindowTitleBar`.
+- The mini player remains a main-window overlay, not a separate HWND (per
+  confirmed scope); spec §10.1's "independent window" is a future item.
+- Real TDR recovery and the 4-hour long-run still need follow-up; the watchdog
+  and snapshot traces are in place.
+- Mixed-DPI (150/200 %) resize and multi-monitor snap were not re-measured on
+  hardware.
+
+Settings: 11 pages / 134 rows / 581 keys; tests: 1001.
+
+## 1.3.10 — previous release
 
 ### Playlist down-move works, and the row stays selected
 
@@ -164,7 +248,7 @@ evidence in `artifacts/v138-bugB-*.png`.
 
 ### Thumbnails: a plan, not a change
 
-`docs/reports/thumbnails-v1.3.8-plan.md` (360 lines) analyses why the slow mode's
+`docs/archive/reports/thumbnails-v1.3.8-plan.md` (360 lines) analyses why the slow mode's
 three meanings conflict, proposes an effective-mode/disk-cache policy, a keyframe
 seek switch (`video.thumbnail-keyframe-seek`, default off), an instant-mode UX
 state machine (`ThumbnailOutcome`, no spinner, keep the previous frame) and
@@ -223,7 +307,7 @@ double-clicked file. Nine new tests plus a folder-expansion test.
 
 ### Thumbnail optimisation remains a report
 
-`docs/reports/thumbnails-optimization-1.3.7.md` (333 lines) finds that about
+`docs/archive/reports/thumbnails-optimization-1.3.7.md` (333 lines) finds that about
 20 ms of each ~50 ms thumbnail bucket is the `Task.Delay(20)` seek-poll floor,
 that pushing the downscale into mpv should save roughly 30 %, that keyframe
 seeks only suit pre-generation, and that "slow mode" currently means "no
@@ -533,7 +617,7 @@ recovery path is code-verified only.
 
 ### Known issues and documentation
 
-`docs/reports/known-issues-1.3.1.md` now carries the user's 1.3.2 decision for
+`docs/archive/reports/known-issues-1.3.1.md` now carries the user's 1.3.2 decision for
 every entry (feature / expected / fixed). New `docs/acceptance/v1.3.2.md`
 records the eleven user items, the decision table, the settings delta
 (129 -> 128 rows, 563 -> 568 keys, still eleven pages) and 827 tests.
@@ -596,11 +680,11 @@ A transparent cursor resource (id 101), `ProtectedCursor` on all 489 elements
 under `RootGrid`, and a 60 ms helper-thread `SetCursor(NULL)` all build and pass
 tests, but no stable hidden pointer was observed — CoreMessaging re-applies the
 arrow within milliseconds. This is documented as partial, not as fixed; see
-`../reports/known-issues-1.3.1.md` (K26).
+`../archive/reports/known-issues-1.3.1.md` (K26).
 
 ### A known-issues list you can triage
 
-`../reports/known-issues-1.3.1.md` collects 30 issues (P0/P1/P2) with symptoms,
+`../archive/reports/known-issues-1.3.1.md` collects 30 issues (P0/P1/P2) with symptoms,
 causes, workarounds, rough fix cost, involved files and a checkbox per item.
 
 780 tests pass (Core).
@@ -757,7 +841,7 @@ test suite is at 761 tests.
 
 - Close now stops every UI timer first, saves settings once, detaches the video
   panel before disposing mpv, and stops refreshing the statistics card while it
-  is hidden. See `docs/reports/hang-analysis-1.2.7.md`; the report's
+  is hidden. See `docs/archive/reports/hang-analysis-1.2.7.md`; the report's
   `ChromeBlur`-stop / handler-detach items are not implemented and are recorded
   as such in the acceptance page.
 
@@ -765,7 +849,7 @@ test suite is at 761 tests.
 
 - All 23 quality options apply live; only `vo` / `gpu-api` / `gpu-context` /
   `d3d11-output-mode` are fixed at startup. See
-  `docs/reports/performance-vs-potplayer.md`.
+  `docs/archive/reports/performance-vs-potplayer.md`.
 
 ### Documentation
 

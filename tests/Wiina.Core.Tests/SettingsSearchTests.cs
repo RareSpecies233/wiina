@@ -486,29 +486,30 @@ public sealed class SettingsSearchTests
     }
 
     [Fact]
-    public void AdvancedModesSectionHasOneMiniPlayerEntry()
+    public void AdvancedModesSectionReplacesTheMiniPlayerActionWithTheAutoEnterSetting()
     {
-        // Mini player and music mode are the same feature: one entry only, and
-        // it carries the "still in development" warning.
+        // The dev-only "enter mini player" action was removed; the 模式 section
+        // now carries the audio auto-enter toggle that feeds AppSettings.
         Assert.DoesNotContain(
-            SettingsCatalog.Rows, row => row.Id == "advanced.music-mode");
-
-        SettingsRowDefinition mini = Assert.Single(
             SettingsCatalog.Rows, row => row.Id == "advanced.mini-player");
-        Assert.Equal(SettingsPageId.Advanced, mini.Page);
-        Assert.Equal("模式", mini.Section);
-        Assert.Equal(SettingsRowKind.Action, mini.Kind);
-        Assert.Null(mini.UnavailableReason);
-        Assert.Equal("enter-mini-player", mini.ActionId);
-        Assert.Contains("迷你播放器", mini.Title);
-        Assert.Contains("开发中", mini.Description);
-        Assert.Contains("测试", mini.Description);
 
-        // The menu catalogue must not expose these modes any more; only the
-        // settings entry above may route into them.
-        Assert.DoesNotContain(
+        SettingsRowDefinition auto = Assert.Single(
+            SettingsCatalog.Rows, row => row.Id == "advanced.music-auto");
+        Assert.Equal(SettingsPageId.Advanced, auto.Page);
+        Assert.Equal("模式", auto.Section);
+        Assert.Equal(SettingsRowKind.Toggle, auto.Kind);
+        Assert.Null(auto.UnavailableReason);
+
+        var settings = new AppSettings();
+        Assert.True(settings.AutoSwitchToMusicMode);
+        Assert.Equal(true, auto.Value(settings));
+        auto.Apply(settings, false);
+        Assert.False(settings.AutoSwitchToMusicMode);
+
+        // The mode is reachable from the 视频 menu (and the OSC toolbar).
+        Assert.Contains(
             MenuCatalog.Flatten(MenuCatalog.Build(new MenuState())),
-            item => item.Id is "video.music-mode" or "video.mini-player" or "window.music-mode");
+            item => item.Id == "video.music-mode");
     }
 }
 

@@ -255,5 +255,5 @@ powershell -ExecutionPolicy Bypass -File tools/fetch-libmpv.ps1
 
 ## 后续 UI 修正（2026-10-18）
 
-- 改用 **WinUI 3 扩展标题栏**：自绘标题栏只保留标题，应用按钮移入 OSC 的 `⋯` 更多菜单；标题栏随 OSC 自动隐藏，系统 caption 按钮通过 `TitleBarHeightOption.Collapsed` 一起消失。原因与取舍见 [ADR-0002](../architecture/0002-native-titlebar.md)。
+- 改用 **WinUI 3 扩展标题栏**：自绘标题栏只保留标题，应用按钮移入 OSC 的 `⋯` 更多菜单；标题栏随 OSC 自动隐藏，系统 caption 按钮通过 `TitleBarHeightOption.Collapsed` 一起消失。原因与取舍见 [ADR-0002](../../architecture/0002-native-titlebar.md)。
 

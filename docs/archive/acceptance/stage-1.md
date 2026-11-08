@@ -43,27 +43,27 @@
 
 ### 默认窗口化（edge-to-edge + 浮动 OSC）
 
-![Stage 1 windowed](assets/stage-1-windowed.png)
+![Stage 1 windowed](../../acceptance/assets/stage-1-windowed.png)
 
 ### 侧栏壳（edge-to-edge）
 
-![Stage 1 sidebar](assets/stage-1-sidebar.png)
+![Stage 1 sidebar](../../acceptance/assets/stage-1-sidebar.png)
 
 ### Docked（标题栏 + 视频 + 底部 OSC）
 
-![Stage 1 docked](assets/stage-1-docked.png)
+![Stage 1 docked](../../acceptance/assets/stage-1-docked.png)
 
 ### 顶部 OSC 壳
 
-![Stage 1 top OSC](assets/stage-1-top-osc.png)
+![Stage 1 top OSC](../../acceptance/assets/stage-1-top-osc.png)
 
 ### 浅色主题
 
-![Stage 1 light](assets/stage-1-light.png)
+![Stage 1 light](../../acceptance/assets/stage-1-light.png)
 
 ### 最小尺寸（高 DPI）
 
-![Stage 1 min size](assets/stage-1-min-size.png)
+![Stage 1 min size](../../acceptance/assets/stage-1-min-size.png)
 
 ## 已知问题 / 偏离
 

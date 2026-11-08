@@ -8,7 +8,7 @@ Windows 原生播放器 · [WinUI 3](https://learn.microsoft.com/windows/apps/wi
 [![Release](https://img.shields.io/github/v/release/RareSpecies233/wiina?style=flat-square&color=ff8a5c)](https://github.com/RareSpecies233/wiina/releases/latest)
 [![License](https://img.shields.io/badge/license-GPL--3.0--only-blue?style=flat-square)](LICENSE)
 [![Platform](https://img.shields.io/badge/platform-Windows%2010%2F11%20x64-0078D4?style=flat-square)](#下载与安装)
-[![Tests](https://img.shields.io/badge/tests-943%20passing-2ea44f?style=flat-square)](tests/Wiina.Core.Tests)
+[![Tests](https://img.shields.io/badge/tests-1001%20passing-2ea44f?style=flat-square)](tests/Wiina.Core.Tests)
 [![WinUI 3](https://img.shields.io/badge/UI-WinUI%203-8a5cf6?style=flat-square)](https://learn.microsoft.com/windows/apps/winui/winui3/)
 
 ![Wiina 播放 1080p HEVC，浮动 OSC 与深色标题栏](site/assets/hero.webp)
@@ -97,7 +97,7 @@ OSC 与 OSD 支持「固定 / 动态 / 始终 / 纯色」四档。毛玻璃把�
 
 ![快捷键编辑器](site/assets/keybindings.webp)
 
-内置 Wiina（基于 IINA 习惯，81 个常用键位）与 mpv 两套方案，也可以自己录制。编辑器支持搜索、
+内置 Wiina（基于 IINA 习惯，82 个常用键位）与 mpv 两套方案，也可以自己录制。编辑器支持搜索、
 分类、冲突检查、导入导出与重置；菜单里的快捷键提示会跟着你的配置变化。
 
 ### 8 · 画质：默认就很好，想调也调得动
@@ -245,14 +245,14 @@ pwsh -File scripts/dev-build.ps1 -Agent me -Test
 pwsh -File scripts/release.ps1 -Version 1.3.9
 ```
 
-验收基线：**977 项测试通过**、Release 构建 **0 警告 / 0 错误**、便携包与安装包冒烟通过。
-详见 [docs/acceptance/v1.3.10.md](docs/acceptance/v1.3.10.md)。
+验收基线：**1001 项测试通过**、Release 构建 **0 警告 / 0 错误**、便携包与安装包冒烟通过。
+详见 [docs/acceptance/v1.3.11.md](docs/acceptance/v1.3.11.md)。
 
 ---
 
 ## 项目状态
 
-- 当前版本 **v1.3.10**（2026-11-07），前置版本见 [更新日志](docs/release/notes.md)。
+- 当前版本 **v1.3.11**（2026-11-08），前置版本见 [更新日志](docs/release/notes.md)。
 - 设置 **11 页 / 134 行**；本地化 **581** 个字符串键。
 - 已实现：播放管线、原生标题栏、OSC/侧栏、播放列表/章节/历史、字幕、缩略图、统计面板、
   全屏/PiP/迷你、文件关联、快捷键编辑器、字幕字体、滤镜/均衡器、HDR、单实例与拖放。
@@ -280,3 +280,4 @@ pwsh -File scripts/release.ps1 -Version 1.3.9
 - 播放内核：[mpv](https://github.com/mpv-player/mpv) / libmpv（GPL-2.0-or-later）。
 - 界面框架：WinUI 3 / Windows App SDK。
 - Wiina 与 IINA、mpv 项目均无隶属关系。
+

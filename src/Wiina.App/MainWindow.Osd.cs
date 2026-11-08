@@ -497,6 +497,39 @@ public sealed partial class MainWindow
 
     // -------------------------------------------------------- time preview UX
 
+    /// <summary>
+    /// True when the hover bubble may show a frame for the current file right
+    /// now. Mirrors <see cref="ThumbnailService.GetAsync"/>'s policy gate: in
+    /// pre-generation mode with "preview while generating" off, previews stay
+    /// silent until the whole-file pass has covered every bucket. Checking it
+    /// before painting the placeholder is what keeps the black card (and the
+    /// spinner) off the screen while the file is still being generated.
+    /// </summary>
+    private bool CanShowHoverThumbnailNow()
+    {
+        if (!_settings.ThumbnailPreviewEnabled ||
+            string.IsNullOrWhiteSpace(_currentPath) ||
+            !File.Exists(_currentPath))
+        {
+            return false;
+        }
+
+        ThumbnailService service = GetThumbnailService();
+        // The tracker only reports on a pass it started. A file whose pass was
+        // skipped (slow mode, zero disk budget, unknown duration) has nothing
+        // to wait for and must not be blocked.
+        bool preGenerationPending =
+            string.Equals(
+                _thumbnailPregenPath,
+                _currentPath,
+                StringComparison.OrdinalIgnoreCase) &&
+            !service.IsPreGenerationCompleteFor(_currentPath);
+        return ThumbnailPolicy.AllowsHoverPreview(
+            service.Mode,
+            service.PreviewWhileGenerating,
+            preGenerationPending);
+    }
+
     private async void RequestThumbnailAsync(double seconds)
     {
         if (!_settings.ThumbnailPreviewEnabled ||
@@ -534,6 +567,10 @@ public sealed partial class MainWindow
                 return;
             }
 
+            // Whether a frame was already on screen decides between "clear the
+            // stale image but keep the bubble" and "there is nothing to show,
+            // so never paint a card at all".
+            bool hadFrame = ThumbnailPeek.HasFrame;
             ThumbnailHoverPhase phase = _thumbnailHover.Complete(result.Outcome);
             if (result.Frame is null)
             {
@@ -541,18 +578,26 @@ public sealed partial class MainWindow
                 switch (phase)
                 {
                     case ThumbnailHoverPhase.Unavailable:
-                        // The policy forbids previews: never keep a stale frame
-                        // of this file on screen behind a black backplate.
-                        ThumbnailPeek.ShowEmpty(
-                            TimeFormatter.Format(seconds),
-                            emptyWidth,
-                            emptyHeight);
-                        break;
                     case ThumbnailHoverPhase.Empty:
-                        ThumbnailPeek.ShowEmpty(
-                            TimeFormatter.Format(seconds),
-                            emptyWidth,
-                            emptyHeight);
+                        if (hadFrame)
+                        {
+                            // The policy changed under a frame that was already
+                            // visible: drop the stale image (it would claim a
+                            // preview that is no longer allowed) on a neutral,
+                            // non-black backplate.
+                            ThumbnailPeek.ShowEmpty(
+                                TimeFormatter.Format(seconds),
+                                emptyWidth,
+                                emptyHeight);
+                        }
+                        else
+                        {
+                            // No frame exists yet (pre-generation still running
+                            // with "show only after generation", or an empty
+                            // bucket): hide instead of the old black card.
+                            ThumbnailPeek.Hide();
+                        }
+
                         break;
                     default:
                         // Pending / Showing / Updated: the previous frame (or

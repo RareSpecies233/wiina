@@ -961,12 +961,13 @@ public static class SettingsCatalog
             "重置所有设置", "恢复全部默认值（按键绑定、窗口位置与历史不受影响）。",
             "reset-all-settings",
             "reset all settings 重置 全部"));
-        rows.Add(ActionRow(
-            "advanced.mini-player", SettingsPageId.Advanced, "模式",
-            "迷你播放器（音乐模式）",
-            "功能仍在开发中，稳定性有限，建议仅在测试时使用。进入前会先确认，设置窗口随后关闭。",
-            "enter-mini-player",
-            "mini player music mode 迷你 播放器 音乐 模式 小窗 开发中 测试"));
+        rows.Add(BoolRow(
+            "advanced.music-auto", SettingsPageId.Advanced, "模式",
+            "音频文件自动进入音乐模式",
+            "打开纯音频文件时自动进入迷你播放器（音乐模式）；视频文件不会自动进入，手动退出后同一文件不再自动进入。",
+            settings => settings.AutoSwitchToMusicMode,
+            (settings, value) => settings.AutoSwitchToMusicMode = value,
+            "music mode mini auto audio 音乐模式 迷你 播放器 自动 进入 音频"));
 
         // --------------------------------------------------------- Integration
         rows.Add(InfoRow(

@@ -1,6 +1,27 @@
-# Known issues — Wiina v1.3.10
+# Known issues — Wiina v1.3.11
 
-Nothing here is hidden; these are known limitations of the v1.3.10 build. The full decision list (with fix cost and checkboxes) lives in [../reports/known-issues-1.3.1.md](../reports/known-issues-1.3.1.md).
+Nothing here is hidden; these are known limitations of the v1.3.11 build. The full decision list (with fix cost and checkboxes) lives in [../archive/reports/known-issues-1.3.1.md](../archive/reports/known-issues-1.3.1.md).
+
+## What changed in 1.3.11
+
+- Multi-select up/down moves every selected row as a block (`PlaylistMove.ResolveBatch`), preserving selection and scroll.
+- The sidebar blur is gated for the whole slide and replayed once at rest, so the panel is uniformly solid during the 240 ms show/hide animation instead of half solid/half blurred.
+- Pre-generated thumbnails no longer paint a black card or queue a decode while "show only after generation" is on; only the time bubble appears.
+- Mini player: Video menu + OSC toolbar + `Ctrl+Alt+M` entry; audio-only files auto-enter (setting, default on); playlist expands at the bottom; window-follows-mouse and slider drag bugs fixed; progress thumb no longer clipped; volume bubble anchored to the button; mini rejects fullscreen; prev/next honour the seek/track-skip setting; cover fallback ignores punctuation; overlays parked in mini.
+- Edge snapping: single mover, frozen work area, 120 ms DWM-style debounce and sparse `[snap]` traces; the monitor seam no longer jumps.
+- Resize: video composition size is applied immediately (16 ms coalescing), with only clip/cover work left on the 80 ms debounce.
+- Documentation: 21 superseded planning/stage/report files moved to `docs/archive/` with 0 broken local links.
+
+## Limits specific to 1.3.11
+
+- The custom caption buttons still trail the DWM non-client frame by at least one frame during a fast resize. A high-priority layout sync narrows it; the real fix (native `AppWindowTitleBar` buttons) is deferred to a future UI pass.
+- The mini player remains a main-window overlay, not a separate HWND: spec §10.1's independent window is a future item. The playlist bottom panel and the 80 DIP control strip (spec says 72) are deliberate deviations for a non-clipped stock Slider.
+- During the sidebar slide the blur layer is intentionally suppressed: the panel stays uniformly solid and becomes glass at rest. `Fixed` mode still shows the last captured frame at rest.
+- With "pre-generated + show only after generation", hovering before the pass completes shows only the time bubble and queues nothing; a frame appears only after the pointer moves again.
+- Edge-snap fixes are mechanism-level plus trace; a real-mouse acceptance on multi-monitor/taskbar/150 % DPI is still recommended. If shaking persists, the `[snap]` lines distinguish two movers, a work-area flip, or DWM churn.
+- Auto mini depends on mpv reporting the full track list; a file that first reports audio-only and then a video track could briefly enter mini before the video track arrives (mpv normally reports the list in one event).
+- `Ctrl+Alt+m` is the actual chord (mpv syntax makes an uppercase `M` imply Shift); the menu displays `Ctrl+Alt+M`.
+- The local test machine has no working audio output device for audio-only files, so auto-mini was verified by code/entry-point and manual toolbar entry; final audio acceptance should be done on a machine with an output device.
 
 ## What changed in 1.3.10
 
@@ -641,7 +662,7 @@ instant). The default mode (pre-generation) is unchanged.
 - **Still open**: there is no per-event mpv callback detach step
   (`MpvPlayer.Dispose()` stops its own event thread), and the staging-texture
   flush buffer described in the task does not exist in the code. The report in
-  [../reports/hang-analysis-1.2.7.md](../reports/hang-analysis-1.2.7.md)
+  [../archive/reports/hang-analysis-1.2.7.md](../archive/reports/hang-analysis-1.2.7.md)
   recommends these as the next step.
 - The two recorded `AppHangB1` events (1.2.5 and 1.2.6) both occurred during
   shutdown while the GPU was in a `DXGI_ERROR_DEVICE_REMOVED` loop; no dumps

@@ -5,9 +5,13 @@ using Microsoft.UI.Xaml.Controls.Primitives;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Media.Animation;
+using Wiina.App.Interop;
 using Wiina.Core.State;
 using Wiina.App.Localization;
 using Wiina.Core.Text;
+// Alias instead of `using Windows.System;`: that namespace also exposes a
+// DispatcherQueueTimer, which would collide with Microsoft.UI.Dispatching.
+using VirtualKey = Windows.System.VirtualKey;
 
 namespace Wiina.App.Controls;
 
@@ -19,6 +23,12 @@ namespace Wiina.App.Controls;
 /// </summary>
 public sealed partial class MiniPlayerView : UserControl
 {
+    /// <summary>Gap between the volume bubble and the mute button (P1-5).</summary>
+    private const double VolumeBubbleGap = 8;
+
+    /// <summary>Keep the anchored bubble this far from the window edges.</summary>
+    private const double BubbleEdgePadding = 8;
+
     private readonly DispatcherQueueTimer _volumeHideTimer;
     private readonly Dictionary<Control, (bool IsTabStop, bool AllowFocusOnInteraction)> _keyboardState = new();
     private bool _mouseOnlyKeyboard;
@@ -29,6 +39,7 @@ public sealed partial class MiniPlayerView : UserControl
     private bool _muted;
     private bool _dragCandidate;
     private bool _dragging;
+    private bool _positioningBubble;
     private Windows.Foundation.Point _dragStart;
 
     public MiniPlayerView()
@@ -48,8 +59,17 @@ public sealed partial class MiniPlayerView : UserControl
         };
         ProgressSlider.PointerCaptureLost += (_, _) => _seeking = false;
 
-        SizeChanged += (_, _) => FallbackInitial.FontSize =
-            Math.Clamp(ActualWidth * 0.18, 40, 96);
+        SizeChanged += (_, _) =>
+        {
+            FallbackInitial.FontSize = Math.Clamp(ActualWidth * 0.18, 40, 96);
+            // The window grows by 300 DIP when the playlist expands; the
+            // bubble hugs the mute button, so its anchor moved too.
+            PositionVolumeBubble();
+        };
+
+        // The first show measures the card while it is still unarranged, so
+        // its real height arrives with this event; re-anchor once it is known.
+        VolumeBubble.SizeChanged += (_, _) => PositionVolumeBubble();
     }
 
     public event EventHandler? PlayPauseRequested;
@@ -188,11 +208,35 @@ public sealed partial class MiniPlayerView : UserControl
         FallbackCover.Visibility = showFallback ? Visibility.Visible : Visibility.Collapsed;
         if (showFallback)
         {
-            string initial = resolvedTitle.Trim();
-            FallbackInitial.Text = initial.Length > 0
-                ? initial[..1].ToUpperInvariant()
-                : "♪";
+            FallbackInitial.Text = ResolveFallbackInitial(resolvedTitle, artist, album);
         }
+    }
+
+    /// <summary>
+    /// Cover fallback letter. File names often start with a bracket/punctuation
+    /// tag ("[MV] Artist - Title", "(01) …"), which used to become the visible
+    /// initial; take the first letter or digit instead, then the album/artist,
+    /// then the music note.
+    /// </summary>
+    private static string ResolveFallbackInitial(string? title, string? artist, string? album)
+    {
+        foreach (string? candidate in new[] { title, album, artist })
+        {
+            if (string.IsNullOrWhiteSpace(candidate))
+            {
+                continue;
+            }
+
+            foreach (char character in candidate)
+            {
+                if (char.IsLetterOrDigit(character))
+                {
+                    return char.ToUpperInvariant(character).ToString();
+                }
+            }
+        }
+
+        return "♪";
     }
 
     public void SetPlaying(bool playing)
@@ -314,6 +358,7 @@ public sealed partial class MiniPlayerView : UserControl
     public void ShowVolumeBubble()
     {
         VolumeBubble.Visibility = Visibility.Visible;
+        PositionVolumeBubble();
         _volumeHideTimer.Stop();
         _volumeHideTimer.Start();
     }
@@ -322,6 +367,68 @@ public sealed partial class MiniPlayerView : UserControl
     {
         _volumeHideTimer.Stop();
         VolumeBubble.Visibility = Visibility.Collapsed;
+    }
+
+    /// <summary>
+    /// Anchors the 148 DIP bubble 8 DIP above MuteButton and clamps it inside
+    /// the mini window. The card lives on <see cref="BubbleLayer"/> (a Canvas
+    /// above the whole surface), so both axes are explicit and follow the
+    /// window while the playlist changes its height.
+    /// </summary>
+    private void PositionVolumeBubble()
+    {
+        if (_positioningBubble ||
+            VolumeBubble.Visibility != Visibility.Visible ||
+            Root.ActualWidth <= 0 ||
+            Root.ActualHeight <= 0)
+        {
+            return;
+        }
+
+        _positioningBubble = true;
+        try
+        {
+            // Measure with the fixed width so the top edge is known on the
+            // first show, before the Canvas has arranged the card.
+            VolumeBubble.Measure(new Windows.Foundation.Size(
+                MiniPlayerLayout.VolumeBubbleWidth,
+                double.PositiveInfinity));
+            double width = MiniPlayerLayout.VolumeBubbleWidth;
+            double height = VolumeBubble.ActualHeight > 0
+                ? VolumeBubble.ActualHeight
+                : VolumeBubble.DesiredSize.Height;
+
+            Windows.Foundation.Point anchor;
+            try
+            {
+                anchor = MuteButton
+                    .TransformToVisual(Root)
+                    .TransformPoint(new Windows.Foundation.Point(0, 0));
+            }
+            catch
+            {
+                // Not in the visual tree yet; the next SizeChanged repositions.
+                return;
+            }
+
+            double left = anchor.X + ((MuteButton.ActualWidth - width) / 2);
+            double top = anchor.Y - height - VolumeBubbleGap;
+            left = Math.Clamp(
+                left,
+                BubbleEdgePadding,
+                Math.Max(BubbleEdgePadding, Root.ActualWidth - width - BubbleEdgePadding));
+            top = Math.Clamp(
+                top,
+                BubbleEdgePadding,
+                Math.Max(BubbleEdgePadding, Root.ActualHeight - height - BubbleEdgePadding));
+
+            Canvas.SetLeft(VolumeBubble, left);
+            Canvas.SetTop(VolumeBubble, top);
+        }
+        finally
+        {
+            _positioningBubble = false;
+        }
     }
 
     public void TogglePlaylist()
@@ -372,6 +479,16 @@ public sealed partial class MiniPlayerView : UserControl
     {
         ShowControls();
 
+        // P0-4: a pointer move without the left button held must never move the
+        // window. The compact mini window used to keep an old _dragCandidate
+        // after a child (slider/button) swallowed the Released event, so simply
+        // hovering dragged the window around.
+        if (!WindowInterop.IsKeyDown(VirtualKey.LeftButton))
+        {
+            EndDrag();
+            return;
+        }
+
         if (!_dragCandidate)
         {
             return;
@@ -399,6 +516,17 @@ public sealed partial class MiniPlayerView : UserControl
     {
         if (!e.GetCurrentPoint(this).Properties.IsLeftButtonPressed)
         {
+            EndDrag();
+            return;
+        }
+
+        // Only a press on a non-interactive surface starts a window drag. A
+        // press on a transport button, a slider, a playlist row, the volume
+        // bubble or the playlist panel belongs to that control; otherwise
+        // dragging the progress/volume thumb moved the window instead.
+        if (IsInteractiveSurface(e.OriginalSource))
+        {
+            EndDrag();
             return;
         }
 
@@ -407,15 +535,53 @@ public sealed partial class MiniPlayerView : UserControl
         _dragStart = e.GetCurrentPoint(this).Position;
     }
 
-    private void OnPointerReleased(object sender, PointerRoutedEventArgs e)
+    /// <summary>
+    /// Walks the OriginalSource ancestry: anything that owns a pointer gesture
+    /// (buttons, range controls, list rows, text entry, scroll bars, the two
+    /// floating panels) must not turn into a window drag.
+    /// </summary>
+    private bool IsInteractiveSurface(object? source)
+    {
+        DependencyObject? current = source as DependencyObject;
+        while (current is not null && !ReferenceEquals(current, Root))
+        {
+            if (current is ButtonBase or RangeBase or ListViewItem or TextBox or ScrollBar)
+            {
+                return true;
+            }
+
+            if (ReferenceEquals(current, VolumeBubble) ||
+                ReferenceEquals(current, PlaylistPanel))
+            {
+                return true;
+            }
+
+            current = VisualTreeHelper.GetParent(current);
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Clears the drag gesture, raising <see cref="DragEnded"/> so the window
+    /// position is persisted.
+    /// </summary>
+    private void EndDrag()
     {
         if (_dragging)
         {
+            _dragging = false;
+            _dragCandidate = false;
             DragEnded?.Invoke(this, EventArgs.Empty);
+            return;
         }
 
         _dragCandidate = false;
-        _dragging = false;
+    }
+
+    private void OnPointerReleased(object sender, PointerRoutedEventArgs e)
+    {
+        EndDrag();
         try
         {
             ReleasePointerCapture(e.Pointer);
@@ -428,17 +594,27 @@ public sealed partial class MiniPlayerView : UserControl
 
     private void OnPointerCaptureLost(object sender, PointerRoutedEventArgs e)
     {
-        if (_dragging)
+        // Moving the window can drop XAML pointer capture mid-gesture. While
+        // the left button is still down the drag must survive (the pointer is
+        // also captured by the window that follows it); only a real release
+        // ends the gesture.
+        if (_dragging && WindowInterop.IsKeyDown(VirtualKey.LeftButton))
         {
-            DragEnded?.Invoke(this, EventArgs.Empty);
+            return;
         }
 
-        _dragCandidate = false;
-        _dragging = false;
+        EndDrag();
     }
 
     private void OnPointerExited(object sender, PointerRoutedEventArgs e)
     {
+        // A release delivered to a child control leaves the root press state
+        // behind; drop it when the button is no longer down.
+        if (!WindowInterop.IsKeyDown(VirtualKey.LeftButton))
+        {
+            EndDrag();
+        }
+
         _volumeHideTimer.Stop();
         HideVolumeBubble();
         HideControls();
@@ -487,14 +663,15 @@ public sealed partial class MiniPlayerView : UserControl
     private void OnRestoreClick(object sender, RoutedEventArgs e) =>
         RestoreRequested?.Invoke(this, EventArgs.Empty);
 
-    private void OnMuteClick(object sender, RoutedEventArgs e)
-    {
-        if (VolumeBubble.Visibility != Visibility.Visible)
-        {
-            ShowVolumeBubble();
-            return;
-        }
+    /// <summary>
+    /// The transport volume button only opens the anchored bubble (P1-5: it
+    /// used to need a second click to actually mute). Muting lives on the
+    /// bubble's own mute button.
+    /// </summary>
+    private void OnMuteClick(object sender, RoutedEventArgs e) => ShowVolumeBubble();
 
+    private void OnBubbleMuteClick(object sender, RoutedEventArgs e)
+    {
         MuteToggleRequested?.Invoke(this, EventArgs.Empty);
         ShowVolumeBubble();
     }
