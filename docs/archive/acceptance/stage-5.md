@@ -227,13 +227,13 @@
 
 ### 音量 OSD（图标 + 文本 + 进度）
 
-![Stage 5 volume OSD](assets/stage-5-osd-volume.png)
+![Stage 5 volume OSD](../../acceptance/assets/stage-5-osd-volume.png)
 
 ### 持久技术 OSD
 
-![Stage 5 persistent OSD](assets/stage-5-persistent-osd.png)
+![Stage 5 persistent OSD](../../acceptance/assets/stage-5-persistent-osd.png)
 
 ### 时间预览 + 缩略图
 
-![Stage 5 thumbnail preview](assets/stage-5-thumbnail.png)
+![Stage 5 thumbnail preview](../../acceptance/assets/stage-5-thumbnail.png)
 

@@ -189,6 +189,14 @@ public sealed partial class AppSettings
 
     public bool AlwaysOnTop { get; set; }
 
+    /// <summary>
+    /// Hold a Windows power request (display + system) while media is actually
+    /// playing so the screen does not turn off, the machine does not sleep and
+    /// Windows does not auto-lock. Released on pause, stop and window close; the
+    /// system power plan is never modified. On by default.
+    /// </summary>
+    public bool PreventSleepWhilePlaying { get; set; } = true;
+
     // ---- Stage 6: modes, PiP, mini/music mode, multi-window ----
 
     /// <summary>Audio-only files enter mini/music mode automatically.</summary>

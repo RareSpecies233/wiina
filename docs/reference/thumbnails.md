@@ -286,9 +286,9 @@ flowchart TD
 
 ## 14. 相关文档
 
-- [缩略图 v1.3.8 改造方案](../reports/thumbnails-v1.3.8-plan.md) — 原为方案，**1.3.9 已实施 A/B/C**（慢速=即时、关键帧 seek 进入设置并默认关、`ThumbnailOutcome` 悬停状态机），§7 记录实施差异；20 ms 轮询地板与 `vf=scale` 预缩放仍未做。
+- [缩略图 v1.3.8 改造方案](../archive/reports/thumbnails-v1.3.8-plan.md) — 原为方案，**1.3.9 已实施 A/B/C**（慢速=即时、关键帧 seek 进入设置并默认关、`ThumbnailOutcome` 悬停状态机），§7 记录实施差异；20 ms 轮询地板与 `vf=scale` 预缩放仍未做。
 
-- [缩略图性能优化可行性（v1.3.7，仅报告）](../reports/thumbnails-optimization-1.3.7.md)
+- [缩略图性能优化可行性（v1.3.7，仅报告）](../archive/reports/thumbnails-optimization-1.3.7.md)
 
 - [性能测量](../performance.md) — 缩略图各档耗时与占用。
 - [1.3.1 验收](../acceptance/v1.3.1.md) — GPU 解码与整片内存缓存。

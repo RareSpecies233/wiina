@@ -54,6 +54,13 @@ public sealed partial class MainWindow
 
     private string? _currentPath;
     private string? _currentTitle;
+
+    // Auto mini-player entry for audio-only files: remember the path we already
+    // looked at plus whether we auto-entered or the user backed out, so a paused
+    // or re-evaluated file is never bounced back into mini mode.
+    private string? _autoMiniPath;
+    private bool _autoMiniEntered;
+    private bool _autoMiniSuppressed;
     private int _currentChapterIndex = -1;
     private int _currentPlaylistIndex = -1;
     private int _abLoopStage;
@@ -83,6 +90,11 @@ public sealed partial class MainWindow
         _settings.RecentUrls ??= new List<string>();
 
         TitleBar.MoreClicked += (_, _) => ShowApplicationMenu(TitleBar);
+        // Music mode lives in the Video menu, the OSC toolbar and Ctrl+Alt+M;
+        // the toolbar raises this event from all three OSC surfaces.
+        OscFloating.Toolbar.MusicModeClicked += (_, _) => ToggleMini();
+        OscBottom.Toolbar.MusicModeClicked += (_, _) => ToggleMini();
+        OscTop.Toolbar.MusicModeClicked += (_, _) => ToggleMini();
         RootGrid.AllowDrop = true;
         RootGrid.DragOver += OnRootDragOver;
         RootGrid.Drop += OnRootDropAsync;
@@ -622,6 +634,7 @@ public sealed partial class MainWindow
         startIndex = Math.Clamp(startIndex, 0, entries.Count - 1);
         string current = entries[startIndex];
 
+        ResetAutoMiniState();
         _resumeApplied = false;
         _abLoopStage = 0;
         _abLoopA = 0;
@@ -775,6 +788,7 @@ public sealed partial class MainWindow
         SendPlayerCommandAsync("stop");
         _currentPath = null;
         _currentTitle = null;
+        ResetAutoMiniState();
         TitleBar.Title = "Wiina";
         Title = "Wiina";
         EndStreamOpen();
@@ -1673,6 +1687,87 @@ public sealed partial class MainWindow
         }
     }
 
+    // ------------------------------------------------ auto mini (audio only)
+
+    /// <summary>
+    /// Forgets the per-file auto-mini decision; called when a new file starts or
+    /// playback stops so reopening the same path can auto-enter again.
+    /// </summary>
+    private void ResetAutoMiniState()
+    {
+        _autoMiniPath = null;
+        _autoMiniEntered = false;
+        _autoMiniSuppressed = false;
+    }
+
+    /// <summary>
+    /// Enters mini mode for an audio-only file when the setting is on. Called
+    /// after mpv reports the track list (the only point where "audio-only" is
+    /// known) and when the setting is switched on. Video files never enter; a
+    /// manual exit sets <c>_autoMiniSuppressed</c> for the current path.
+    /// </summary>
+    private void TryAutoEnterMini()
+    {
+        if (!_settings.AutoSwitchToMusicMode || _mode.Current != PlayerMode.Normal)
+        {
+            return;
+        }
+
+        if (_player is not { IsRunning: true })
+        {
+            return;
+        }
+
+        string? path = _player.GetPropertyString("path");
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            path = _currentPath;
+        }
+
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            return;
+        }
+
+        if (!string.Equals(path, _autoMiniPath, StringComparison.OrdinalIgnoreCase))
+        {
+            _autoMiniPath = path;
+            _autoMiniEntered = false;
+            _autoMiniSuppressed = false;
+        }
+
+        if (_autoMiniEntered || _autoMiniSuppressed)
+        {
+            return;
+        }
+
+        // IsAudioOnly is false for an empty track list (mpv has not decided the
+        // media shape yet) and ignores embedded cover art, so an mp3 with album
+        // art still counts as audio while a real video track never auto-enters.
+        if (!MediaModeAdvice.IsAudioOnly(_trackList))
+        {
+            return;
+        }
+
+        // Only latch after the transition actually happened. During the initial
+        // file load the mode machine can reject Mini (the window/video surface
+        // is still settling); latching first would permanently suppress the
+        // retry that ApplyLoadedMedia performs once the file is ready.
+        try
+        {
+            RequestMode(PlayerMode.Mini);
+        }
+        catch (Exception ex)
+        {
+            Trace($"auto mini failed: {ex.Message}");
+        }
+
+        _autoMiniEntered = _mode.Current == PlayerMode.Mini;
+        Trace(
+            $"auto mini: audio-only {path}; requested, now={_mode.Current}, " +
+            $"entered={_autoMiniEntered}");
+    }
+
     // ------------------------------------------------------ event handlers
 
     private void OnTrackListChanged(IReadOnlyList<TrackInfo> tracks)
@@ -1703,6 +1798,7 @@ public sealed partial class MainWindow
             RefreshSidebarTracks();
             UpdateAlbumArtState();
             UpdateMiniPlayerState();
+            TryAutoEnterMini();
         });
     }
 
@@ -2416,6 +2512,15 @@ public sealed partial class MainWindow
                 ResetSpeed();
                 return true;
             case PlayerActions.ToggleFullscreen:
+                // P0-6: the mini overlay owns the window; a fullscreen request
+                // (F/Enter, menu, OSC) must leave it alone. RequestMode holds
+                // the same guard as a backstop.
+                if (InMiniMode)
+                {
+                    Trace("action ignored: mini has no fullscreen");
+                    return true;
+                }
+
                 ToggleFullscreen();
                 return true;
             case PlayerActions.ExitFullscreen:
@@ -2652,6 +2757,18 @@ public sealed partial class MainWindow
     /// </summary>
     private void DragWindowFromCursor()
     {
+        // P0-4: a lost PointerReleased used to leave the drag candidate set, so
+        // the next mouse move (no button) dragged the main window around. The
+        // left button is the only thing that may keep a drag alive; without it
+        // clear the gesture and stop the pump instead of moving.
+        if (!WindowInterop.IsKeyDown(VirtualKey.LeftButton))
+        {
+            _windowDragCandidate = false;
+            _windowDragging = false;
+            _dragPump?.Stop();
+            return;
+        }
+
         // Mode may have switched to fullscreen mid-gesture (shortcut, OSC, or
         // media end); never move the window from a fullscreen frame.
         if (IsFullscreen)

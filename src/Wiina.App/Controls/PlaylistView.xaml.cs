@@ -8,6 +8,7 @@ using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Controls.Primitives;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
+using Wiina.Core.Files;
 using Wiina.Mpv;
 using Windows.ApplicationModel.DataTransfer;
 using Windows.UI.Text;
@@ -39,10 +40,30 @@ public sealed partial class PlaylistView : UserControl
 
     public event EventHandler<IReadOnlyList<int>>? RemoveRequested;
 
+    /// <summary>
+    /// Single-row drag reorder. <c>From</c>/<c>To</c> are final playlist
+    /// indexes; the shell maps them through
+    /// <see cref="PlaylistMove.ResolveTarget"/>.
+    /// </summary>
     public event EventHandler<(int From, int To)>? MoveRequested;
+
+    /// <summary>
+    /// Multi-row up/down move. Each pair is already the exact
+    /// <c>playlist-move</c> argument sequence, in execution order; the shell
+    /// sends them verbatim.
+    /// </summary>
+    public event EventHandler<IReadOnlyList<(int From, int To)>>? MoveBatchRequested;
 
     public void SetItems(IReadOnlyList<MpvPlaylistItem> items, int currentIndex)
     {
+        // mpv pushes a whole new playlist on every change; the view rebuilds the
+        // row collection. Capture selection (by path, falling back to index) and
+        // the scroll offset first so a move keeps the edited row selected and the
+        // list does not jump back to the top.
+        List<(int Index, string Path)> selection = CaptureSelection();
+        double verticalOffset = GetVerticalOffset();
+
+        ItemList.SelectedItems.Clear();
         _rows.Clear();
         for (int i = 0; i < items.Count; i++)
         {
@@ -64,6 +85,14 @@ public sealed partial class PlaylistView : UserControl
         EmptyHint.Visibility = items.Count == 0
             ? Visibility.Visible
             : Visibility.Collapsed;
+
+        RestoreSelection(selection, items.Count);
+        UpdateMoveButtons();
+
+        if (verticalOffset > 0.5)
+        {
+            DispatcherQueue.TryEnqueue(() => RestoreScrollOffset(verticalOffset));
+        }
     }
 
     public void UpdateCurrent(int currentIndex)
@@ -99,10 +128,13 @@ public sealed partial class PlaylistView : UserControl
         RemoveSelected();
 
     private void OnMoveUpClick(object sender, RoutedEventArgs e) =>
-        MoveFirstSelected(-1);
+        MoveSelectedBatch(-1);
 
     private void OnMoveDownClick(object sender, RoutedEventArgs e) =>
-        MoveFirstSelected(1);
+        MoveSelectedBatch(1);
+
+    private void OnListSelectionChanged(object sender, SelectionChangedEventArgs e) =>
+        UpdateMoveButtons();
 
     private void OnListDoubleTapped(object sender, DoubleTappedRoutedEventArgs e)
     {
@@ -155,8 +187,10 @@ public sealed partial class PlaylistView : UserControl
         }
 
         Add(Loc.T("playlist.play"), () => PlayRequested?.Invoke(this, row.Index));
-        Add(Loc.T("playlist.moveUp"), () => MoveFirstSelected(-1));
-        Add(Loc.T("playlist.moveDown"), () => MoveFirstSelected(1));
+        MenuFlyoutItem moveUp = Add(Loc.T("playlist.moveUp"), () => MoveSelectedBatch(-1));
+        moveUp.IsEnabled = CanMoveSelection(-1);
+        MenuFlyoutItem moveDown = Add(Loc.T("playlist.moveDown"), () => MoveSelectedBatch(1));
+        moveDown.IsEnabled = CanMoveSelection(1);
         flyout.Items.Add(new MenuFlyoutSeparator());
         Add(Loc.T("playlist.remove"), RemoveSelected);
         Add(Loc.T("playlist.copyPath"), () => CopyPath(row.Path));
@@ -202,21 +236,125 @@ public sealed partial class PlaylistView : UserControl
         }
     }
 
-    private void MoveFirstSelected(int delta)
+    /// <summary>
+    /// Moves the whole selection one slot up/down. Contiguous runs move as a
+    /// block; a run already touching the edge is skipped as a unit.
+    /// </summary>
+    private void MoveSelectedBatch(int delta)
     {
-        PlaylistRow? row = SelectedRows().FirstOrDefault();
-        if (row is null)
+        IReadOnlyList<(int From, int To)> moves =
+            PlaylistMove.ResolveBatch(SelectedIndexes(), _rows.Count, delta);
+        if (moves.Count > 0)
+        {
+            MoveBatchRequested?.Invoke(this, moves);
+        }
+    }
+
+    private int[] SelectedIndexes() =>
+        SelectedRows().Select(row => row.Index).ToArray();
+
+    private bool CanMoveSelection(int delta) =>
+        PlaylistMove.CanMoveBatch(SelectedIndexes(), _rows.Count, delta);
+
+    private void UpdateMoveButtons()
+    {
+        MoveUpButton.IsEnabled = CanMoveSelection(-1);
+        MoveDownButton.IsEnabled = CanMoveSelection(1);
+    }
+
+    private List<(int Index, string Path)> CaptureSelection() =>
+        ItemList.SelectedItems
+            .OfType<PlaylistRow>()
+            .Select(row => (row.Index, row.Path))
+            .OrderBy(entry => entry.Index)
+            .ToList();
+
+    /// <summary>
+    /// Re-selects the same files after a rebuild. Paths are stable across
+    /// reorders; the old index is only a fallback for empty/duplicate paths.
+    /// </summary>
+    private void RestoreSelection(
+        IReadOnlyList<(int Index, string Path)> selection,
+        int count)
+    {
+        if (selection.Count == 0 || count == 0)
         {
             return;
         }
 
-        int to = row.Index + delta;
-        if (to < 0 || to >= _rows.Count)
+        var indexesByPath = new Dictionary<string, Queue<int>>(StringComparer.OrdinalIgnoreCase);
+        foreach (PlaylistRow row in _rows)
         {
-            return;
+            if (string.IsNullOrEmpty(row.Path))
+            {
+                continue;
+            }
+
+            if (!indexesByPath.TryGetValue(row.Path, out Queue<int>? indexes))
+            {
+                indexes = new Queue<int>();
+                indexesByPath[row.Path] = indexes;
+            }
+
+            indexes.Enqueue(row.Index);
         }
 
-        MoveRequested?.Invoke(this, (row.Index, to));
+        var restored = new HashSet<int>();
+        foreach ((int oldIndex, string path) in selection)
+        {
+            int index = -1;
+            if (!string.IsNullOrEmpty(path)
+                && indexesByPath.TryGetValue(path, out Queue<int>? candidates))
+            {
+                while (candidates.Count > 0 && restored.Contains(candidates.Peek()))
+                {
+                    candidates.Dequeue();
+                }
+
+                if (candidates.Count > 0)
+                {
+                    index = candidates.Dequeue();
+                }
+            }
+
+            if (index < 0 && oldIndex >= 0 && oldIndex < count)
+            {
+                index = oldIndex;
+            }
+
+            if (index >= 0 && index < _rows.Count && restored.Add(index))
+            {
+                ItemList.SelectedItems.Add(_rows[index]);
+            }
+        }
+    }
+
+    private double GetVerticalOffset() =>
+        FindScrollViewer(ItemList)?.VerticalOffset ?? 0;
+
+    private void RestoreScrollOffset(double offset)
+    {
+        ItemList.UpdateLayout();
+        FindScrollViewer(ItemList)?.ChangeView(null, offset, null, disableAnimation: true);
+    }
+
+    private static ScrollViewer? FindScrollViewer(DependencyObject root)
+    {
+        if (root is ScrollViewer viewer)
+        {
+            return viewer;
+        }
+
+        int count = VisualTreeHelper.GetChildrenCount(root);
+        for (int i = 0; i < count; i++)
+        {
+            if (FindScrollViewer(VisualTreeHelper.GetChild(root, i)) is { } found)
+            {
+                return found;
+            }
+        }
+
+        return null;
     }
 
     private static void CopyPath(string path)

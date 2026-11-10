@@ -176,14 +176,18 @@ public sealed class MenuRulesTests
         Assert.True(Find(fullscreen, "video.fullscreen").IsChecked);
         Assert.Equal("退出全屏", Find(fullscreen, "video.fullscreen").Label);
 
-        // The mini/music menu entry was removed (mini mode now lives only under
-        // Settings → 高级 → 模式); PiP keeps its 窗口 entry.
+        // Music mode is a 视频 menu entry again (checkable through IsMini); PiP
+        // keeps its 窗口 entry.
         string[] ids = MenuCatalog
             .Flatten(MenuCatalog.Build(new MenuState()))
             .Select(item => item.Id)
             .ToArray();
-        Assert.DoesNotContain("video.music-mode", ids);
+        Assert.Contains("video.music-mode", ids);
         Assert.Contains("video.pip", ids);
+
+        MenuItemDefinition mini = Find(new MenuState { IsMini = true }, "video.music-mode");
+        Assert.True(mini.IsChecked);
+        Assert.False(Find(new MenuState(), "video.music-mode").IsChecked);
     }
 
     [Fact]

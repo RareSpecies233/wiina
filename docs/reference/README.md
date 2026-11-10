@@ -11,10 +11,13 @@
   含设置可打开的全部窗口与快速设置侧栏；修改设置结构后需同步更新。
 - `thumbnails.md` — 时间轴缩略图的当前实现参考：`PreGenerate` / `Instant` 两种模式、截取链路、内存/磁盘/预生成三级缓存、每个开关的行为、生成完成前的预览闸门、性能数据与已知限制；1.3.9 增加慢速=即时、关键帧定位与悬停状态机（见各节增量）。
 - `iina-shortcuts.md` — 键位对照与编辑器 UX 的历史调研（IINA 默认配置推导，不复制代码）。1.3.1 起设置里只保留 Wiina / mpv 两套配置，IINA 预设已移除，旧值自动迁移到 Wiina。
-- `../reports/` — 维护者/文档任务产出的分析报告：`hang-analysis-1.2.7.md`（冻结/崩溃取证与修复建议）、
+- `../reports/` — 当前轮的定位与修复报告：`fix-plan-1.3.10.md`、`fix-plan-1.3.11.md`、
+  `winui3-audit-1.3.11.md`、`docs-audit-1.3.11.md`。
+- [`../archive/reports/`](../archive/reports/) — **历史一次性分析报告（已归档）**：`hang-analysis-1.2.7.md`（冻结/崩溃取证与修复建议）、
   `performance-vs-potplayer.md`（画质选项与 PotPlayer 的逐项开销分析）、`ui-freeze-analysis.md`
   （高负载 UI 冻结取证，1.3.0）、`known-issues-1.3.1.md`（已知问题清单与修复成本；1.3.2 起附用户决策表）、
   `thumbnails-optimization-1.3.7.md`（缩略图性能优化可行性：20 ms 轮询地板、缩放前置、关键帧 seek、慢速模式重定义与路线表；仅报告，未实施）、`thumbnails-v1.3.8-plan.md`（1.3.8 改造方案；1.3.9 已实施 A/B/C——慢速=即时、关键帧 seek、悬停状态机；20 ms 轮询与 `vf=scale` 预缩放未做）。
+  归档说明见 [`../archive/README.md`](../archive/README.md)；引用时请当作历史结论。
 - `iina-thumbnails.md` — IINA 时间轴缩略图的实现调研与 Wiina 现状/差距分析；1.2.7 落地预生成 + 磁盘缓存，1.3.1 增加 GPU 解码档位（自动/仅 CPU）与全片内存缓存。
 
 ## 来源与许可证
@@ -28,7 +31,7 @@
 ## 使用方式
 
 实现时以规格的**层级、顺序、状态迁移、触发条件、避让规则**为准；像素/时长按 Windows Fluent 规范换算（见
-[实施计划 §4](../PLAN.md)）。规格未覆盖的细节，回到 IINA 源码确认，不臆造。
+[实施计划 §4（已归档）](../archive/planning/PLAN.md)）。规格未覆盖的细节，回到 IINA 源码确认，不臆造。
 
 ## 维护
 

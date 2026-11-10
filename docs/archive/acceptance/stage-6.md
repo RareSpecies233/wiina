@@ -284,9 +284,9 @@
 
 ### 全屏
 
-![Stage 6 fullscreen](assets/stage-6-fullscreen.png)
+![Stage 6 fullscreen](../../acceptance/assets/stage-6-fullscreen.png)
 
 ### 画中画
 
-![Stage 6 PiP](assets/stage-6-pip.png)
+![Stage 6 PiP](../../acceptance/assets/stage-6-pip.png)
 

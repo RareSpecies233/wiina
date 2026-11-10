@@ -93,6 +93,9 @@ public sealed partial class MainWindow : Window
     private readonly DeviceLossRecoveryBudget _deviceRecovery = new();
     private bool _deviceRecoveryPending;
     private bool _deviceRecoveryFailed;
+    // A power-resume / display-change reload is routine plumbing, not a device
+    // failure: it keeps the traces but skips the "device lost" OSD pair.
+    private bool _deviceRecoveryQuiet;
     private DispatcherQueueTimer? _deviceRecoveryTimer;
     private bool _titleBarVisible = true;
 
@@ -199,6 +202,10 @@ public sealed partial class MainWindow : Window
         // visible: "Solid" must never arm the Win2D capture thread at all.
         ChromeBlur.SetMode(_settings.ChromeBlurMode);
 
+        // Blur capture diagnostics go to the app trace file (sparse: first
+        // failure of a run plus backoff transitions only).
+        ChromeBlur.Log = Trace;
+
         // Follow system light/dark changes even when the OSD was constructed
         // while the app was still on its default (dark) Application theme.
         RootGrid.ActualThemeChanged += (_, _) => Osd.RequestedTheme = RootGrid.ActualTheme;
@@ -221,6 +228,26 @@ public sealed partial class MainWindow : Window
         _resizeTimer.Interval = TimeSpan.FromMilliseconds(80);
         _resizeTimer.IsRepeating = false;
         _resizeTimer.Tick += (_, _) => ApplyVideoLayout();
+
+        // Edge-snap helpers: debounce the DWM frame style while dragging and
+        // restore the native caption region shortly after a video-area drag.
+        _frameStyleTimer = DispatcherQueue.CreateTimer();
+        _frameStyleTimer.Interval = TimeSpan.FromMilliseconds(FrameStyleStableMs);
+        _frameStyleTimer.IsRepeating = false;
+        _frameStyleTimer.Tick += (_, _) => OnFrameStyleStable();
+
+        _captionDragGuardTimer = DispatcherQueue.CreateTimer();
+        _captionDragGuardTimer.Interval = TimeSpan.FromMilliseconds(100);
+        _captionDragGuardTimer.IsRepeating = true;
+        _captionDragGuardTimer.Tick += (_, _) => OnCaptionGuardTick();
+
+        // Resize split: coalesce a burst of SizeChanged events into one
+        // composition-size update per frame instead of waiting for the 80 ms
+        // layout debounce.
+        _compositionSizeTimer = DispatcherQueue.CreateTimer();
+        _compositionSizeTimer.Interval = TimeSpan.FromMilliseconds(16);
+        _compositionSizeTimer.IsRepeating = false;
+        _compositionSizeTimer.Tick += (_, _) => OnCompositionSizeCoalesced();
 
         _autoHideTimer = DispatcherQueue.CreateTimer();
         _autoHideTimer.Interval = TimeSpan.FromMilliseconds(2500);
@@ -1299,15 +1326,27 @@ public sealed partial class MainWindow : Window
 
         if (_settings.ThumbnailPreviewEnabled && File.Exists(_currentPath))
         {
-            double thumbWidth = Math.Clamp(_settings.ThumbnailWidth, 80, 320);
-            double aspect = _videoAspect > 0 ? _videoAspect : 16.0 / 9.0;
-            double thumbHeight = Math.Clamp(thumbWidth / aspect, 45, 220);
-            ThumbnailPeek.ShowLoading(
-                TimeFormatter.Format(seconds),
-                thumbWidth,
-                thumbHeight);
-            PositionThumbnail();
-            RequestThumbnailAsync(seconds);
+            if (CanShowHoverThumbnailNow())
+            {
+                double thumbWidth = Math.Clamp(_settings.ThumbnailWidth, 80, 320);
+                double aspect = _videoAspect > 0 ? _videoAspect : 16.0 / 9.0;
+                double thumbHeight = Math.Clamp(thumbWidth / aspect, 45, 220);
+                ThumbnailPeek.ShowLoading(
+                    TimeFormatter.Format(seconds),
+                    thumbWidth,
+                    thumbHeight);
+                PositionThumbnail();
+                RequestThumbnailAsync(seconds);
+            }
+            else
+            {
+                // Pre-generation has not covered the file yet and the user asked
+                // for "show only after generation": the time bubble is the whole
+                // overlay. No card, no ring and no decode request, so nothing
+                // black can appear before a frame is allowed.
+                _thumbnailHover.Clear();
+                ThumbnailPeek.Hide();
+            }
         }
     }
 
@@ -1711,6 +1750,12 @@ public sealed partial class MainWindow : Window
             return;
         }
 
+        // A new file starts a fresh recovery cycle. An exhausted device-loss
+        // budget or watchdog budget from the previous file used to latch for the
+        // rest of the process, so a later transient TDR was never recovered.
+        ResetDeviceRecovery();
+        ResetRenderWatchdog();
+
         _oscVm.SetDurationFromPlayer(_player.GetPropertyDouble("duration"));
         _oscVm.SetPositionFromPlayer(_player.GetPropertyDouble("time-pos"));
         _oscVm.SetVolumeFromPlayer(_player.GetPropertyDouble("volume"));
@@ -1760,6 +1805,12 @@ public sealed partial class MainWindow : Window
                 _player.CommandAsync("set", "pause", "yes");
             }
         }
+
+        // Retry after the file is fully loaded: the first track-list event can
+        // arrive while the window/video surface is still settling, in which case
+        // the Mini transition is rejected and TryAutoEnterMini leaves its latch
+        // false on purpose.
+        TryAutoEnterMini();
     }
 
     /// <summary>
@@ -1856,6 +1907,12 @@ public sealed partial class MainWindow : Window
 
         OscTop.Margin = new Thickness(0, visible ? 40 : 0, 0, 0);
         UpdateSidebarMargins();
+
+        // The native caption drag region must follow the XAML titlebar: while
+        // the bar is hidden (chrome faded, mini, fullscreen) the top strip
+        // belongs to the video surface, and leaving the region live let the OS
+        // move loop run on top of the video drag (two movers = shake).
+        UpdateCaptionDragRegion();
     }
 
     private void ToggleMaximize()
@@ -2034,6 +2091,57 @@ public sealed partial class MainWindow : Window
     /// </summary>
     private WindowInterop.WindowFrameStyle? _frameStyleApplied;
 
+    // DWM frame style is debounced while a drag gesture runs: writing the DWM
+    // attributes on every 16 ms tick made the edge state flicker (and the DWM
+    // writes themselves are one of the "window shakes" suspects). The style is
+    // applied once the edge state has been stable for FrameStyleStableMs, or
+    // immediately when the gesture ends.
+    private const int FrameStyleStableMs = 120;
+    private DispatcherQueueTimer? _frameStyleTimer;
+    private WindowInterop.WindowFrameStyle? _pendingFrameStyle;
+
+    /// <summary>True between WM_ENTERSIZEMOVE and WM_EXITSIZEMOVE.</summary>
+    private bool _nativeMoveGesture;
+
+    /// <summary>
+    /// Work area captured once per gesture. The pointer crosses a monitor
+    /// boundary before the window does, so re-reading the work area every tick
+    /// made the magnet flip between monitors (A -> B -> A shake).
+    /// </summary>
+    private WorkArea _snapWorkArea;
+    private bool _snapWorkAreaValid;
+
+    // Sparse snap trace: one line on a state change plus a 4/s heartbeat while
+    // dragging, so a 10 s capture is enough to tell "double mover" from
+    // "work-area switch" without flooding the trace.
+    private const int SnapTraceHeartbeatMs = 250;
+    private long _snapTraceLastTick;
+    private bool _snapTraceHasLast;
+    private SnapEdges _snapTraceEdges;
+    private WindowRect _snapTraceApplied;
+
+    // Content-drag trace state (the drag itself lives in MainWindow.Playback.cs;
+    // its raw rect is reconstructed here from the same anchor fields).
+    private long _contentDragTraceLastTick;
+    private bool _contentDragTraceHasLast;
+    private WindowRect _contentDragTraceApplied;
+
+    // Single-mover guard: the native caption drag region must not be live while
+    // the chrome is hidden (the top strip belongs to the video surface then) or
+    // while a video-area drag is running.
+    private bool _captionDragSuppressed;
+    private DispatcherQueueTimer? _captionDragGuardTimer;
+
+    // Resize split: the composition size follows SizeChanged immediately
+    // (coalesced to one update per 16 ms) while the expensive clip/cover work
+    // stays on the 80 ms layout debounce.
+    private DispatcherQueueTimer? _compositionSizeTimer;
+    private long _compositionSizeAppliedAt;
+    private bool _compositionSizePending;
+    private long _captionSyncLastTick;
+    private bool _captionSyncQueued;
+    private long _resizeTraceLastTick;
+
     /// <summary>
     /// Invisible resize-border margins of this window. The OS reports the outer
     /// window rect (≈8 px of border on left/right/bottom at 100%), so snapping
@@ -2058,32 +2166,51 @@ public sealed partial class MainWindow : Window
     {
         _snapSession.Reset();
         _moveAnchorValid = false;
+        _nativeMoveGesture = true;
+        // Freeze the work area for the whole gesture: the pointer can cross a
+        // monitor boundary before the window does, and re-reading the work area
+        // on every tick made the magnet flip between monitors.
+        CaptureSnapWorkArea();
+        TraceSnapState("gesture-start");
     }
 
     private void SnapWindowToEdges()
     {
+        // WM_EXITSIZEMOVE: the gesture is over, so the DWM frame may switch
+        // immediately instead of waiting for the stability window.
+        _nativeMoveGesture = false;
+        _snapWorkAreaValid = false;
+
         if (!_settings.EdgeSnapping ||
             AppWindow.Presenter is not OverlappedPresenter { State: OverlappedPresenterState.Restored })
         {
             _snapSession.Reset();
+            _moveAnchorValid = false;
             ApplySnapFrame(false);
+            TraceSnapState("gesture-end (snapping off)");
             return;
         }
 
         PointInt32 position = AppWindow.Position;
         SizeInt32 size = AppWindow.Size;
         FrameMargins margins = SnapMargins();
-        EdgeSnapResult result = _snapSession.Apply(
-            new WindowRect(position.X, position.Y, position.X + size.Width, position.Y + size.Height),
-            WorkAreaUnderPointer(),
-            DisplayScale,
-            margins: margins);
+        var raw = new WindowRect(
+            position.X,
+            position.Y,
+            position.X + size.Width,
+            position.Y + size.Height);
+        WorkArea area = WorkAreaUnderPointer();
+        EdgeSnapResult result = _snapSession.Apply(raw, area, DisplayScale, margins: margins);
+
+        WindowInterop.TryGetCursorPosition(out int cursorX, out int cursorY);
+        TraceSnap("end", raw, result.Rect, result.Edges, area, cursorX, cursorY, force: true);
 
         if (result.Rect.Left != position.X || result.Rect.Top != position.Y)
         {
             AppWindow.Move(new PointInt32(result.Rect.Left, result.Rect.Top));
         }
 
+        _snapWorkAreaValid = false;
         ApplySnapFrame(result.IsSnapped);
     }
 
@@ -2108,13 +2235,18 @@ public sealed partial class MainWindow : Window
 
         FrameMargins snapMargins = SnapMargins();
         WindowRect raw = rect;
-        if (WindowInterop.TryGetCursorPosition(out int cursorX, out int cursorY))
+        int cursorX = 0;
+        int cursorY = 0;
+        if (WindowInterop.TryGetCursorPosition(out cursorX, out cursorY))
         {
             if (!_moveAnchorValid)
             {
+                // Anchor once per gesture. Resetting it inside WM_MOVING made
+                // the raw rect follow the applied (snapped) rect and drift.
                 _moveAnchorX = rect.Left - cursorX;
                 _moveAnchorY = rect.Top - cursorY;
                 _moveAnchorValid = true;
+                Trace($"[snap] anchor captured ({_moveAnchorX},{_moveAnchorY})");
             }
 
             int width = rect.Right - rect.Left;
@@ -2124,37 +2256,180 @@ public sealed partial class MainWindow : Window
             raw = new WindowRect(left, top, left + width, top + height);
         }
 
+        WorkArea area = WorkAreaUnderPointer();
         EdgeSnapResult result = _snapSession.Apply(
             raw,
-            WorkAreaUnderPointer(),
+            area,
             DisplayScale,
             margins: snapMargins);
 
+        TraceSnap("moving", raw, result.Rect, result.Edges, area, cursorX, cursorY);
         ApplySnapFrame(result.IsSnapped);
         return result.Rect;
     }
 
     private double DisplayScale => RootGrid.XamlRoot?.RasterizationScale ?? 1.0;
 
-    /// <summary>Work area of the monitor under the pointer (fallback: nearest).</summary>
+    /// <summary>
+    /// Work area used for snapping. During a gesture the value captured when the
+    /// gesture started is reused, and outside a gesture the window's monitor is
+    /// preferred over the pointer's: the pointer crosses a monitor seam before
+    /// the window does, and switching work areas mid-drag made the magnet flip
+    /// and the window shake.
+    /// </summary>
     private WorkArea WorkAreaUnderPointer()
     {
-        DisplayArea area = WindowInterop.TryGetCursorPosition(out int x, out int y)
-            ? DisplayArea.GetFromPoint(new PointInt32(x, y), DisplayAreaFallback.Nearest)
-            : DisplayArea.GetFromWindowId(AppWindow.Id, DisplayAreaFallback.Nearest);
-        RectInt32 work = area.WorkArea;
-        return new WorkArea(work.X, work.Y, work.Width, work.Height);
+        bool gesture = _nativeMoveGesture || _windowDragging;
+        if (gesture && _snapWorkAreaValid)
+        {
+            return _snapWorkArea;
+        }
+
+        WorkArea area = WorkAreaForWindow();
+        if (gesture)
+        {
+            _snapWorkArea = area;
+            _snapWorkAreaValid = true;
+        }
+
+        return area;
+    }
+
+    /// <summary>Freezes the work area at the start of a move gesture.</summary>
+    private void CaptureSnapWorkArea()
+    {
+        _snapWorkArea = WorkAreaForWindow();
+        _snapWorkAreaValid = true;
     }
 
     /// <summary>
-    /// Records the magnet state and re-resolves the effective frame style.
+    /// The monitor the window mostly covers, not the one under the pointer.
+    /// Falls back to the pointer only when the window id cannot be resolved
+    /// (for example during a presenter switch).
+    /// </summary>
+    private WorkArea WorkAreaForWindow()
+    {
+        try
+        {
+            DisplayArea area = DisplayArea.GetFromWindowId(AppWindow.Id, DisplayAreaFallback.Nearest);
+            RectInt32 work = area.WorkArea;
+            return new WorkArea(work.X, work.Y, work.Width, work.Height);
+        }
+        catch
+        {
+            // Fall through to the pointer.
+        }
+
+        try
+        {
+            if (WindowInterop.TryGetCursorPosition(out int x, out int y))
+            {
+                DisplayArea area = DisplayArea.GetFromPoint(
+                    new PointInt32(x, y),
+                    DisplayAreaFallback.Nearest);
+                RectInt32 work = area.WorkArea;
+                return new WorkArea(work.X, work.Y, work.Width, work.Height);
+            }
+        }
+        catch
+        {
+            // Snapping degrades to "no work area" instead of throwing.
+        }
+
+        return new WorkArea(0, 0, 0, 0);
+    }
+
+    /// <summary>
+    /// True while a snap path is being driven by a drag gesture. Mini mode is
+    /// included because its drag is event-driven without an explicit end
+    /// notification: debouncing there still applies the final frame once the
+    /// edge state has been stable for the same 120 ms.
+    /// </summary>
+    private bool SnapGestureActive => _nativeMoveGesture || _windowDragging || InMiniMode;
+
+    private WindowInterop.WindowFrameStyle EffectiveFrameStyle() =>
+        IsFullscreen
+            ? WindowInterop.WindowFrameStyle.Fullscreen
+            : _snapFrameEngaged
+                ? WindowInterop.WindowFrameStyle.Snapped
+                : WindowInterop.WindowFrameStyle.Default;
+
+    /// <summary>
+    /// Records the magnet state and schedules the DWM frame update.
     /// Fullscreen always wins over a stale snapped state, which is what used to
     /// leave a thin outline around the fullscreen surface.
     /// </summary>
     private void ApplySnapFrame(bool snapped)
     {
         _snapFrameEngaged = snapped;
-        ApplyWindowFrame();
+
+        // A video-area drag is the only mover: keep the native caption region
+        // off while it runs so the OS move loop cannot run as well.
+        if (_windowDragging || _windowDragCandidate)
+        {
+            UpdateCaptionDragRegion();
+        }
+
+        if (_windowDragging)
+        {
+            TraceContentDrag();
+        }
+
+        if (!SnapGestureActive)
+        {
+            // Gesture over (or no gesture): switch the DWM frame immediately.
+            _pendingFrameStyle = null;
+            _frameStyleTimer?.Stop();
+            ApplyWindowFrame();
+            return;
+        }
+
+        WindowInterop.WindowFrameStyle style = EffectiveFrameStyle();
+        if (style == _frameStyleApplied)
+        {
+            if (_pendingFrameStyle is not null)
+            {
+                _pendingFrameStyle = null;
+                _frameStyleTimer?.Stop();
+            }
+            return;
+        }
+
+        if (_pendingFrameStyle == style)
+        {
+            // Already waiting for this edge state to stay stable.
+            return;
+        }
+
+        // Do not toggle the DWM frame on every 16 ms tick: wait until the edge
+        // state has been stable for FrameStyleStableMs.
+        _pendingFrameStyle = style;
+        _frameStyleTimer?.Stop();
+        _frameStyleTimer?.Start();
+    }
+
+    /// <summary>
+    /// The requested edge state survived the stability window: write the DWM
+    /// frame now. The timer is restarted only when the requested style changes,
+    /// so it never fires on every drag tick.
+    /// </summary>
+    private void OnFrameStyleStable()
+    {
+        _frameStyleTimer?.Stop();
+        if (_pendingFrameStyle is not { } style)
+        {
+            return;
+        }
+
+        _pendingFrameStyle = null;
+        if (style == _frameStyleApplied)
+        {
+            return;
+        }
+
+        _frameStyleApplied = style;
+        WindowInterop.SetWindowFrame(this, style);
+        Trace($"[snap] frame style -> {style} (stable {FrameStyleStableMs} ms)");
     }
 
     /// <summary>
@@ -2165,11 +2440,13 @@ public sealed partial class MainWindow : Window
     /// </summary>
     private void ApplyWindowFrame()
     {
-        WindowInterop.WindowFrameStyle style = IsFullscreen
-            ? WindowInterop.WindowFrameStyle.Fullscreen
-            : _snapFrameEngaged
-                ? WindowInterop.WindowFrameStyle.Snapped
-                : WindowInterop.WindowFrameStyle.Default;
+        // An authoritative immediate update (presenter/DPI change, gesture end)
+        // wins over any queued debounce: a stale pending style must not
+        // overwrite it a few milliseconds later.
+        _pendingFrameStyle = null;
+        _frameStyleTimer?.Stop();
+
+        WindowInterop.WindowFrameStyle style = EffectiveFrameStyle();
         if (_frameStyleApplied == style)
         {
             return;
@@ -2177,6 +2454,162 @@ public sealed partial class MainWindow : Window
 
         _frameStyleApplied = style;
         WindowInterop.SetWindowFrame(this, style);
+        Trace($"[snap] frame style -> {style}");
+    }
+
+    /// <summary>
+    /// Sparse snap trace: raw/applied rect, edges, work area, cursor, anchor and
+    /// frame style. Written on a state change and at most every
+    /// <see cref="SnapTraceHeartbeatMs"/> otherwise, so a 10 s drag capture is
+    /// readable instead of a 16 ms flood.
+    /// </summary>
+    private void TraceSnap(
+        string phase,
+        WindowRect raw,
+        WindowRect applied,
+        SnapEdges edges,
+        WorkArea area,
+        int cursorX,
+        int cursorY,
+        bool force = false)
+    {
+        long now = Environment.TickCount64;
+        bool changed = !_snapTraceHasLast ||
+            edges != _snapTraceEdges ||
+            applied != _snapTraceApplied;
+        if (!force && !changed && now - _snapTraceLastTick < SnapTraceHeartbeatMs)
+        {
+            return;
+        }
+
+        _snapTraceLastTick = now;
+        _snapTraceHasLast = true;
+        _snapTraceEdges = edges;
+        _snapTraceApplied = applied;
+        Trace(
+            $"[snap] {phase} raw=({raw.Left},{raw.Top},{raw.Right},{raw.Bottom}) " +
+            $"applied=({applied.Left},{applied.Top},{applied.Right},{applied.Bottom}) " +
+            $"edges={edges} area=({area.X},{area.Y},{area.Width},{area.Height}) " +
+            $"cursor=({cursorX},{cursorY}) " +
+            $"anchor=({_moveAnchorX},{_moveAnchorY},valid={_moveAnchorValid}) " +
+            $"style={_frameStyleApplied?.ToString() ?? "none"} " +
+            $"pending={_pendingFrameStyle?.ToString() ?? "none"} " +
+            $"drag={_windowDragging} native={_nativeMoveGesture}");
+    }
+
+    private void TraceSnapState(string phase) =>
+        Trace(
+            $"[snap] {phase} gesture(native={_nativeMoveGesture},drag={_windowDragging}) " +
+            $"anchor=({_moveAnchorX},{_moveAnchorY},valid={_moveAnchorValid}) " +
+            $"areaValid={_snapWorkAreaValid} captionSuppressed={_captionDragSuppressed}");
+
+    /// <summary>
+    /// Sparse trace for the video-area (content) drag. The drag loop itself lives
+    /// in MainWindow.Playback.cs; this reconstructs the same raw rectangle from
+    /// the gesture anchor fields so a capture shows what each mover proposed.
+    /// </summary>
+    private void TraceContentDrag()
+    {
+        PointInt32 position = AppWindow.Position;
+        SizeInt32 size = AppWindow.Size;
+        var applied = new WindowRect(
+            position.X,
+            position.Y,
+            position.X + size.Width,
+            position.Y + size.Height);
+
+        long now = Environment.TickCount64;
+        bool changed = !_contentDragTraceHasLast || applied != _contentDragTraceApplied;
+        if (!changed && now - _contentDragTraceLastTick < SnapTraceHeartbeatMs)
+        {
+            return;
+        }
+
+        _contentDragTraceLastTick = now;
+        _contentDragTraceHasLast = true;
+        _contentDragTraceApplied = applied;
+
+        WindowInterop.TryGetCursorPosition(out int cursorX, out int cursorY);
+        int rawLeft = _windowStartX + (cursorX - _dragStartCursorX);
+        int rawTop = _windowStartY + (cursorY - _dragStartCursorY);
+        var raw = new WindowRect(rawLeft, rawTop, rawLeft + size.Width, rawTop + size.Height);
+        WorkArea area = WorkAreaUnderPointer();
+        Trace(
+            $"[snap] content-drag raw=({raw.Left},{raw.Top},{raw.Right},{raw.Bottom}) " +
+            $"applied=({applied.Left},{applied.Top},{applied.Right},{applied.Bottom}) " +
+            $"snapped={_snapFrameEngaged} area=({area.X},{area.Y},{area.Width},{area.Height}) " +
+            $"cursor=({cursorX},{cursorY}) startCursor=({_dragStartCursorX},{_dragStartCursorY}) " +
+            $"startWindow=({_windowStartX},{_windowStartY}) " +
+            $"style={_frameStyleApplied?.ToString() ?? "none"} " +
+            $"pending={_pendingFrameStyle?.ToString() ?? "none"} " +
+            $"captionSuppressed={_captionDragSuppressed}");
+    }
+
+    /// <summary>
+    /// Single-mover guard. The native caption drag region only makes sense while
+    /// the XAML titlebar is hit-testable; when the chrome is hidden (or mini /
+    /// fullscreen) the top strip belongs to the video surface, and a press there
+    /// used to start the OS move loop on top of the video drag.
+    /// </summary>
+    private void UpdateCaptionDragRegion()
+    {
+        bool wanted = _titleBarVisible && !_windowDragging && !_windowDragCandidate;
+        if (!wanted)
+        {
+            SuppressCaptionDrag(_titleBarVisible ? "content drag" : "titlebar hidden");
+            return;
+        }
+
+        RestoreCaptionDrag();
+    }
+
+    private void SuppressCaptionDrag(string reason)
+    {
+        if (!_captionDragSuppressed)
+        {
+            _captionDragSuppressed = true;
+            WindowInterop.SetCaptionDragEnabled(this, false);
+            Trace($"[snap] caption drag disabled ({reason})");
+        }
+
+        // Only a video-area drag needs a restore poll: the chrome show/hide path
+        // re-evaluates the region on its own.
+        if ((_windowDragging || _windowDragCandidate) &&
+            _captionDragGuardTimer is { IsRunning: false })
+        {
+            _captionDragGuardTimer.Start();
+        }
+    }
+
+    private void RestoreCaptionDrag()
+    {
+        if (!_captionDragSuppressed)
+        {
+            return;
+        }
+
+        _captionDragSuppressed = false;
+        _captionDragGuardTimer?.Stop();
+        // SetCaptionDragEnabled(true) is a no-op by design: re-setting the
+        // titlebar element is what recreates the caption region after it was
+        // emptied.
+        if (_titleBarVisible && !IsFullscreen && !InMiniMode)
+        {
+            SetTitleBar(TitleBar);
+        }
+        WindowInterop.SetCaptionDragEnabled(this, true);
+        Trace("[snap] caption drag restored");
+    }
+
+    private void OnCaptionGuardTick()
+    {
+        if (_windowDragging || _windowDragCandidate)
+        {
+            return;
+        }
+
+        _captionDragGuardTimer?.Stop();
+        UpdateCaptionDragRegion();
     }
 
     /// <summary>
@@ -2195,6 +2628,8 @@ public sealed partial class MainWindow : Window
         {
             _snapSession.Reset();
             _snapFrameEngaged = false;
+            _nativeMoveGesture = false;
+            _snapWorkAreaValid = false;
         }
 
         _frameStyleApplied = null;
@@ -2225,7 +2660,19 @@ public sealed partial class MainWindow : Window
             OnWindowMoveStarted,
             // Fullscreen reports every hit as client area: a native move or
             // resize would drop the fullscreen presenter.
-            () => IsFullscreen);
+            () => IsFullscreen,
+            // Sleep/resume and display-mode changes may invalidate the
+            // composition swapchain; both callbacks only enqueue UI work.
+            OnPowerResumed,
+            OnDisplayChanged,
+            // Native WM_SIZE: re-measure the custom caption row before WinUI's
+            // next layout pass (best-effort same-frame sync; see TitleBarView).
+            OnWindowSized);
+
+        // Long-play watchdog: mpv can stop presenting frames without logging a
+        // device loss (audio keeps playing), so sample the frame counter and
+        // rebuild the video output when it stands still.
+        InitializeRenderWatchdog();
 
         if (RootGrid.XamlRoot is { } xamlRoot)
         {
@@ -2242,6 +2689,13 @@ public sealed partial class MainWindow : Window
 
     private void OnVideoFrameSizeChanged(object sender, SizeChangedEventArgs e)
     {
+        // P1-2: the video follows a live resize through the lightweight
+        // composition-size path (immediate, coalesced to one update per frame),
+        // not through the 80 ms layout debounce that also rebuilds the clip
+        // geometry and covers the content island.
+        RequestCompositionSize();
+        QueueCaptionRowSync();
+
         _resizeTimer.Stop();
         _resizeTimer.Start();
     }
@@ -2262,8 +2716,99 @@ public sealed partial class MainWindow : Window
         // mouse move will have its cursor reset by the platform.
         ReapplyHiddenCursor();
 
+        RequestCompositionSize();
+        QueueCaptionRowSync();
+
         _resizeTimer.Stop();
         _resizeTimer.Start();
+    }
+
+    /// <summary>
+    /// Native WM_SIZE callback (runs on the UI thread inside the subclass proc):
+    /// only throttles and queues a caption-row re-measure. The video composition
+    /// size is driven by the XAML SizeChanged path, which already knows the new
+    /// DIP size.
+    /// </summary>
+    private void OnWindowSized()
+    {
+        long now = Environment.TickCount64;
+        if (now - _captionSyncLastTick < 30)
+        {
+            return;
+        }
+
+        _captionSyncLastTick = now;
+        QueueCaptionRowSync();
+    }
+
+    /// <summary>
+    /// Queues one caption-row re-measure for the next dispatcher turn.
+    ///
+    /// It must not run inside SizeChanged: forcing UpdateLayout from a layout
+    /// pass risks a layout cycle. Running at high dispatcher priority still
+    /// happens before the next render, which is the earliest point WinUI allows
+    /// XAML content to catch up with the native frame. See
+    /// <see cref="Controls.TitleBarView.SyncCaptionRowForResize"/> for the
+    /// residual one-frame lag.
+    /// </summary>
+    private void QueueCaptionRowSync()
+    {
+        if (_captionSyncQueued)
+        {
+            return;
+        }
+
+        _captionSyncQueued = true;
+        _ = DispatcherQueue.TryEnqueue(DispatcherQueuePriority.High, () =>
+        {
+            _captionSyncQueued = false;
+            if (_closed || _closing)
+            {
+                return;
+            }
+
+            TitleBar.SyncCaptionRowForResize();
+        });
+    }
+
+    /// <summary>
+    /// Coalesces a burst of SizeChanged events into one composition-size update
+    /// per frame. The first change of a burst is applied immediately, so the
+    /// video starts following the drag on the same frame.
+    /// </summary>
+    private void RequestCompositionSize()
+    {
+        long now = Environment.TickCount64;
+        if (now - _compositionSizeAppliedAt >= 16)
+        {
+            _compositionSizeAppliedAt = now;
+            _compositionSizePending = false;
+            _compositionSizeTimer?.Stop();
+            ApplyCompositionSize();
+            return;
+        }
+
+        if (_compositionSizePending)
+        {
+            return;
+        }
+
+        _compositionSizePending = true;
+        _compositionSizeTimer?.Stop();
+        _compositionSizeTimer?.Start();
+    }
+
+    private void OnCompositionSizeCoalesced()
+    {
+        _compositionSizeTimer?.Stop();
+        if (!_compositionSizePending)
+        {
+            return;
+        }
+
+        _compositionSizePending = false;
+        _compositionSizeAppliedAt = Environment.TickCount64;
+        ApplyCompositionSize();
     }
 
     private void UpdateCompactState()
@@ -2283,6 +2828,7 @@ public sealed partial class MainWindow : Window
     {
         _resizeTimer.Stop();
         _resizeTimer.Start();
+        RequestCompositionSize();
         ConfigureCaptionButtons();
         // A DPI / monitor change recreates the DWM frame; re-assert the
         // fullscreen or snapped decoration so no border ring survives it.
@@ -2377,7 +2923,16 @@ public sealed partial class MainWindow : Window
     {
         DispatcherQueue.TryEnqueue(() =>
         {
-            if (swapChain <= 0 || _swapChain == (nint)swapChain)
+            if (swapChain <= 0)
+            {
+                return;
+            }
+
+            // mpv may republish the same handle during a recovery. The early
+            // return used to swallow that notification and let the recovery
+            // time out, so only skip duplicates when no recovery is waiting for
+            // the rebind.
+            if (_swapChain == (nint)swapChain && !_deviceRecoveryPending)
             {
                 return;
             }
@@ -2420,7 +2975,11 @@ public sealed partial class MainWindow : Window
     /// <see cref="OnDisplaySwapChainChanged"/>. Playback state (position,
     /// playlist, audio) is untouched by a video-output reload.
     /// </summary>
-    private void RecoverFromDeviceLoss(string reason)
+    /// <param name="quiet">
+    /// True for the power-resume / display-change reloads: they are routine, so
+    /// they keep the traces but skip the "device lost / recovered" OSD pair.
+    /// </param>
+    private void RecoverFromDeviceLoss(string reason, bool quiet = false)
     {
         if (_closed || _closing || _deviceRecoveryFailed)
         {
@@ -2446,10 +3005,11 @@ public sealed partial class MainWindow : Window
         }
 
         _deviceRecoveryPending = true;
+        _deviceRecoveryQuiet = quiet;
         Trace($"[devicelost] {reason}: attempt {_deviceRecovery.Attempts}/{DeviceLossRecoveryBudget.DefaultAttempts}");
 
         // The blur worker is the only part of Wiina that keeps submitting GPU
-        // work against the dead device (8 Hz screenshot-raw). Stop it first.
+        // work against the dead device (screenshot-raw). Stop it first.
         ChromeBlur.SetActive(false);
 
         try
@@ -2461,7 +3021,10 @@ public sealed partial class MainWindow : Window
             Trace("[devicelost] detach failed: " + ex.Message);
         }
 
-        ShowOsd(Loc.T("osd.deviceLost"));
+        if (!quiet)
+        {
+            ShowOsd(Loc.T("osd.deviceLost"));
+        }
 
         try
         {
@@ -2496,7 +3059,10 @@ public sealed partial class MainWindow : Window
     private void StartDeviceRecoveryTimeout()
     {
         _deviceRecoveryTimer ??= DispatcherQueue.CreateTimer();
-        _deviceRecoveryTimer.Interval = TimeSpan.FromSeconds(5);
+        // 8 s instead of 5 s: a video-reload after a TDR (and especially after a
+        // monitor wake-up) can take longer than the old timeout on slow GPUs,
+        // which made a successful recovery look like a failure.
+        _deviceRecoveryTimer.Interval = TimeSpan.FromSeconds(8);
         _deviceRecoveryTimer.IsRepeating = false;
         _deviceRecoveryTimer.Tick += (_, _) =>
         {
@@ -2506,7 +3072,7 @@ public sealed partial class MainWindow : Window
             }
 
             _deviceRecoveryPending = false;
-            Trace("[devicelost] no new swapchain within 5 s");
+            Trace("[devicelost] no new swapchain within 8 s");
             FailDeviceRecovery();
         };
         _deviceRecoveryTimer.Start();
@@ -2521,9 +3087,36 @@ public sealed partial class MainWindow : Window
 
         _deviceRecoveryPending = false;
         _deviceRecoveryTimer?.Stop();
+        // A success proves the device is healthy again, so the hard latch and
+        // the attempt budget must not survive it (7.2).
+        _deviceRecoveryFailed = false;
+        _deviceRecovery.Reset();
         Trace("[devicelost] recovered");
         ChromeBlur.SetMode(_settings.ChromeBlurMode);
-        ShowOsd(Loc.T("osd.deviceRecovered"));
+        // RecoverFromDeviceLoss parked the blur worker and nothing re-armed it,
+        // which left the chrome on its last frame forever (7.1). Mirror the
+        // current chrome visibility so the blur resumes (or stays parked when
+        // the chrome is hidden).
+        ChromeBlur.SetActive(_chromeShown);
+        if (!_deviceRecoveryQuiet)
+        {
+            ShowOsd(Loc.T("osd.deviceRecovered"));
+        }
+        _deviceRecoveryQuiet = false;
+    }
+
+    /// <summary>
+    /// Clears the device-loss latch, the pending attempt and the budget for a
+    /// fresh playback. Without this one exhausted budget disabled recovery for
+    /// the rest of the process (7.2).
+    /// </summary>
+    private void ResetDeviceRecovery()
+    {
+        _deviceRecoveryTimer?.Stop();
+        _deviceRecoveryPending = false;
+        _deviceRecoveryFailed = false;
+        _deviceRecoveryQuiet = false;
+        _deviceRecovery.Reset();
     }
 
     private void FailDeviceRecovery()
@@ -2534,6 +3127,7 @@ public sealed partial class MainWindow : Window
         }
 
         _deviceRecoveryFailed = true;
+        _deviceRecoveryQuiet = false;
         _deviceRecoveryTimer?.Stop();
         Trace("[devicelost] giving up; playback continues without video output");
         ShowOsd(Loc.T("osd.deviceLostFailed"));
@@ -2541,12 +3135,52 @@ public sealed partial class MainWindow : Window
 
     private (int Width, int Height) _lastCompositionSize;
 
+    /// <summary>
+    /// Full video layout: composition size plus the expensive clip/cover work.
+    /// Runs on the 80 ms layout debounce (and on explicit mode/DPI changes);
+    /// live resizes go through <see cref="ApplyCompositionSize"/> instead.
+    /// </summary>
     private void ApplyVideoLayout()
     {
         UpdateCompactState();
 
         // While the swapchain lives in the PiP window the main surface must not
         // resize it; the PiP window owns the composition size for now.
+        if (InPipMode)
+        {
+            return;
+        }
+
+        ApplyCompositionSize();
+
+        double dpi = VideoFrame.XamlRoot?.RasterizationScale ?? 1.0;
+        double dipWidth = VideoFrame.ActualWidth;
+        double dipHeight = VideoFrame.ActualHeight;
+        if (dipWidth < 16 || dipHeight < 16)
+        {
+            return;
+        }
+
+        VideoFrame.Clip = new RectangleGeometry
+        {
+            Rect = new Rect(0, 0, dipWidth, dipHeight),
+        };
+
+        // Keep the WinUI content island flush with the client area; after a
+        // fullscreen switch Windows/WinUI leaves a 1 px row above the video.
+        WindowInterop.CoverClientArea(this);
+    }
+
+    /// <summary>
+    /// Lightweight part of <see cref="ApplyVideoLayout"/>: the swapchain panel
+    /// size and mpv's <c>d3d11-composition-size</c> only. Called immediately
+    /// (coalesced to one update per 16 ms) from SizeChanged so a live resize
+    /// does not wait for the 80 ms layout debounce; the clip geometry and the
+    /// content-island cover stay on the debounced path because they are the
+    /// expensive parts.
+    /// </summary>
+    private void ApplyCompositionSize()
+    {
         if (InPipMode)
         {
             return;
@@ -2568,11 +3202,6 @@ public sealed partial class MainWindow : Window
         // used to shrink the panel and leave part of the window uncovered.
         VideoHost.SetLayoutSize(pixelWidth, pixelHeight, dpi);
 
-        VideoFrame.Clip = new RectangleGeometry
-        {
-            Rect = new Rect(0, 0, dipWidth, dipHeight),
-        };
-
         if (_player is { IsRunning: true })
         {
             if (!_player.TrySetPropertyString(
@@ -2591,11 +3220,19 @@ public sealed partial class MainWindow : Window
             }
         }
 
-        _lastCompositionSize = (pixelWidth, pixelHeight);
+        if (_lastCompositionSize != (pixelWidth, pixelHeight))
+        {
+            // Sparse resize trace: a live resize changes this every frame, so
+            // throttle to one line per 100 ms.
+            long now = Environment.TickCount64;
+            if (now - _resizeTraceLastTick >= 100)
+            {
+                _resizeTraceLastTick = now;
+                Trace($"[resize] composition {pixelWidth}x{pixelHeight} (dpi={dpi:0.##})");
+            }
+        }
 
-        // Keep the WinUI content island flush with the client area; after a
-        // fullscreen switch Windows/WinUI leaves a 1 px row above the video.
-        WindowInterop.CoverClientArea(this);
+        _lastCompositionSize = (pixelWidth, pixelHeight);
     }
 
     private (int Width, int Height) GetPixelSize()
@@ -3064,6 +3701,7 @@ public sealed partial class MainWindow : Window
 
         _closed = true;
         _deviceRecoveryTimer?.Stop();
+        StopRenderWatchdog();
 
         // Make the close feel instant even if teardown needs a moment.
         try
@@ -3084,7 +3722,11 @@ public sealed partial class MainWindow : Window
         _statsTimer?.Stop();
         _cursorHideTimer?.Stop();
         _settingsSaveTimer?.Stop();
+        _frameStyleTimer?.Stop();
+        _captionDragGuardTimer?.Stop();
+        _compositionSizeTimer?.Stop();
         SidebarHost.Log = null;
+        ChromeBlur.Log = null;
         WindowInterop.SetCursorVisible(true);
         ApplyProtectedCursor(false);
         CloseStage("timers stopped");

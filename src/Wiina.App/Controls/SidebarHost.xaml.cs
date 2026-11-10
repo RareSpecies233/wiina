@@ -46,6 +46,13 @@ public sealed partial class SidebarHost : UserControl
     private double _animToOpacity;
     private long _animStart;
     private ChromeBlurLayer? _blur;
+    private bool _reapplyQueued;
+    // True from the first frame of a slide until it settles. While set, the
+    // blur layer is not repainted: Apply samples the panel through
+    // TransformToVisual, so a frame painted at TranslateX = ±Width bakes the
+    // slide into the brush transform and leaves half the panel on the opaque
+    // solid brush (1.3.10 regression). The layer is replayed once at rest.
+    private bool _animating;
 
     public SidebarHost()
     {
@@ -74,6 +81,12 @@ public sealed partial class SidebarHost : UserControl
             new PointerEventHandler(OnGripPointerReleased),
             handledEventsToo: true);
         RootGrid.PointerCaptureLost += OnGripPointerCaptureLost;
+
+        // A collapsed panel has no layout size, so the blur layer never gets a
+        // frame while hidden. The first size after a show (and any later DPI
+        // change or width drag) is the moment to replay the cached frame.
+        RootGrid.SizeChanged += OnPanelSizeChanged;
+        PanelBorder.SizeChanged += OnPanelSizeChanged;
     }
 
     private void OnLoaded(object sender, RoutedEventArgs e)
@@ -99,6 +112,10 @@ public sealed partial class SidebarHost : UserControl
 
         _blur = layer;
         _blur.FirstFrame += OnFirstBlurFrame;
+        // A layer attached while a slide is already running inherits the gate;
+        // otherwise a capture could still paint at the transient offset.
+        _blur.IsTransformSuppressed = _animating;
+        _blur.GeometryOffsetX = _animating ? SlideTransform.TranslateX : 0;
         _blur.RaiseFirstFrameIfReady();
     }
 
@@ -106,6 +123,10 @@ public sealed partial class SidebarHost : UserControl
     {
         EnsureAttached();
         ApplyBlurVisuals();
+        // Leaving Solid while the panel is already on screen attaches a fresh,
+        // empty layer without a size change; replay immediately so the panel
+        // does not stay on the solid brush.
+        RequestBlurReapply();
     }
 
     private void OnFirstBlurFrame(object? sender, EventArgs e) => ApplyBlurVisuals();
@@ -123,6 +144,64 @@ public sealed partial class SidebarHost : UserControl
         // ThemeResource keeps resolving on theme/accent changes.
         bool blurred = live && _blur is { HasFrame: true };
         SidebarBlurTintLayer.Visibility = blurred ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    /// <summary>
+    /// The panel just received a layout size (first show, DPI change, width
+    /// drag). Repaint the cached blurred frame once layout has completed.
+    /// </summary>
+    private void OnPanelSizeChanged(object sender, SizeChangedEventArgs e) =>
+        RequestBlurReapply();
+
+    /// <summary>
+    /// Replays the last published blurred frame into this panel's layer on the
+    /// next dispatcher turn, when <c>ActualWidth/ActualHeight</c> are final.
+    /// Deferring also coalesces the SizeChanged burst of a width drag into one
+    /// repaint per pass. Solid keeps its opaque brush untouched. A slide in
+    /// flight is skipped entirely: the settle handler calls this once
+    /// <c>TranslateX</c> is back to 0.
+    /// </summary>
+    private void RequestBlurReapply()
+    {
+        if (_blur is null || _reapplyQueued || _animating ||
+            ChromeBlur.Current.Mode == ChromeBlurMode.Solid)
+        {
+            return;
+        }
+
+        _reapplyQueued = true;
+        if (!DispatcherQueue.TryEnqueue(() =>
+        {
+            _reapplyQueued = false;
+            if (_blur is null || _animating ||
+                ChromeBlur.Current.Mode == ChromeBlurMode.Solid)
+            {
+                return;
+            }
+
+            ChromeBlur.Current.Reapply(_blur);
+        }))
+        {
+            _reapplyQueued = false;
+        }
+    }
+
+    /// <summary>
+    /// Gates the blur layer for the duration of a slide and keeps its geometry
+    /// compensation equal to the current offset, so a frame the capture worker
+    /// publishes mid-slide maps to the settled position instead of freezing the
+    /// panel half a width off.
+    /// </summary>
+    private void SetAnimating(bool animating)
+    {
+        _animating = animating;
+        if (_blur is null)
+        {
+            return;
+        }
+
+        _blur.IsTransformSuppressed = animating;
+        _blur.GeometryOffsetX = animating ? SlideTransform.TranslateX : 0;
     }
 
     private void OnUnloaded(object sender, RoutedEventArgs e)
@@ -354,6 +433,8 @@ public sealed partial class SidebarHost : UserControl
         SlideTransform.TranslateX = 0;
         Opacity = 1;
         Visibility = Visibility.Visible;
+        SetAnimating(false);
+        RequestBlurReapply();
     }
 
     public void PlayShow(SidebarAnimationMode mode)
@@ -367,9 +448,16 @@ public sealed partial class SidebarHost : UserControl
         {
             SlideTransform.TranslateX = 0;
             Opacity = 1;
+            SetAnimating(false);
+            RequestBlurReapply();
             return;
         }
 
+        // Do not repaint before or during the slide. The layer may still be
+        // empty (no frame was published while the panel was collapsed), but
+        // sampling it at ±Width would bake the slide into the brush transform
+        // and leave half the panel on the opaque solid brush. OnAnimationTick
+        // clears the gate once TranslateX is 0 and replays the cached frame.
         _animFromOffset = mode == SidebarAnimationMode.Fade
             ? 0
             : Side == SidebarSide.Leading ? -Width : Width;
@@ -378,6 +466,7 @@ public sealed partial class SidebarHost : UserControl
         _animToOpacity = 1;
         SlideTransform.TranslateX = _animFromOffset;
         Opacity = _animFromOpacity;
+        SetAnimating(true);
         StartAnimation();
     }
 
@@ -400,6 +489,9 @@ public sealed partial class SidebarHost : UserControl
         _animToOffset = Side == SidebarSide.Leading ? -Width : Width;
         _animFromOpacity = Opacity;
         _animToOpacity = 0;
+        // Same gate as PlayShow: the layer must not be repainted while the
+        // panel is sliding out either (it would freeze the exit offset).
+        SetAnimating(true);
         StartAnimation();
     }
 
@@ -411,6 +503,7 @@ public sealed partial class SidebarHost : UserControl
         Visibility = Visibility.Collapsed;
         SlideTransform.TranslateX = 0;
         Opacity = 1;
+        SetAnimating(false);
         LayoutTab.IsChecked = false;
         VideoTab.IsChecked = false;
         AudioTab.IsChecked = false;
@@ -436,6 +529,13 @@ public sealed partial class SidebarHost : UserControl
         SlideTransform.TranslateX =
             _animFromOffset + ((_animToOffset - _animFromOffset) * eased);
         Opacity = _animFromOpacity + ((_animToOpacity - _animFromOpacity) * eased);
+        if (_blur is not null)
+        {
+            // Keep the geometry compensation equal to the live offset so a
+            // frame the capture worker publishes mid-slide maps to the settled
+            // position (it cannot shift the image by half a panel).
+            _blur.GeometryOffsetX = SlideTransform.TranslateX;
+        }
 
         if (progress < 1)
         {
@@ -453,6 +553,10 @@ public sealed partial class SidebarHost : UserControl
         {
             SlideTransform.TranslateX = 0;
             Opacity = 1;
+            // The panel is at rest: lift the gate and replay the cached frame
+            // exactly once, now that the sampled geometry is the settled one.
+            SetAnimating(false);
+            RequestBlurReapply();
         }
     }
 

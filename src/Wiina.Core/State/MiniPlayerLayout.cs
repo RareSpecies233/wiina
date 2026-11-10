@@ -3,7 +3,7 @@ namespace Wiina.Core.State;
 /// <summary>
 /// Mini / music-mode constants from spec §10 and §20.1: cover at least 72 DIP,
 /// 300-wide playlist panel, 148-wide volume bubble, 0.2 s control cross-fade and
-/// a 48 high transport row inside a 72 high control area.
+/// a 48 high transport row.
 /// </summary>
 public static class MiniPlayerLayout
 {
@@ -19,16 +19,20 @@ public static class MiniPlayerLayout
 
     public const double ControlRowHeight = 48;
 
-    public const double ProgressRowHeight = 24;
+    /// <summary>
+    /// The stock WinUI Slider is 32 DIP high; a 24 DIP progress row clipped the
+    /// thumb. The row is therefore 32 and the strip 80 (v1.3.11 P1-5).
+    /// </summary>
+    public const double ProgressRowHeight = 32;
 
-    public const double ControlAreaHeight = 72;
+    public const double ControlAreaHeight = ProgressRowHeight + ControlRowHeight;
 
     public const double PlaylistAutoCollapseThreshold = 200;
 
     public const double DefaultWidth = 400;
 
-    /// <summary>72 DIP control area + a 16:9 cover.</summary>
-    public const double DefaultHeight = 297;
+    /// <summary>80 DIP control area + a 16:9 cover (305 for the 400 default).</summary>
+    public const double DefaultHeight = ControlAreaHeight + 225;
 
     public const double MinWidth = 320;
 

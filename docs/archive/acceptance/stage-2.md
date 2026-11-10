@@ -127,27 +127,27 @@
 
 ### 浮动 OSC（默认位置，音量/工具/进度齐全）
 
-![Stage 2 floating OSC](assets/stage-2-floating-osc.png)
+![Stage 2 floating OSC](../../acceptance/assets/stage-2-floating-osc.png)
 
 ### 浮动 OSC 拖动后（重启仍恢复该位置）
 
-![Stage 2 floating OSC dragged](assets/stage-2-floating-dragged.png)
+![Stage 2 floating OSC dragged](../../acceptance/assets/stage-2-floating-dragged.png)
 
 ### 底部 OSC（全宽；629 DIP 下工具栏已按优先级隐藏）
 
-![Stage 2 bottom OSC](assets/stage-2-bottom-osc.png)
+![Stage 2 bottom OSC](../../acceptance/assets/stage-2-bottom-osc.png)
 
 ### 顶部 OSC（标题栏第二行）
 
-![Stage 2 top OSC](assets/stage-2-top-osc.png)
+![Stage 2 top OSC](../../acceptance/assets/stage-2-top-osc.png)
 
 ### 播放/暂停交互（暂停后图标切换、时间停止）
 
-![Stage 2 top paused](assets/stage-2-top-paused.png)
+![Stage 2 top paused](../../acceptance/assets/stage-2-top-paused.png)
 
 ### Docked 布局（标题栏 + 视频让位 + 底部 OSC，Stage 1 不回归）
 
-![Stage 2 docked](assets/stage-2-docked.png)
+![Stage 2 docked](../../acceptance/assets/stage-2-docked.png)
 
 ## 已知问题 / 偏离
 

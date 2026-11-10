@@ -115,6 +115,9 @@ public static class WiinaInputDefaults
                 return PlayerActions.ToggleTopmost;
             case "picture-in-picture":
                 return PlayerActions.PictureInPicture;
+            case "music-mode":
+            case "音乐模式":
+                return PlayerActions.MusicMode;
             case "cycle mute":
                 return PlayerActions.Mute;
             case "cycle video":

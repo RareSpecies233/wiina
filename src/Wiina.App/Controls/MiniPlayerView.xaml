@@ -18,7 +18,8 @@
           DoubleTapped="OnRootDoubleTapped">
         <Grid.RowDefinitions>
             <RowDefinition Height="*" />
-            <RowDefinition Height="72" />
+            <RowDefinition Height="80" />
+            <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
         <!-- Generated cover tile: only visible when the file has no embedded
@@ -38,7 +39,41 @@
         <Border Grid.Row="0" VerticalAlignment="Bottom" Height="180"
                 Background="{ThemeResource MiniCoverScrimBrush}" />
 
-        <!-- Info and controls occupy the same 72 DIP strip and cross-fade
+        <!-- Playlist: an Auto row BELOW the cover/control strip (spec §10.1).
+             The window grows by exactly the 300 DIP panel height while the
+             cover row keeps its size, so the list is a full-width block under
+             the transport instead of a right-side overlay (v1.3.10 bug). -->
+        <Border x:Name="PlaylistPanel"
+                Grid.Row="2"
+                Height="300"
+                HorizontalAlignment="Stretch"
+                Background="{ThemeResource PanelBrush}"
+                BorderBrush="{ThemeResource PanelBorderBrush}"
+                BorderThickness="0,1,0,0"
+                Visibility="Collapsed">
+            <Grid RowSpacing="8" Padding="12">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                </Grid.RowDefinitions>
+                <Grid>
+                    <TextBlock loc:Loc.Text="ui.playlist" FontSize="13" FontWeight="SemiBold" />
+                    <Button HorizontalAlignment="Right"
+                            Style="{StaticResource MiniIconButtonStyle}"
+                            Content="&#xE711;"
+                            Click="OnPlaylistClick"
+                            loc:Loc.AutomationName="ui.closePlaylist" />
+                </Grid>
+                <ListView x:Name="PlaylistList"
+                          Grid.Row="1"
+                          IsTabStop="False"
+                          SelectionMode="Single"
+                          IsItemClickEnabled="True"
+                          ItemClick="OnPlaylistItemClick" />
+            </Grid>
+        </Border>
+
+        <!-- Info and controls occupy the same 80 DIP strip and cross-fade
              (0.2 s, spec §10.2). -->
         <Grid x:Name="InfoPanel"
               Grid.Row="1"
@@ -67,7 +102,9 @@
               Opacity="0"
               IsHitTestVisible="False">
             <Grid.RowDefinitions>
-                <RowDefinition Height="24" />
+                <!-- 32 DIP: the stock WinUI Slider is 32 high and its thumb is
+                     clipped when the row is only 24 (P1-5). -->
+                <RowDefinition Height="32" />
                 <RowDefinition Height="48" />
             </Grid.RowDefinitions>
 
@@ -144,77 +181,39 @@
             </StackPanel>
         </Grid>
 
-        <!-- Volume bubble: width 148, rounded, spec §10.3. -->
-        <Border x:Name="VolumeBubble"
-                Width="148"
-                HorizontalAlignment="Right"
-                VerticalAlignment="Bottom"
-                Margin="0,0,12,84"
-                Padding="12,10"
-                CornerRadius="18"
-                Background="{ThemeResource PanelBrush}"
-                BorderBrush="{ThemeResource PanelBorderBrush}"
-                BorderThickness="1"
-                Visibility="Collapsed">
-            <StackPanel Spacing="6">
-                <StackPanel Orientation="Horizontal" Spacing="8">
-                    <Button x:Name="BubbleMuteButton"
-                            Style="{StaticResource MiniIconButtonStyle}"
-                            Content="&#xE767;"
-                            Click="OnMuteClick"
-                            loc:Loc.ToolTip="osd.mute"
-                            loc:Loc.AutomationName="osd.mute" />
-                    <TextBlock x:Name="VolumeText"
-                               Text="100%"
-                               FontSize="11"
-                               Foreground="{ThemeResource SecondaryTextBrush}"
-                               VerticalAlignment="Center" />
+        <!-- Volume bubble layer: a Canvas above the whole mini surface so the
+             148 DIP card can be anchored 8 DIP above MuteButton and clamped
+             inside the window (P1-5; it used to be a fixed bottom-right
+             margin, ~160 DIP away from the button). -->
+        <Canvas x:Name="BubbleLayer" Grid.RowSpan="3" Canvas.ZIndex="10">
+            <Border x:Name="VolumeBubble"
+                    Width="148"
+                    Padding="12,10"
+                    CornerRadius="18"
+                    Background="{ThemeResource PanelBrush}"
+                    BorderBrush="{ThemeResource PanelBorderBrush}"
+                    BorderThickness="1"
+                    Visibility="Collapsed">
+                <StackPanel Spacing="6">
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <Button x:Name="BubbleMuteButton"
+                                Style="{StaticResource MiniIconButtonStyle}"
+                                Content="&#xE767;"
+                                Click="OnBubbleMuteClick"
+                                loc:Loc.ToolTip="osd.mute"
+                                loc:Loc.AutomationName="osd.mute" />
+                        <TextBlock x:Name="VolumeText"
+                                   Text="100%"
+                                   FontSize="11"
+                                   Foreground="{ThemeResource SecondaryTextBrush}"
+                                   VerticalAlignment="Center" />
+                    </StackPanel>
+                    <Slider x:Name="VolumeSlider"
+                            Minimum="0"
+                            Maximum="130"
+                            ValueChanged="OnVolumeChanged" />
                 </StackPanel>
-                <Slider x:Name="VolumeSlider"
-                        Minimum="0"
-                        Maximum="130"
-                        ValueChanged="OnVolumeChanged" />
-            </StackPanel>
-        </Border>
-
-        <!-- Playlist panel: 300 wide (spec §10.2), overlays the right edge of the
-             cover but must stop above the 72 DIP info/control strip: the strip
-             holds the transport and the only mouse "restore" entry, and an
-             unconstrained overlay hid the whole row (v1.3.7 restore was
-             unreachable while the playlist was open). -->
-        <Border x:Name="PlaylistPanel"
-                Grid.RowSpan="2"
-                Width="300"
-                Margin="0,0,0,72"
-                HorizontalAlignment="Right"
-                Background="{ThemeResource PanelBrush}"
-                BorderBrush="{ThemeResource PanelBorderBrush}"
-                BorderThickness="1,0,0,0"
-                Visibility="Collapsed">
-            <Grid RowSpacing="8" Padding="12">
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="Auto" />
-                    <RowDefinition Height="*" />
-                </Grid.RowDefinitions>
-                <Grid>
-                    <TextBlock loc:Loc.Text="ui.playlist" FontSize="13" FontWeight="SemiBold" />
-                    <Button HorizontalAlignment="Right"
-                            Style="{StaticResource MiniIconButtonStyle}"
-                            Content="&#xE711;"
-                            Click="OnPlaylistClick"
-                            loc:Loc.AutomationName="ui.closePlaylist" />
-                </Grid>
-                <ListView x:Name="PlaylistList"
-                          Grid.Row="1"
-                          IsTabStop="False"
-                          SelectionMode="Single"
-                          IsItemClickEnabled="True"
-                          ItemClick="OnPlaylistItemClick" />
-            </Grid>
-        </Border>
+            </Border>
+        </Canvas>
     </Grid>
 </UserControl>
-
-
-
-

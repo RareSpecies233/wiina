@@ -228,5 +228,138 @@ public sealed class EdgeSnapTests
         Assert.Equal(0, result.Rect.Top);
         Assert.Equal(SnapEdges.Left | SnapEdges.Top, result.Edges);
     }
+
+    /// <summary>
+    /// Shake regression: sweeping the raw rectangle across the left edge must
+    /// move the applied position monotonically. Any A -> B -> A step would be
+    /// visible as the window jumping back and forth while the pointer moves in
+    /// one direction.
+    /// </summary>
+    [Fact]
+    public void SweepAcrossLeftEdgeIsMonotonic()
+    {
+        var session = new EdgeSnapSession();
+        int previous = int.MinValue;
+        for (int raw = -60; raw <= 60; raw++)
+        {
+            int applied = session.Apply(Rect(raw, 200), Area).Rect.Left;
+            Assert.True(
+                applied >= previous,
+                $"applied left went backwards at raw={raw}: {previous} -> {applied}");
+            previous = applied;
+        }
+    }
+
+    [Fact]
+    public void ReverseSweepAcrossLeftEdgeIsMonotonic()
+    {
+        var session = new EdgeSnapSession();
+        int previous = int.MaxValue;
+        for (int raw = 60; raw >= -60; raw--)
+        {
+            int applied = session.Apply(Rect(raw, 200), Area).Rect.Left;
+            Assert.True(
+                applied <= previous,
+                $"applied left went forwards at raw={raw}: {previous} -> {applied}");
+            previous = applied;
+        }
+    }
+
+    [Fact]
+    public void SweepAcrossRightEdgeIsMonotonic()
+    {
+        var session = new EdgeSnapSession();
+        int previous = int.MinValue;
+        for (int raw = 900; raw <= 1260; raw++)
+        {
+            int applied = session.Apply(Rect(raw, 200), Area).Rect.Left;
+            Assert.True(
+                applied >= previous,
+                $"applied left went backwards at raw={raw}: {previous} -> {applied}");
+            previous = applied;
+        }
+    }
+
+    /// <summary>
+    /// Pointer jitter of a pixel or two around the snap threshold must not
+    /// flicker the window between flush and raw: once the magnet is engaged the
+    /// breakaway hysteresis has to hold it.
+    /// </summary>
+    [Fact]
+    public void JitterAtTheSnapThresholdDoesNotFlicker()
+    {
+        var session = new EdgeSnapSession();
+        EdgeSnapResult first = session.Apply(Rect(9, 200), Area);
+        Assert.Equal(0, first.Rect.Left);
+
+        foreach (int raw in new[] { 11, 9, 12, 8, 11, 10 })
+        {
+            EdgeSnapResult result = session.Apply(Rect(raw, 200), Area);
+            Assert.Equal(0, result.Rect.Left);
+            Assert.Equal(SnapEdges.Left, result.Edges);
+        }
+    }
+
+    /// <summary>
+    /// Multi-monitor boundary: the pointer crosses the seam before the window
+    /// does, so the work area can switch while the old magnet is still engaged.
+    /// A stale magnet used to pull the window to the new monitor's edge (up to
+    /// the breakaway distance); crossing must start from a clean magnet.
+    /// </summary>
+    [Fact]
+    public void SwitchingWorkAreaResetsTheMagnetInsteadOfJumping()
+    {
+        var session = new EdgeSnapSession();
+        EdgeSnapResult onPrimary = session.Apply(Rect(2, 200), Area);
+        Assert.Equal(0, onPrimary.Rect.Left);
+        Assert.Equal(SnapEdges.Left, onPrimary.Edges);
+
+        var secondary = new WorkArea(1920, 0, 1920, 1040);
+
+        // 20 px from the secondary's left edge is inside the old magnet's
+        // 22 px breakaway, but outside the new area's 10 px snap distance.
+        EdgeSnapResult crossed = session.Apply(Rect(1940, 200), secondary);
+
+        Assert.Equal(SnapEdges.None, crossed.Edges);
+        Assert.Equal(1940, crossed.Rect.Left);
+    }
+
+    [Fact]
+    public void MonitorSeamSweepStaysStableAcrossBothWorkAreas()
+    {
+        var left = new WorkArea(0, 0, 1920, 1040);
+        var right = new WorkArea(1920, 0, 1920, 1040);
+        var session = new EdgeSnapSession();
+
+        // Sweep a window across the seam: every applied rect must either keep
+        // the raw position or be flush with an edge of the current work area.
+        foreach (WorkArea area in new[] { left, right })
+        {
+            for (int raw = 900; raw <= 1260; raw += 7)
+            {
+                EdgeSnapResult result = session.Apply(Rect(raw, 200), area);
+                Assert.True(
+                    result.Rect.Left == raw ||
+                    result.Rect.Left == area.X ||
+                    result.Rect.Right == area.Right,
+                    $"raw={raw} area={area.X}..{area.Right} applied={result.Rect.Left}..{result.Rect.Right}");
+                Assert.Equal(800, result.Rect.Width);
+                Assert.Equal(450, result.Rect.Height);
+            }
+        }
+    }
+
+    [Fact]
+    public void SameWorkAreaKeepsTheMagnetAcrossSamples()
+    {
+        var session = new EdgeSnapSession();
+        Assert.Equal(SnapEdges.Left, session.Apply(Rect(2, 200), Area).Edges);
+
+        // A re-measured but identical work area (same rect) must not reset it.
+        var same = new WorkArea(0, 0, 1920, 1040);
+        EdgeSnapResult held = session.Apply(Rect(12, 200), same);
+        Assert.Equal(SnapEdges.Left, held.Edges);
+        Assert.Equal(0, held.Rect.Left);
+    }
 }
 

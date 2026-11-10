@@ -1,6 +1,8 @@
 using System.Linq;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Automation;
+using Microsoft.UI.Xaml.Automation.Peers;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
 using Windows.Graphics;
@@ -62,8 +64,11 @@ public sealed partial class MainWindow
 
         MiniPlayer.SetAnimationsEnabled(AnimationsEnabled);
         MiniPlayer.PlayPauseRequested += (_, _) => TogglePlayPause();
-        MiniPlayer.PreviousRequested += (_, _) => PlaylistPrevious();
-        MiniPlayer.NextRequested += (_, _) => PlaylistNext();
+        // P1-4: the mini transport must follow OscPrevNextMode (seek ±5 s /
+        // Ctrl ±30 s vs. track skip) exactly like the OSC arrows; calling
+        // PlaylistPrevious/Next here bypassed the setting.
+        MiniPlayer.PreviousRequested += (_, _) => OscPrevious();
+        MiniPlayer.NextRequested += (_, _) => OscNext();
         MiniPlayer.RestoreRequested += (_, _) => RequestMode(PlayerMode.Normal);
         MiniPlayer.MuteToggleRequested += (_, _) => ToggleMute();
         MiniPlayer.SeekRequested += seconds => SeekAbsolute(seconds);
@@ -76,6 +81,8 @@ public sealed partial class MainWindow
 
         _oscVm.PropertyChanged += (_, _) => UpdateMiniPlayerState();
         UpdateOsdPlacement();
+
+        InitializePowerKeepAwake();
     }
 
     // -------------------------------------------------------------- layouts
@@ -155,6 +162,17 @@ public sealed partial class MainWindow
             return;
         }
 
+        // P0-6: mini has no fullscreen. Every fullscreen entry (F/Enter,
+        // double-click on the video, menu, OSC, ExecuteAction) funnels through
+        // here, so one guard closes all of them. The OSD is parked in mini
+        // (see SetMiniOverlaysSuppressed), so this is normally a silent no-op.
+        if (target == PlayerMode.Fullscreen && _mode.Current == PlayerMode.Mini)
+        {
+            Trace("mode rejected Mini -> Fullscreen: mini has no fullscreen");
+            ShowOsd(Loc.T("modes.switchFailed"), Loc.T("modes.fullscreen"));
+            return;
+        }
+
         Trace($"mode request {_mode.Current} -> {target}");
         ModeTransitionResult result = _mode.Request(target, ApplyMode);
         if (!result.Success)
@@ -194,6 +212,15 @@ public sealed partial class MainWindow
                 return true;
 
             case PlayerMode.Fullscreen:
+                // P0-6 defensive guard: RequestMode already rejects Fullscreen
+                // while mini is current, but a direct apply (rollback, tests,
+                // future caller) must never tear the mini overlay down either.
+                if (_mode.Current == PlayerMode.Mini)
+                {
+                    Trace("apply rejected Mini -> Fullscreen: mini has no fullscreen");
+                    return false;
+                }
+
                 HideMiniPlayer();
                 RestoreVideoToMain();
                 CaptureNormalFrame();
@@ -240,6 +267,16 @@ public sealed partial class MainWindow
     private void OnModeChanged(object? sender, ModeTransitionResult result)
     {
         Trace($"mode {result.From} -> {result.To} ok={result.Success} reason={result.Reason}");
+        if (result.Success &&
+            result.From == PlayerMode.Mini &&
+            result.To == PlayerMode.Normal)
+        {
+            // Any exit from mini (menu, shortcut, toolbar, restore) is the
+            // user's decision for this file; the audio-only auto-entry must not
+            // bounce it straight back into mini mode.
+            _autoMiniSuppressed = true;
+        }
+
         UpdateFullscreenStatus();
         UpdateOsdPlacement();
     }
@@ -552,6 +589,14 @@ public sealed partial class MainWindow
 
     private bool EnterMiniInternal()
     {
+        // Re-entry happens when a failed transition rolls back to Mini. The
+        // chrome blur is counted and the mini background is captured, so a
+        // second pass would park the blur twice and back up the wrong brush.
+        if (InMiniMode && MiniPlayer.Visibility == Visibility.Visible)
+        {
+            return true;
+        }
+
         // The mini window has a fixed dark chrome and no video behind the
         // titlebar, so the blur worker would only burn frames. Park it here and
         // restore the previous mode when mini exits.
@@ -573,6 +618,11 @@ public sealed partial class MainWindow
         MiniPlayer.RequestedTheme = ElementTheme.Dark;
         MiniPlayer.SetAnimationsEnabled(AnimationsEnabled);
         MiniPlayer.ResetControls();
+        // P1-5: the statistics card, buffer pill, hover thumbnail, frame-drop
+        // card and the transient OSD are normal-mode overlays; park them so
+        // they cannot paint over the mini cover (the album-art path leaves the
+        // mini root transparent, so "behind the overlay" was still visible).
+        SetMiniOverlaysSuppressed(true);
         // The normal root is transparent: the window backdrop paints it. The
         // backdrop is suspended in mini mode, so any transparent pixel would
         // expose the black mpv swap chain (the light-theme "black mini window"
@@ -665,6 +715,9 @@ public sealed partial class MainWindow
         // guard below would otherwise leave the blur parked forever. The
         // helper counts suspensions, so a call with none active is a no-op.
         ResumeChromeBlur("mini");
+        // Restore the normal-mode overlays before the visibility guard below:
+        // a half-finished entry must not leave them parked forever either.
+        SetMiniOverlaysSuppressed(false);
 
         if (MiniPlayer.Visibility != Visibility.Visible)
         {
@@ -694,6 +747,57 @@ public sealed partial class MainWindow
         ApplySnapFrame(false);
         RestoreTopmostFromSettings();
         RestoreNormalFrame();
+    }
+
+    /// <summary>True while mini mode has parked the normal-mode overlays.</summary>
+    private bool _miniOverlaysSuppressed;
+
+    /// <summary>
+    /// P1-5: mini is a clean cover surface. The statistics card, buffer pill,
+    /// hover thumbnail, frame-drop card, time preview, OSC and sidebars all live
+    /// inside <see cref="OverlayLayer"/>, so collapsing the layer hides them in
+    /// one place and also stops their own timers (stats tick, buffering state,
+    /// hover peek) from re-showing over the cover. The OSD is a sibling of the
+    /// mini overlay and has an explicit enable switch instead.
+    /// </summary>
+    private void SetMiniOverlaysSuppressed(bool suppressed)
+    {
+        if (_miniOverlaysSuppressed == suppressed)
+        {
+            return;
+        }
+
+        _miniOverlaysSuppressed = suppressed;
+        if (suppressed)
+        {
+            OverlayLayer.Visibility = Visibility.Collapsed;
+            // The statistics card owns its Visibility (a one-second timer calls
+            // Show()), so pin opacity/UIA as well: an outer collapse alone
+            // would be undone by the next tick.
+            StatsPanel.Hide();
+            StatsPanel.Opacity = 0;
+            AutomationProperties.SetAccessibilityView(StatsPanel, AccessibilityView.Raw);
+            ThumbnailPeek.Hide();
+            BufferStatus.Hide();
+            HideFrameDropNotice();
+            // ShowOsd runs for buffering/errors/mode labels; mini is chrome
+            // free, so switch the card off rather than letting messages pop up
+            // over the cover.
+            Osd.Hide();
+            Osd.SetEnabled(false);
+            Trace("mini overlays: hidden");
+            return;
+        }
+
+        OverlayLayer.Visibility = Visibility.Visible;
+        StatsPanel.Opacity = 1;
+        AutomationProperties.SetAccessibilityView(StatsPanel, AccessibilityView.Content);
+        // Restore from the settings/state owners instead of a remembered
+        // snapshot, so a setting changed while mini was open still wins.
+        ApplyStatsSettings();
+        Osd.SetEnabled(_settings.OsdEnabled);
+        UpdateBufferStatus();
+        Trace("mini overlays: restored");
     }
 
     private void UpdateMiniPlayerState()
@@ -823,6 +927,12 @@ public sealed partial class MainWindow
             ApplyTheme();
             _oscState.AutoHideEnabled = _settings.OscAutoHide;
             ApplyStage5Settings();
+            if (_miniOverlaysSuppressed)
+            {
+                // ApplyStage5Settings re-applies OsdEnabled from settings; mini
+                // keeps the OSD parked for as long as it is the active mode.
+                Osd.SetEnabled(false);
+            }
             if (!IsFullscreen)
             {
                 SetTopmost(_settings.AlwaysOnTop);
@@ -834,6 +944,11 @@ public sealed partial class MainWindow
             ApplyStage7Settings();
             ApplyStage8Settings();
             SyncQuickSettingsValues();
+            UpdatePowerKeepAwake();
+            // Live setting: turning "audio auto-enter" on while an audio file is
+            // playing in normal mode enters mini without waiting for a reload;
+            // turning it off simply stops future entries.
+            TryAutoEnterMini();
         });
     }
 

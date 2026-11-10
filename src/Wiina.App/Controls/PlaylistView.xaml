@@ -29,13 +29,17 @@
                         Click="OnRemoveClick"
                         loc:Loc.ToolTip="ui.removeSelected"
                         loc:Loc.AutomationName="ui.removeSelected" />
-                <Button Style="{StaticResource OscIconButtonStyle}"
+                <Button x:Name="MoveUpButton"
+                        Style="{StaticResource OscIconButtonStyle}"
                         Content="&#xE74A;"
+                        IsEnabled="False"
                         Click="OnMoveUpClick"
                         loc:Loc.ToolTip="ui.moveUp"
                         loc:Loc.AutomationName="ui.moveUp" />
-                <Button Style="{StaticResource OscIconButtonStyle}"
+                <Button x:Name="MoveDownButton"
+                        Style="{StaticResource OscIconButtonStyle}"
                         Content="&#xE74B;"
+                        IsEnabled="False"
                         Click="OnMoveDownClick"
                         loc:Loc.ToolTip="ui.moveDown"
                         loc:Loc.AutomationName="ui.moveDown" />
@@ -60,6 +64,7 @@
                   CanReorderItems="True"
                   AllowDrop="True"
                   HorizontalContentAlignment="Stretch"
+                  SelectionChanged="OnListSelectionChanged"
                   DoubleTapped="OnListDoubleTapped"
                   RightTapped="OnListRightTapped"
                   DragItemsStarting="OnDragItemsStarting"

@@ -30,7 +30,20 @@ namespace Wiina.App.Interop;
 internal sealed class ChromeBlur
 {
     private const int TargetPixels = 320;
-    private const int FrameIntervalMs = 125;
+
+    // 4 Hz instead of 8 Hz: the blur is decorative, and halving the GPU->CPU
+    // readback halves the load that used to amplify a device loss into a hang.
+    // The constant stays adjustable in one place.
+    private const int FrameIntervalMs = 250;
+
+    // Consecutive capture failures use a small backoff ladder so a dead device
+    // cannot be hammered at the normal cadence: two quick retries, then 2 s,
+    // then 5 s until a capture succeeds again.
+    private const int FailureBackoffThreshold = 3;
+    private const int EmptyFrameBackoffThreshold = 20;
+    private const int FailureBackoffFirstMs = 2000;
+    private const int FailureBackoffMaxMs = 5000;
+
     private const float BlurAmount = 9f;
     private static readonly Lazy<ChromeBlur> LazyInstance =
         new(() => new ChromeBlur());
@@ -41,6 +54,14 @@ internal sealed class ChromeBlur
     /// can attach a layer (leaving Solid) or fall back to the solid brush.
     /// </summary>
     public static event EventHandler? ModeChanged;
+
+    /// <summary>
+    /// Trace sink installed by the main window so the capture worker's
+    /// diagnostics land in the app trace file. Deliberately sparse: one line
+    /// for the first failure of a run plus backoff transitions, so a dead
+    /// device cannot flood the trace at the capture cadence.
+    /// </summary>
+    internal static Action<string>? Log;
 
     private readonly object _gate = new();
     private readonly List<WeakReference<ChromeBlurLayer>> _layers = new();
@@ -57,6 +78,10 @@ internal sealed class ChromeBlur
     private int[]? _extendMap;
     private string? _extendSignature;
     private WriteableBitmap? _bitmap;
+    // Geometry that matches the pixels currently in _bitmap. UI thread only,
+    // like _bitmap: ApplyPending writes both together, and Reapply repaints
+    // the pair into a layer that was collapsed while the frame was published.
+    private VideoGeometry? _publishedGeometry;
     private byte[]? _pending;
     private int _pendingWidth;
     private int _pendingHeight;
@@ -68,6 +93,16 @@ internal sealed class ChromeBlur
     private volatile bool _suspended;
     private volatile ChromeBlurMode _pendingMode = ChromeBlurMode.Dynamic;
     private int _captures;
+
+    // Capture worker state. Only the worker thread touches these; the render
+    // target and the downscale/extend buffers are reused across frames and
+    // rebuilt only when the frame size changes, which removes the per-frame
+    // GPU resource churn the freeze analysis flagged.
+    private int _captureFailures;
+    private int _emptyCaptures;
+    private CanvasRenderTarget? _target;
+    private byte[]? _downscaleBuffer;
+    private byte[]? _extendBuffer;
 
     /// <summary>Current capture strategy.</summary>
     public ChromeBlurMode Mode => _mode;
@@ -100,6 +135,19 @@ internal sealed class ChromeBlur
             thread.Join(TimeSpan.FromSeconds(1));
         }
         blur._thread = null;
+
+        // The worker owns these; it has been joined, so releasing the cached
+        // GPU target here is safe.
+        try
+        {
+            blur._target?.Dispose();
+        }
+        catch
+        {
+        }
+        blur._target = null;
+        blur._downscaleBuffer = null;
+        blur._extendBuffer = null;
 
         lock (blur._gate)
         {
@@ -167,6 +215,50 @@ internal sealed class ChromeBlur
 
         blur._suspended = false;
         blur.ApplyMode(blur._pendingMode);
+    }
+
+    /// <summary>
+    /// Repaints the most recently published frame into <paramref name="layer"/>
+    /// immediately, without capturing. A chrome surface that is collapsed while
+    /// the frame is published has no layout size, so <see cref="ChromeBlurLayer.Apply"/>
+    /// returns early and the surface would otherwise stay on its opaque solid
+    /// brush until the next capture interval. The host calls this once the
+    /// surface has a layout size again. UI thread only.
+    /// </summary>
+    public void Reapply(ChromeBlurLayer layer)
+    {
+        // A layer whose host is sliding must not be repainted: Apply samples
+        // the surface through TransformToVisual, so a frame published mid-slide
+        // would freeze the current offset into the brush transform. The host
+        // replays the cached frame once the animation settles instead.
+        if (layer is null || _mode == ChromeBlurMode.Solid || layer.IsTransformSuppressed)
+        {
+            return;
+        }
+
+        WriteableBitmap? bitmap = _bitmap;
+        if (bitmap is not null && _publishedGeometry is { } geometry)
+        {
+            try
+            {
+                layer.Apply(bitmap, geometry);
+            }
+            catch (Exception ex)
+            {
+                // This runs from a dispatcher callback: never let a repaint
+                // failure escape and take the UI thread down.
+                BlurLog("reapply failed: " + ex.Message);
+            }
+            return;
+        }
+
+        // Nothing has been published yet (first show of the process, or a
+        // device/mode reset): clear the Fixed-mode latch and make sure the
+        // worker is running so the next capture fills the layer instead of
+        // waiting for the next chrome show/hide cycle.
+        _fixedCaptured = false;
+        Start();
+        BlurLog("reapply: no published frame, capture requested");
     }
 
     private void ApplyMode(ChromeBlurMode mode)
@@ -296,21 +388,23 @@ internal sealed class ChromeBlur
         while (_running)
         {
             long started = Environment.TickCount64;
+            int delay = FrameIntervalMs;
+
             if (_mode == ChromeBlurMode.Solid)
             {
-                Thread.Sleep(FrameIntervalMs);
+                Thread.Sleep(delay);
                 continue;
             }
 
             if (!_active && _mode != ChromeBlurMode.Always)
             {
-                Thread.Sleep(FrameIntervalMs);
+                Thread.Sleep(delay);
                 continue;
             }
 
             if (_mode is ChromeBlurMode.Fixed && _fixedCaptured)
             {
-                Thread.Sleep(FrameIntervalMs);
+                Thread.Sleep(delay);
                 continue;
             }
 
@@ -319,37 +413,103 @@ internal sealed class ChromeBlur
                 MpvPlayer? player = ResolvePlayer();
                 if (player is { IsRunning: true })
                 {
-                    MpvScreenshot? shot = player.ScreenshotRaw();
-                    if (shot is not null && shot.Pixels.Length > 0)
-                    {
-                        Blur(shot, ReadVideoGeometry(player));
-                        // Cheap diagnostic for "is the blur still capturing?"
-                        // reports: only written when WIINA_BLUR_LOG=1.
-                        BlurLog("capture #" + Interlocked.Increment(ref _captures));
-                        if (_mode == ChromeBlurMode.Fixed)
-                        {
-                            _fixedCaptured = true;
-                        }
-                    }
-                    else
-                    {
-                        BlurLog(shot is null
-                            ? "capture skipped: no frame"
-                            : "capture skipped: empty frame");
-                    }
+                    // Paused playback presents no new frames: capturing would
+                    // only repeat the same image while paying for a GPU
+                    // readback every tick. Fixed mode still needs its single
+                    // static frame, so it may capture once before the latch.
+                    bool allowFixedFirst =
+                        _mode == ChromeBlurMode.Fixed && !_fixedCaptured;
+                    delay = player.GetPropertyFlag("pause") && !allowFixedFirst
+                        ? FrameIntervalMs
+                        : CaptureOnce(player);
                 }
             }
             catch (Exception ex)
             {
-                LogOnce("frame capture failed: " + ex.Message);
-                BlurLog("capture failed: " + ex.Message);
+                delay = RecordCaptureFailure(ex.Message);
             }
-            int remaining = FrameIntervalMs - (int)(Environment.TickCount64 - started);
+
+            int remaining = delay - (int)(Environment.TickCount64 - started);
             if (remaining > 0)
             {
                 Thread.Sleep(remaining);
             }
         }
+    }
+
+    /// <summary>
+    /// Captures and blurs one frame. Returns the delay before the next attempt:
+    /// the normal interval on success, or the failure backoff.
+    /// </summary>
+    private int CaptureOnce(MpvPlayer player)
+    {
+        MpvScreenshot? shot = player.ScreenshotRaw();
+        if (shot is null || shot.Pixels.Length == 0)
+        {
+            // A dead device usually surfaces here as a failed command that
+            // returns null, not as an exception (MpvPlayer logs and returns
+            // null). Treat it as a failure so the backoff also covers that
+            // path instead of retrying at 4 Hz forever. An empty frame during
+            // startup is normal, so its threshold is much higher than an
+            // exception's.
+            return RecordCaptureFailure(
+                shot is null ? "no frame" : "empty frame",
+                emptyFrame: true);
+        }
+
+        Blur(shot, ReadVideoGeometry(player));
+        _captureFailures = 0;
+        _emptyCaptures = 0;
+        // Cheap diagnostic for "is the blur still capturing?" reports:
+        // only written when WIINA_BLUR_LOG=1.
+        BlurLog("capture #" + Interlocked.Increment(ref _captures));
+        if (_mode == ChromeBlurMode.Fixed)
+        {
+            _fixedCaptured = true;
+        }
+
+        return FrameIntervalMs;
+    }
+
+    /// <summary>
+    /// Counts one consecutive capture failure and returns the backoff delay.
+    /// Only the first failure of a run is traced, so a lost device produces one
+    /// line instead of a 4 Hz storm; the count is in the detailed blur log.
+    /// </summary>
+    private int RecordCaptureFailure(string reason, bool emptyFrame = false)
+    {
+        int run;
+        int threshold;
+        if (emptyFrame)
+        {
+            run = ++_emptyCaptures;
+            threshold = EmptyFrameBackoffThreshold;
+        }
+        else
+        {
+            run = ++_captureFailures;
+            threshold = FailureBackoffThreshold;
+        }
+
+        int delay = run > threshold
+            ? FailureBackoffMaxMs
+            : run == threshold
+                ? FailureBackoffFirstMs
+                : FrameIntervalMs;
+
+        if (run == 1)
+        {
+            Log?.Invoke("[chrome-blur] frame capture failed: " + reason);
+        }
+
+        BlurLog($"capture failed (run={run}, empty={emptyFrame}, backoff={delay}ms): {reason}");
+        if (delay != FrameIntervalMs)
+        {
+            Log?.Invoke(
+                $"[chrome-blur] capture backoff {delay} ms after {run} consecutive failures");
+        }
+
+        return delay;
     }
 
     /// <summary>
@@ -537,13 +697,37 @@ internal sealed class ChromeBlur
             Optimization = EffectOptimization.Speed,
             BorderMode = EffectBorderMode.Hard,
         };
-        using var target = new CanvasRenderTarget(device, width, height, 96f);
+        CanvasRenderTarget target = EnsureTarget(device, width, height);
         using (CanvasDrawingSession session = target.CreateDrawingSession())
         {
             session.Clear(Color.FromArgb(255, 0, 0, 0));
             session.DrawImage(blur);
         }
+        // GetPixelBytes() hands a fresh array to the UI thread; the target and
+        // every intermediate buffer stay owned by this worker.
         Publish(target.GetPixelBytes(), width, height, geometry with { Extended = extended });
+    }
+
+    /// <summary>
+    /// The blurred frame's render target, reused across frames and recreated
+    /// only when the size (or the device) changed. The previous implementation
+    /// allocated one every 125 ms, which the freeze analysis flagged as GPU
+    /// resource churn.
+    /// </summary>
+    private CanvasRenderTarget EnsureTarget(CanvasDevice device, int width, int height)
+    {
+        CanvasRenderTarget? target = _target;
+        if (target is not null &&
+            ReferenceEquals(target.Device, device) &&
+            (int)Math.Round((double)target.SizeInPixels.Width) == width &&
+            (int)Math.Round((double)target.SizeInPixels.Height) == height)
+        {
+            return target;
+        }
+
+        target?.Dispose();
+        _target = new CanvasRenderTarget(device, width, height, 96f);
+        return _target;
     }
 
     /// <summary>
@@ -571,7 +755,10 @@ internal sealed class ChromeBlur
             display,
             widgetWidth,
             widgetHeight);
-        var dest = new byte[destWidth * destHeight * 4];
+        int bytes = destWidth * destHeight * 4;
+        byte[] dest = _extendBuffer is { } buffer && buffer.Length == bytes
+            ? buffer
+            : _extendBuffer = new byte[bytes];
         for (int i = 0; i < map.Length; i++)
         {
             int src = map[i];
@@ -637,13 +824,18 @@ internal sealed class ChromeBlur
     /// small opaque BGRA bitmap. Alpha is forced to 255 because mpv's "bgr0"
     /// format leaves the alpha channel zero.
     /// </summary>
-    private static byte[] Downscale(MpvScreenshot shot, int width, int height)
+    private byte[] Downscale(MpvScreenshot shot, int width, int height)
     {
         byte[] source = shot.Pixels;
         int stride = Math.Abs(shot.Stride);
         bool bottomUp = shot.Stride < 0;
         int limit = source.Length - 4;
-        var target = new byte[width * height * 4];
+        // Reused across frames: the buffer is only read by the synchronous
+        // CanvasBitmap.CreateFromBytes call before the next frame overwrites it.
+        int bytes = width * height * 4;
+        byte[] target = _downscaleBuffer is { } buffer && buffer.Length == bytes
+            ? buffer
+            : _downscaleBuffer = new byte[bytes];
         for (int y = 0; y < height; y++)
         {
             int sy0 = y * shot.Height / height;
@@ -738,6 +930,9 @@ internal sealed class ChromeBlur
                 stream.Write(pixels, 0, pixels.Length);
             }
             _bitmap.Invalidate();
+            // The bitmap now holds these pixels: remember the pair so a
+            // collapsed surface can be repainted from it without capturing.
+            _publishedGeometry = geometry;
             foreach (ChromeBlurLayer layer in SnapshotLayers())
             {
                 layer.Apply(_bitmap, geometry);
@@ -814,6 +1009,11 @@ public sealed class ChromeBlurLayer : Canvas
     private readonly Rectangle _fill;
     private readonly ImageBrush _brush;
     private readonly CompositeTransform _transform;
+    // One geometry for the lifetime of the layer: UpdateClip only mutates its
+    // Rect, so a long playback never allocates a geometry per layout pass.
+    private readonly RectangleGeometry _clipGeometry = new();
+    private double _clipWidth = -1;
+    private double _clipHeight = -1;
     private WeakReference<MpvVideoView>? _video;
     private string? _diagSignature;
     internal ChromeBlurLayer(double cornerRadius)
@@ -842,8 +1042,11 @@ public sealed class ChromeBlurLayer : Canvas
             IsHitTestVisible = false,
         };
         Children.Add(_fill);
+        // SizeChanged only. LayoutUpdated used to be hooked here too, which
+        // fires for every layout pass (including the video's per-frame
+        // invalidation) and allocated a new RectangleGeometry each time; that
+        // is the GC/composition jitter flagged in the freeze analysis.
         SizeChanged += (_, _) => UpdateClip();
-        LayoutUpdated += (_, _) => UpdateClip();
         Loaded += (_, _) =>
         {
             UpdateClip();
@@ -859,16 +1062,28 @@ public sealed class ChromeBlurLayer : Canvas
     /// </summary>
     private void UpdateClip()
     {
-        if (ActualWidth < 1 || ActualHeight < 1)
+        double width = ActualWidth;
+        double height = ActualHeight;
+        if (width < 1 || height < 1)
         {
             return;
         }
-        _fill.Width = ActualWidth;
-        _fill.Height = ActualHeight;
-        Clip = new RectangleGeometry
+        if (width == _clipWidth && height == _clipHeight)
         {
-            Rect = new Rect(0, 0, ActualWidth, ActualHeight),
-        };
+            // Apply() calls this for every frame; a real size change is the
+            // only thing that needs to touch the visual tree.
+            return;
+        }
+
+        _clipWidth = width;
+        _clipHeight = height;
+        _fill.Width = width;
+        _fill.Height = height;
+        if (!ReferenceEquals(Clip, _clipGeometry))
+        {
+            Clip = _clipGeometry;
+        }
+        _clipGeometry.Rect = new Rect(0, 0, width, height);
     }
     /// <summary>Raised once the first blurred frame is on screen.</summary>
     public event EventHandler? FirstFrame;
@@ -876,6 +1091,26 @@ public sealed class ChromeBlurLayer : Canvas
     /// <summary>True once a blurred frame has actually been painted.</summary>
     public bool HasFrame { get; private set; }
     private bool _firstFrameRaised;
+
+    /// <summary>
+    /// Set by a host while its own subtree is animating (the sidebar slide).
+    /// <see cref="Apply"/> returns early meanwhile: the sampled geometry comes
+    /// from <c>TransformToVisual</c>, so painting at <c>TranslateX = ±Width</c>
+    /// bakes the slide into the brush transform and leaves half the surface on
+    /// the opaque solid brush once the animation finishes (1.3.10 regression).
+    /// The host clears the flag when the animation settles and calls
+    /// <see cref="ChromeBlur.Reapply"/> once.
+    /// </summary>
+    internal bool IsTransformSuppressed { get; set; }
+
+    /// <summary>
+    /// Extra DIP added to the sampled region's X while a host slides this layer.
+    /// The host keeps it equal to its current slide offset, so a frame that is
+    /// published mid-slide still maps the video onto the layer's settled
+    /// position instead of freezing the image half a panel off. Zero whenever
+    /// the host is not animating.
+    /// </summary>
+    internal double GeometryOffsetX { get; set; }
 
     /// <summary>
     /// Delivers the first-frame notification to a subscriber that attached after
@@ -893,6 +1128,13 @@ public sealed class ChromeBlurLayer : Canvas
 
     internal void Apply(WriteableBitmap bitmap, ChromeBlur.VideoGeometry geometry)
     {
+        if (IsTransformSuppressed)
+        {
+            // The host is mid-slide: keep the previous image (or none) rather
+            // than freezing the current transform into the brush.
+            return;
+        }
+
         FrameworkElement? root = XamlRoot?.Content as FrameworkElement;
         if (root is null)
         {
@@ -982,13 +1224,19 @@ public sealed class ChromeBlurLayer : Canvas
         _brush.ImageSource = bitmap;
         _transform.ScaleX = scaleX;
         _transform.ScaleY = scaleY;
-        _transform.TranslateX = videoX - surface.X;
+        // GeometryOffsetX compensates a slide that is still in flight when the
+        // frame is published: surface is sampled in root space (it includes the
+        // host's TranslateX), so adding the offset back maps the video to the
+        // settled position instead of the transient one.
+        _transform.TranslateX = videoX - surface.X + GeometryOffsetX;
         _transform.TranslateY = videoY - surface.Y;
         UpdateClip();
-        if (!HasFrame && Visibility == Visibility.Visible)
-        {
-            HasFrame = true;
-        }
+        // A chrome surface can be painted while it is not on screen yet (a
+        // collapsed parent has no layout size, but the host replays the cached
+        // frame as soon as layout completes). Remember that an image exists so
+        // the tint can be revealed on show; the tint itself stays driven by
+        // ApplyBlurVisuals/FirstFrame, never by this flag alone.
+        HasFrame = true;
         RaiseFirstFrameIfReady();
     }
     private MpvVideoView? ResolveVideo(FrameworkElement root)

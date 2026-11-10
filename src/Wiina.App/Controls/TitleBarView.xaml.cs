@@ -107,6 +107,37 @@ public sealed partial class TitleBarView : UserControl
         ApplyBlurVisuals();
     }
 
+    /// <summary>
+    /// Best-effort early sync for the hand-drawn caption buttons.
+    ///
+    /// The window's non-client frame is updated by DWM as soon as the window
+    /// resizes, while this titlebar is XAML content inside the content island
+    /// and composites at least one frame later. Forcing the caption row to
+    /// re-measure from a high-priority dispatcher callback keeps the
+    /// minimize/maximize/close buttons as close to the new right edge as WinUI
+    /// allows, but it cannot remove the lag: the buttons are not native caption
+    /// buttons. Switching them to <c>AppWindowTitleBar</c>'s native buttons is
+    /// the real fix and is deliberately deferred (tracked in known-issues / the
+    /// WinUI 3 audit).
+    ///
+    /// Must be called outside the layout pass (the caller queues it) because
+    /// forcing <see cref="FrameworkElement.UpdateLayout"/> from SizeChanged can
+    /// trip WinUI's layout-cycle protection.
+    /// </summary>
+    public void SyncCaptionRowForResize()
+    {
+        if (ActualWidth < 1)
+        {
+            // Collapsed/zero-width titlebar: nothing to measure, and a forced
+            // layout pass here would only fight the presenter switch.
+            return;
+        }
+
+        WindowControlPanel.InvalidateMeasure();
+        WindowControlPanel.InvalidateArrange();
+        UpdateLayout();
+    }
+
     private void OnLoaded(object sender, RoutedEventArgs e)
     {
         ChromeBlur.ModeChanged += OnBlurModeChanged;

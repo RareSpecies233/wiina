@@ -132,12 +132,16 @@
 
                 <!-- Custom Fluent window controls over the acrylic titlebar.
                      System caption buttons are collapsed because DWM paints an
-                     opaque backing behind them in an extended titlebar. -->
+                     opaque backing behind them in an extended titlebar.
+                     UseLayoutRounding keeps the glyphs on whole pixels while
+                     the window is being resized (the row itself still trails
+                     the native frame by one frame; see SyncCaptionRowForResize). -->
                 <StackPanel x:Name="WindowControlPanel"
                             Grid.Column="2"
                             Orientation="Horizontal"
                             HorizontalAlignment="Right"
                             VerticalAlignment="Stretch"
+                            UseLayoutRounding="True"
                             Height="40">
                     <Button Style="{StaticResource TitleBarCaptionButtonStyle}"
                             Content="&#xE921;"
